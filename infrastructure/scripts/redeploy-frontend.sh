@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
-if ! command -v fly >/dev/null 21; then
+if ! command -v fly >/dev/null 2>&1; then
   echo "flyctl not found. Install from https://fly.io/docs/hands-on/install-flyctl/" >&2
   exit 1
 fi

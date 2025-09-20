@@ -426,11 +426,53 @@ async def websocket_endpoint(
     Handles real-time, bidirectional communication for a single chat session.
     The connection is authenticated and authorized using a JWT token from query params.
     """
-    # 1. Authenticate the user
-    current_user = await get_user_from_token(token)
+    logger.info(f"[WS ENDPOINT] ⚡ WebSocket endpoint called for chat {chat_uuid}")
+    logger.info(f"[WS ENDPOINT] Client: {websocket.client}")
+    logger.info(f"[WS ENDPOINT] Scope: {websocket.scope}")
+    # 1. Authenticate the user - try token query param first, then Authorization header
+    current_user = None
+    
+    logger.info(f"[WS AUTH] WebSocket connection attempt for chat {chat_uuid}")
+    logger.info(f"[WS AUTH] Query token: {token[:50] if token else 'None'}...")
+    logger.info(f"[WS AUTH] WebSocket headers: {dict(websocket.headers)}")
+    
+    # Try query parameter token first
+    if token and token != "ws-cookie-auth":
+        logger.info(f"[WS AUTH] Attempting auth with query token")
+        current_user = await get_user_from_token(token)
+        if current_user:
+            logger.info(f"[WS AUTH] ✅ Authentication successful via query token for user {current_user.sub}")
+        else:
+            logger.warning(f"[WS AUTH] ❌ Query token validation failed")
+    else:
+        logger.info(f"[WS AUTH] Skipping query token (placeholder or missing)")
+    
+    # If no valid token from query param, try Authorization header (injected by proxy)
     if not current_user:
+        auth_header = websocket.headers.get("authorization")
+        logger.info(f"[WS AUTH] Authorization header present: {bool(auth_header)}")
+        
+        if auth_header:
+            logger.info(f"[WS AUTH] Authorization header: {auth_header[:50]}...")
+            if auth_header.startswith("Bearer "):
+                bearer_token = auth_header.split(" ", 1)[1]
+                logger.info(f"[WS AUTH] Extracted bearer token length: {len(bearer_token)}")
+                current_user = await get_user_from_token(bearer_token)
+                if current_user:
+                    logger.info(f"[WS AUTH] ✅ Authentication successful via Authorization header for user {current_user.sub}")
+                else:
+                    logger.warning(f"[WS AUTH] ❌ Bearer token validation failed")
+            else:
+                logger.warning(f"[WS AUTH] ❌ Authorization header doesn't start with 'Bearer '")
+        else:
+            logger.warning(f"[WS AUTH] ❌ No Authorization header found")
+    
+    if not current_user:
+        logger.error(f"[WS AUTH] ❌ All authentication methods failed, closing connection")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token.")
         return
+    
+    logger.info(f"[WS AUTH] ✅ User {current_user.sub} authenticated successfully")
 
     # 2. Authorize the user for the chat
     chat = db.query(ChatModel).filter(

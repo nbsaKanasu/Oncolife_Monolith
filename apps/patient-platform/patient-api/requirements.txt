@@ -12,9 +12,11 @@ groq
 cerebras-cloud-sdk
 openai
 python-docx
-pypdf
 numpy
 pytz
 sentence_transformers
 pinecone
 redis
+pdf2image
+Pillow
+pytesseract

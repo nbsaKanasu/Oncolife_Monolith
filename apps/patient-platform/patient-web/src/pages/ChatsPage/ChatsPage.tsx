@@ -163,8 +163,8 @@ const ChatsPage: React.FC = () => {
 
   // Helper function to check if current conversation is finished
   const isConversationFinished = () => {
-    return chatSession?.conversation_state === 'COMPLETED' || 
-           chatSession?.conversation_state === 'EMERGENCY';
+    const state = chatSession?.conversation_state?.toString().toUpperCase();
+    return state === 'COMPLETED' || state === 'EMERGENCY';
   };
 
   // Handle new conversation button click with confirmation if needed
@@ -407,7 +407,8 @@ const ChatsPage: React.FC = () => {
 
   const shouldShowTextInput = () => {
     // Never show input if the conversation is over
-    if (chatSession?.conversation_state === 'COMPLETED' || chatSession?.conversation_state === 'EMERGENCY') {
+    const state = chatSession?.conversation_state?.toString().toUpperCase();
+    if (state === 'COMPLETED' || state === 'EMERGENCY') {
       return false;
     }
     

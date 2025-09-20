@@ -23,8 +23,17 @@ export const getWebSocketToken = (): string | null => {
   if (shouldUseLocalStorage()) {
     return localStorage.getItem(PATIENT_STORAGE_KEYS.authToken);
   }
-  // In production, return a placeholder since auth is handled by cookies
-  // The WebSocket connection will be authenticated via cookies on the server
+  // Try to read authToken cookie on the client as a best-effort (may be HTTP-only and thus inaccessible)
+  try {
+    const cookies = document.cookie || '';
+    const match = cookies.match(/(?:^|;\s*)authToken=([^;]+)/);
+    if (match && match[1]) {
+      return decodeURIComponent(match[1]);
+    }
+  } catch {
+    // ignore
+  }
+  // Fallback placeholder; proxy will inject Authorization from cookie
   return 'ws-cookie-auth';
 };
 

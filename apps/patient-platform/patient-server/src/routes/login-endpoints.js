@@ -9,7 +9,8 @@ const getCookieConfig = () => {
   return {
     httpOnly: true,
     secure: isProduction, // HTTPS required in production
-    sameSite: isProduction ? 'strict' : 'lax',
+    // Use 'none' in production so cookies are sent on cross-site XHR with credentials
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 60 * 60 * 1000, // 1 hour (matches Cognito default)
     domain: undefined // Let browser handle domain
   };
@@ -119,7 +120,9 @@ router.post('/login', async (req, res) => {
 
 router.post('/complete-new-password', async (req, res) => {
   try {
-    const { email, new_password, session } = req.body;
+    const { email, new_password } = req.body;
+    // Prefer explicit session in body; fall back to cookie in production
+    const session = req.body?.session || (process.env.NODE_ENV === 'production' ? req.cookies?.sessionToken : undefined);
 
     if (!email || !new_password || !session) {
       console.warn('[LOGIN] Missing fields for complete-new-password');

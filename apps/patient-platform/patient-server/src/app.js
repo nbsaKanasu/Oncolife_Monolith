@@ -49,12 +49,48 @@ const server = app.listen(PORT, () => {
 const { wsProxyNoRewrite, wsProxyWithRewrite } = createWsProxies();
 server.on('upgrade', (req, socket, head) => {
   const url = req.url || '';
+  console.log(`[SERVER UPGRADE] WebSocket upgrade request: ${url}`);
+  console.log(`[SERVER UPGRADE] Request headers:`, JSON.stringify(req.headers, null, 2));
+  
   if (url.startsWith('/api/chat/ws')) {
+    console.log(`[SERVER UPGRADE] Routing /api/chat/ws request through wsProxyWithRewrite`);
     // Manually rewrite path for upgrade requests to match FastAPI route
     req.url = url.replace(/^\/api\/chat\/ws/, '/chat/ws');
+    console.log(`[SERVER UPGRADE] Rewritten URL: ${req.url}`);
+    
+    // CRITICAL: Inject Authorization header from authToken cookie (since upgrade bypasses middleware)
+    try {
+      const cookieHeader = req.headers && req.headers.cookie;
+      console.log(`[SERVER UPGRADE] Cookie header present: ${!!cookieHeader}`);
+      
+      if (cookieHeader) {
+        console.log(`[SERVER UPGRADE] Cookie header: ${cookieHeader.substring(0, 100)}...`);
+        const authMatch = cookieHeader.match(/(?:^|;\s*)authToken=([^;]+)/);
+        console.log(`[SERVER UPGRADE] authToken match: ${!!authMatch}`);
+        
+        if (authMatch && authMatch[1]) {
+          const token = decodeURIComponent(authMatch[1]);
+          console.log(`[SERVER UPGRADE] Decoded token length: ${token.length}`);
+          console.log(`[SERVER UPGRADE] Token preview: ${token.substring(0, 50)}...`);
+          req.headers.authorization = `Bearer ${token}`;
+          console.log('[SERVER UPGRADE] ✅ Injected Authorization header from authToken cookie');
+        } else {
+          console.log('[SERVER UPGRADE] ❌ No authToken found in cookies');
+        }
+      } else {
+        console.log('[SERVER UPGRADE] ❌ No cookie header found');
+      }
+    } catch (e) {
+      console.error('[SERVER UPGRADE] Error injecting auth header:', e);
+    }
+    
     wsProxyWithRewrite.upgrade(req, socket, head);
   } else if (url.startsWith('/chat/ws')) {
+    console.log(`[SERVER UPGRADE] Routing /chat/ws request through wsProxyNoRewrite`);
     wsProxyNoRewrite.upgrade(req, socket, head);
+  } else {
+    console.log(`[SERVER UPGRADE] ❌ No matching WebSocket route for: ${url}`);
+    socket.end();
   }
 });
 

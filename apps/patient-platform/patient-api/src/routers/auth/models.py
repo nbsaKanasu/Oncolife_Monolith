@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from fastapi import UploadFile
 
 class SignupRequest(BaseModel):
     email: EmailStr
@@ -57,4 +58,22 @@ class ResetPasswordRequest(BaseModel):
 
 class ResetPasswordResponse(BaseModel):
     message: str
-    email: str 
+    email: str
+
+class ProcessFaxRequest(BaseModel):
+    """Request model for processing PDF fax files"""
+    pass
+
+class ProcessFaxResponse(BaseModel):
+    """Response model for PDF fax processing"""
+    message: str
+    patient_email: Optional[str] = None
+    patient_name: Optional[str] = None
+    physician_name: Optional[str] = None
+    success: bool
+    errors: Optional[list] = None
+
+
+class UpdateSinchWebhookRequest(BaseModel):
+    """Request model to update Sinch incoming webhook URL"""
+    url: Optional[str] = None

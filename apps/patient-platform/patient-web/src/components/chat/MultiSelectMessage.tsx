@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { Message } from '../../types/chat';
 
 interface MultiSelectMessageProps {
@@ -11,7 +11,36 @@ export const MultiSelectMessage: React.FC<MultiSelectMessageProps> = ({
   onSubmitSelections 
 }) => {
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const maxSelections = message.structured_data?.max_selections || message.structured_data?.options?.length || 0;
+
+  // Ensure Bruising and Bleeding are separate options; split any legacy combined label
+  const optionsWithFallback = useMemo(() => {
+    const baseOptions = [...(message.structured_data?.options || [])];
+    const isInitialSymptomPrompt = (message.content || '').toLowerCase().includes("please select any symptoms you're experiencing today");
+    if (!isInitialSymptomPrompt) return baseOptions;
+
+    const normalized: string[] = [];
+    baseOptions.forEach((o) => {
+      const lower = o.toLowerCase();
+      if (['bruising / bleeding', 'bruising/bleeding', 'bruising or bleeding'].includes(lower)) {
+        normalized.push('Bruising', 'Bleeding');
+      } else {
+        normalized.push(o);
+      }
+    });
+
+    // De-duplicate while preserving order
+    const seen = new Set<string>();
+    const deduped = normalized.filter(o => {
+      const key = o.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return deduped;
+  }, [message]);
+
+  const maxSelections = message.structured_data?.max_selections || optionsWithFallback.length || 0;
 
   const toggleOption = (option: string) => {
     setSelectedOptions(prev => {
@@ -32,7 +61,7 @@ export const MultiSelectMessage: React.FC<MultiSelectMessageProps> = ({
 
   return (
     <div className="multi-select-options">
-      {message.structured_data?.options?.map((option, index) => (
+      {optionsWithFallback.map((option, index) => (
         <label
           key={index}
           className={`multi-select-item ${selectedOptions.includes(option) ? 'selected' : ''}`}

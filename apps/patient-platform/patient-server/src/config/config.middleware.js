@@ -18,6 +18,38 @@ function createWsProxies() {
     onProxyReq: (proxyReq, req, res) => {
       console.log(`[WS Proxy] ${req.method} ${req.url} -> ${backendBase}`);
     },
+    onProxyReqWs: (proxyReq, req, socket, options, head) => {
+      try {
+        console.log(`[WS Proxy] onProxyReqWs called for ${req.url}`);
+        console.log(`[WS Proxy] Request headers:`, JSON.stringify(req.headers, null, 2));
+        
+        // Forward Authorization from cookies if present (HTTP-only cookie authToken)
+        const cookieHeader = req.headers && req.headers.cookie;
+        console.log(`[WS Proxy] Cookie header present: ${!!cookieHeader}`);
+        
+        if (cookieHeader) {
+          console.log(`[WS Proxy] Cookie header: ${cookieHeader}`);
+          const authMatch = cookieHeader.match(/(?:^|;\s*)authToken=([^;]+)/);
+          console.log(`[WS Proxy] authToken match: ${!!authMatch}`);
+          
+          if (authMatch && authMatch[1]) {
+            const token = decodeURIComponent(authMatch[1]);
+            console.log(`[WS Proxy] Decoded token length: ${token.length}`);
+            console.log(`[WS Proxy] Token preview: ${token.substring(0, 50)}...`);
+            proxyReq.setHeader('Authorization', `Bearer ${token}`);
+            console.log('[WS Proxy] ✅ Injected Authorization header from authToken cookie');
+          } else {
+            console.log('[WS Proxy] ❌ No authToken found in cookies');
+          }
+        } else {
+          console.log('[WS Proxy] ❌ No cookie header found');
+        }
+        
+        console.log(`[WS Proxy] Final proxy request headers:`, JSON.stringify(proxyReq.getHeaders(), null, 2));
+      } catch (e) {
+        console.error('[WS Proxy] onProxyReqWs error:', e);
+      }
+    },
     onError: (err, req, res) => {
       console.error('[WS Proxy] error:', err);
     }
@@ -69,6 +101,10 @@ function configureMiddleware(app) {
   // Support both '/chat/ws' and '/api/chat/ws' so BASE_URL can be '/api'
   app.use('/chat/ws', wsProxyNoRewrite);
   app.use('/api/chat/ws', wsProxyWithRewrite);
+  
+  console.log('[MIDDLEWARE] WebSocket proxies configured:');
+  console.log('[MIDDLEWARE] - /chat/ws -> wsProxyNoRewrite');
+  console.log('[MIDDLEWARE] - /api/chat/ws -> wsProxyWithRewrite');
 
   if (process.env.NODE_ENV === 'production') {
     const webDist = path.join(__dirname, '../../../patient-web/dist');

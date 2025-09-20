@@ -1,17 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { api } = require('../utils/api.helpers');
+const { api, getWithAuth, postWithAuth } = require('../utils/api.helpers');
 const { apiClient } = require('../config/axios.config');
 
 router.get('/session/today', async (req, res) => {
   try {
     const base = apiClient.defaults.baseURL;
     console.log(`[CHAT] GET ${base}/chat/session/today`);
-    const data = await api.get('/chat/session/today', {
-      headers: {
-        'Authorization': req.headers.authorization
-      }
-    });
+    // Use helper to forward Authorization from cookies or headers (prod/dev)
+    const data = await getWithAuth('/chat/session/today', req, res);
     if (!data.success) {
       console.error('[CHAT] Upstream error (session/today):', data.error?.details || data.error?.message);
       return res.status(data.status).json({ error: 'Failed to fetch chat session', details: data.error });
@@ -30,11 +27,8 @@ router.post('/message', async (req, res) => {
   try {
     const base = apiClient.defaults.baseURL;
     console.log(`[CHAT] POST ${base}/chat/message`);
-    const data = await api.post('/chat/message', req.body, {
-      headers: {
-        'Authorization': req.headers.authorization
-      }
-    });
+    // Use helper to forward Authorization from cookies or headers (prod/dev)
+    const data = await postWithAuth('/chat/message', req.body, req, res);
     if (!data.success) {
       console.error('[CHAT] Upstream error (message):', data.error?.details || data.error?.message);
       return res.status(data.status).json({ error: 'Failed to send message', details: data.error });
@@ -53,11 +47,8 @@ router.post('/session/new', async (req, res) => {
   try {
     const base = apiClient.defaults.baseURL;
     console.log(`[CHAT] POST ${base}/chat/session/new`);
-    const response = await api.post('/chat/session/new', req.body, {
-      headers: {
-        'Authorization': req.headers.authorization
-      }
-    });
+    // Use helper to forward Authorization from cookies or headers (prod/dev)
+    const response = await postWithAuth('/chat/session/new', req.body, req, res);
     if (!response.success) {
       console.error('[CHAT] Upstream error (session/new):', response.error?.details || response.error?.message);
       return res.status(response.status).json({ error: 'Failed to create new session', details: response.error });

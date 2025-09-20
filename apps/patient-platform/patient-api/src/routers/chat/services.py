@@ -12,11 +12,9 @@ from .models import (
     ConnectionEstablished, Message, ProcessResponse
 )
 from .constants import ConversationState
-from .llm.context import ContextLoader
 from .llm.gpt import GPT4oProvider
 from .llm.groq import GroqProvider
 from .llm.cerebras import CerebrasProvider
-from .llm.retrieval import retrieve_for_symptoms, cached_retrieve
 from db.patient_models import Conversations as ChatModel, Messages as MessageModel
 
 LLM_PROVIDER = "groq"  # Options: "gpt4o", "groq", "cerebras"
@@ -64,7 +62,8 @@ class ConversationService:
         new_chat = ChatModel(
             patient_uuid=patient_uuid,
             conversation_state=ConversationState.CHEMO_CHECK_SENT,
-            symptom_list=[]  # Always start with empty symptom list
+            symptom_list=[],  # Always start with empty symptom list
+            alerts=[]
         )
         self.db.add(new_chat)
         
@@ -103,6 +102,8 @@ class ConversationService:
                 "Vomiting",
                 "Cough",
                 "Fatigue",
+                "Bruising",
+                "Bleeding",
                 "Swelling",
                 "Numbness or Tingling",
                 "Constipation",
@@ -119,6 +120,14 @@ class ConversationService:
             symptoms = [s.strip() for s in message.content.split(',') if s.strip()]
             # Filter out "None" if it's selected
             symptoms = [s for s in symptoms if s.lower() != "none"]
+            # Normalize any legacy combined option into discrete symptoms
+            expanded: List[str] = []
+            for s in symptoms:
+                if s.lower() in ["bruising / bleeding", "bruising/bleeding", "bruising or bleeding"]:
+                    expanded.extend(["Bruising", "Bleeding"])
+                else:
+                    expanded.append(s)
+            symptoms = expanded
             
             # Update the chat's symptom list in the database
             if symptoms:
@@ -161,25 +170,25 @@ class ConversationService:
 
     def _query_knowledge_base_with_rag(self, chat: ChatModel, context: Dict[str, Any]) -> str:
         """
-        Query knowledge base with complete context including base documents and RAG results.
+        Query the LLM using ONLY the model instructions file as the system prompt.
+        All other RAG/context sources are disabled.
         """
-        print(f"KB_RAG: Querying {LLM_PROVIDER.upper()} with complete context...")
-        
-        # 1. Load complete system prompt (base documents + RAG results)
+        print(f"MODEL_INSTRUCTIONS_ONLY: Querying {LLM_PROVIDER.upper()} with model_instructions.txt...")
+
+        # 1) Load ONLY the model instructions file
         model_inputs_path = "/app/model_inputs"
         if not os.path.exists(model_inputs_path):
             model_inputs_path = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'model_inputs'))
-        context_loader = ContextLoader(model_inputs_path)
-        
-        # Get patient symptoms for RAG
-        patient_symptoms = context.get('patient_state', {}).get('current_symptoms', [])
-        
-        # Load complete context (base documents + RAG results)
-        system_prompt = context_loader.load_context(patient_symptoms)
-        
-        print(f"Loaded complete context for symptoms: {patient_symptoms}")
+        instructions_path = os.path.join(model_inputs_path, 'model_instructions.txt')
+        try:
+            with open(instructions_path, 'r') as f:
+                system_prompt = f.read()
+            print(f"Loaded model_instructions.txt (chars={len(system_prompt)})")
+        except Exception as e:
+            print(f"ERROR: Failed to load model_instructions.txt from {instructions_path}: {e}")
+            system_prompt = "You are a helpful assistant. Respond in JSON."
 
-        # 2. Construct the user prompt for the LLM
+        # 2) Construct the user prompt for the LLM (conversation state/history only)
         user_prompt_parts = [
             "### Conversation Context ###",
             f"Current Symptoms: {context.get('patient_state', {}).get('current_symptoms', [])}",
@@ -188,21 +197,23 @@ class ConversationService:
             f"User: \"{context.get('latest_input', '')}\"",
             "\n### Instructions ###",
             "Follow the conversation workflow defined in your system instructions. Remember to respond with valid JSON only.",
-            "IMPORTANT: If you detect new symptoms in the user's message, include them in the 'new_symptoms' field of your JSON response."
+            "IMPORTANT: If you detect new symptoms in the user's message, include them in the 'new_symptoms' field of your JSON response.",
+            "IMPORTANT: If any alerts/triggers are hit this turn, include descriptive strings in the 'new_alerts' array of your JSON response.",
+            "IMPORTANT: Unless response_type is 'summary' or 'end', your 'content' must ask a question (not a standalone statement)."
         ]
         user_prompt = "\n".join(user_prompt_parts)
 
-        # 3. Call the LLM provider
+        # 3) Call the LLM provider
         llm_provider = get_llm_provider()
         response_generator = llm_provider.query(
             system_prompt=system_prompt,
             user_prompt=user_prompt
         )
 
-        # 4. Consume the streaming generator to get a single string response
+        # 4) Consume the streaming generator to get a single string response
         full_response = "".join([chunk for chunk in response_generator])
-        
-        print(f"KB_RAG: Received response from {LLM_PROVIDER.upper()}: '{full_response[:100]}...'")
+
+        print(f"MODEL_INSTRUCTIONS_ONLY: Received response from {LLM_PROVIDER.upper()}: '{full_response[:100]}...'")
         return full_response if full_response else "I'm not sure what to ask next. Can you tell me more?"
 
     def _extract_json_from_response(self, text: str) -> Dict[str, Any]:
@@ -385,6 +396,7 @@ class ConversationService:
         content = llm_json.get("content", "I'm not sure how to respond.")
         options = llm_json.get("options")
         new_symptoms_from_model = llm_json.get("new_symptoms", [])
+        new_alerts_from_model = llm_json.get("new_alerts", [])
         
         print(f"🎯 [RESPONSE] Processing response_type: {response_type}")
         print(f"🎯 [RESPONSE] Current chat.conversation_state: {chat.conversation_state}")
@@ -407,6 +419,24 @@ class ConversationService:
         else:
             print(f"ℹ️ [SYMPTOMS] No new symptoms detected by model")
 
+        # Check for new alerts returned by the model and update the chat alerts list
+        if new_alerts_from_model:
+            try:
+                print(f"🚩 [ALERTS] New alerts detected by model: {new_alerts_from_model}")
+                current_alerts = chat.alerts or []
+                print(f"🚩 [ALERTS] Current chat.alerts: {current_alerts}")
+                # Merge uniquely while preserving order preference for new alerts last
+                merged = list(dict.fromkeys((current_alerts or []) + new_alerts_from_model))
+                chat.alerts = merged
+                print(f"🚩 [ALERTS] Updated chat.alerts: {chat.alerts}")
+                self.db.commit()
+                print(f"✅ [ALERTS] Successfully committed alerts update to database")
+            except Exception as e:
+                print(f"❌ [ALERTS] Failed to update alerts: {e}")
+                self.db.rollback()
+        else:
+            print(f"ℹ️ [ALERTS] No new alerts detected by model")
+
         # If the user is responding with their feeling, save it to the chat
         if message.message_type == 'feeling_response':
             print(f"😊 [FEELING] Processing feeling response: {message.content}")
@@ -428,7 +458,7 @@ class ConversationService:
 
         # 7. Save and yield the assistant's message
         # If this is the summary, format the content for the user
-        if response_type == "summary":
+        if response_type.lower() == "summary":
             print(f"📝 [SUMMARY] Processing summary response_type...")
             summary_data = llm_json.get("summary_data", {})
             bulleted_summary = summary_data.get("bulleted_summary", "No summary available.")
@@ -436,25 +466,40 @@ class ConversationService:
             print(f"📝 [SUMMARY] Extracted bulleted_summary: {bulleted_summary}")
             print(f"📝 [SUMMARY] bulleted_summary type: {type(bulleted_summary)}")
             
-            # Format the bulleted summary with proper bullet points
+            # Format the bulleted summary with proper bullet points, removing any pre-existing bullets/dashes/numbers
             if bulleted_summary and bulleted_summary != "No summary available.":
                 # Handle both string and list formats
                 if isinstance(bulleted_summary, list):
-                    # If it's already a list, use it directly
                     bullet_lines = bulleted_summary
                     print(f"📝 [SUMMARY] bulleted_summary is already a list with {len(bullet_lines)} items")
                 else:
-                    # If it's a string, split by newlines
                     bullet_lines = bulleted_summary.split('\n')
                     print(f"📝 [SUMMARY] Split bulleted_summary string into {len(bullet_lines)} lines")
-                
+
+                def normalize_line(raw_line):
+                    text = str(raw_line or '').strip()
+                    if not text:
+                        return ''
+                    # Remove common bullet characters, dashes, and numbering at the start
+                    # Bullets: • ‣ ◦ – — -
+                    prefixes = ["•", "‣", "◦", "–", "—", "-"]
+                    for p in prefixes:
+                        if text.startswith(p):
+                            text = text[len(p):].lstrip()
+                    # Remove numbered list like `1. ` or `2) `
+                    i = 0
+                    while i < len(text) and text[i].isdigit():
+                        i += 1
+                    if i > 0 and i < len(text) and text[i] in ".)":
+                        text = text[i+1:].lstrip()
+                    return text
+
                 formatted_bullets = []
                 for line in bullet_lines:
-                    if isinstance(line, str) and line.strip():  # Only add non-empty string lines
-                        formatted_bullets.append(f"• {line.strip()}")
-                    elif not isinstance(line, str) and line:  # Handle non-string items
-                        formatted_bullets.append(f"• {str(line).strip()}")
-                
+                    normalized = normalize_line(line)
+                    if normalized:
+                        formatted_bullets.append(f"• {normalized}")
+
                 bullet_text = '<br>'.join(formatted_bullets) if formatted_bullets else "• No summary available."
                 print(f"📝 [SUMMARY] Formatted bullet_text: {bullet_text}")
             else:
@@ -462,6 +507,14 @@ class ConversationService:
                 print(f"📝 [SUMMARY] Using default bullet_text: {bullet_text}")
             
             content = f"<b>Thank you for completing this chat!</b><br><br>Here is your conversation summary:<br><br>{bullet_text}"
+            # Append abnormal alerts notice if any alerts were recorded this conversation
+            try:
+                if chat.alerts and len(chat.alerts) > 0:
+                    content = content + "<br><br>We noticed a few symptoms that may be considered abnormal. Please contact your care team if you believe something is urgent."
+                    print(f"🚩 [SUMMARY] Appended abnormal alerts notice. alerts_count={len(chat.alerts)}")
+            except Exception:
+                # Be resilient if alerts is unexpectedly not iterable
+                pass
             print(f"📝 [SUMMARY] Final formatted content: {content}")
 
         assistant_msg = MessageModel(
@@ -482,7 +535,7 @@ class ConversationService:
         yield frontend_message
 
         # 8. If the conversation is done, update the chat with the summary and mark as completed
-        if response_type in ["summary", "end"]:
+        if response_type.lower() in ["summary", "end"]:
             print(f"🎯 [SUMMARY] Processing {response_type} response for chat {chat_uuid}")
             summary_data = llm_json.get("summary_data", {})
             

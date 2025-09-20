@@ -33,7 +33,7 @@ class GroqProvider(LLMProvider):
                     "content": user_prompt,
                 }
             ],
-            temperature=0,
+            temperature=0.2,
             model=self.model,
             stream=False,
             tools=None,

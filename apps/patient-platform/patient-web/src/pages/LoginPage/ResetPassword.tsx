@@ -48,17 +48,22 @@ const RuleItem = styled.li<{ status: 'gray' | 'green' | 'red' }>`
 `;
 
 const ResetPassword: React.FC = () => {
-    const [resetPassword, setResetPassword] = useState<string>('');
-    const { completeNewPassword, user } = useAuth();
-    const navigate = useNavigate();
-    const [touched, setTouched] = useState(false);
+	const [resetPassword, setResetPassword] = useState<string>('');
+	const { completeNewPassword, user } = useAuth();
+	const navigate = useNavigate();
+	const [touched, setTouched] = useState(false);
+	const [isLoading, setIsLoading] = useState(false);
 
-    const handleResetPassword = async () => {
-      if (user?.email) {
-        await completeNewPassword(user.email, resetPassword);
-        navigate('/acknowledgement');
-      }
-    };
+	const handleResetPassword = async () => {
+		if (!user?.email || isLoading) return;
+		setIsLoading(true);
+		try {
+			await completeNewPassword(user.email, resetPassword);
+			navigate('/acknowledgement');
+		} finally {
+			setIsLoading(false);
+		}
+	};
 
   return (
     <Background>
@@ -106,8 +111,8 @@ const ResetPassword: React.FC = () => {
   </div>
 </div>
 
-                <StyledButton variant="primary" type="button" onClick={handleResetPassword}>
-                    Reset Password
+                <StyledButton variant="primary" type="button" onClick={handleResetPassword} disabled={isLoading}>
+                    {isLoading ? (<><span className="login-spinner" /> Resetting...</>) : 'Reset Password'}
                 </StyledButton>
             </Card>
         </MainContent>

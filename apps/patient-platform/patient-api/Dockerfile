@@ -4,8 +4,8 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Install system deps for psycopg2
-RUN apt-get update && apt-get install -y build-essential libpq-dev && rm -rf /var/lib/apt/lists/*
+# Install system deps for psycopg2, pdf2image, and OCR
+RUN apt-get update && apt-get install -y build-essential libpq-dev poppler-utils tesseract-ocr && rm -rf /var/lib/apt/lists/*
 
 # ----- Install Python dependencies -----
 COPY apps/patient-platform/patient-api/requirements.txt ./requirements.txt

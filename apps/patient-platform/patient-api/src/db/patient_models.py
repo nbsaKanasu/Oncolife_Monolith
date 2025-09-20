@@ -31,6 +31,7 @@ class Conversations(Base):
     medication_list = Column(JSONB, nullable=True)
     bulleted_summary = Column(Text, nullable=True)
     overall_feeling = Column(String, nullable=True)
+    alerts = Column(JSONB, nullable=True)
 
     # Relationship to the Messages table
     messages = relationship(
