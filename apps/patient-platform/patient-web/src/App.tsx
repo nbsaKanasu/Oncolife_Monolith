@@ -15,6 +15,7 @@ import Acknowledgement from './pages/LoginPage/Acknowledgement';
 // Patient-specific pages
 import SignUpPage from './pages/SignUpPage';
 import Layout from './components/Layout';
+import ProtectedRoute from './components/ProtectedRoute';
 import ChatsPage from './pages/ChatsPage';
 import { SummariesPage, SummariesDetailsPage } from './pages/SummariesPage';
 import NotesPage from './pages/NotesPage';
@@ -23,7 +24,11 @@ import ProfilePage from './pages/ProfilePage';
 
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return null;
+  
+  if (isLoading) {
+    return null;
+  }
+  
   return <Navigate to={isAuthenticated ? '/chat' : '/login'} />;
 }
 
@@ -41,7 +46,7 @@ function App() {
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/acknowledgement" element={<Acknowledgement />} />
               <Route path="/signup" element={<SignUpPage />} />
-              <Route element={<Layout />}>
+              <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route path="/chat" element={<ChatsPage />} />
                 <Route path="/summaries" element={<SummariesPage />} />
                 <Route path="/summaries/:id" element={<SummariesDetailsPage />} />
@@ -49,7 +54,7 @@ function App() {
                 <Route path="/education" element={<EducationPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
               </Route>
-              <Route path="/" element={<Navigate to="/login" />} />
+              <Route path="/" element={<RootRedirect />} />
             </Routes>
           </BrowserRouter>
         </UserProvider>

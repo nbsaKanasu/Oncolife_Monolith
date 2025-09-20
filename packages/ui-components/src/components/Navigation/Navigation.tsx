@@ -701,9 +701,9 @@ const SidebarContent: React.FC<{
       <ProfileSection isExpanded={isExpanded}>
         <ProfileContainer 
           isExpanded={isExpanded} 
-          isClickable={true}
-          onClick={onProfileClick}
-          title={!isExpanded ? 'View Profile' : ''}
+          isClickable={userType === 'patient'}
+          onClick={userType === 'patient' ? onProfileClick : undefined}
+          title={!isExpanded ? (userType === 'patient' ? 'View Profile' : '') : ''}
         >
           <Avatar>
             {profile ? 
@@ -806,8 +806,11 @@ const MobileNavigation: React.FC<{
   };
 
   const handleProfileClick = () => {
-    onProfileClick();
-    setIsOpen(false);
+    // Only handle profile click for patients
+    if (userType === 'patient') {
+      onProfileClick();
+      setIsOpen(false);
+    }
   };
 
   // User display info
@@ -856,7 +859,10 @@ const MobileNavigation: React.FC<{
 
           {/* User section */}
           <MobileUserSection>
-            <MobileUserProfile onClick={handleProfileClick}>
+            <MobileUserProfile 
+              onClick={userType === 'patient' ? handleProfileClick : undefined}
+              style={{ cursor: userType === 'patient' ? 'pointer' : 'default' }}
+            >
               <AvatarInitials>{initials}</AvatarInitials>
               <MobileUserInfo>
                 <MobileUserHello>Hello</MobileUserHello>
@@ -891,7 +897,11 @@ const Navigation: React.FC<NavigationProps> = ({ userType, profile }) => {
   };
 
   const handleProfileClick = () => {
-    navigate('/profile');
+    // Only navigate to profile for patients
+    if (userType === 'patient') {
+      navigate('/profile');
+    }
+    // For doctors, do nothing - just show the name
   };
 
   return (

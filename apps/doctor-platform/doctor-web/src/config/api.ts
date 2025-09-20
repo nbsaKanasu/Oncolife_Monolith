@@ -11,7 +11,6 @@ export const API_CONFIG = {
       RESET_PASSWORD: '/reset-password',
       LOGOUT: '/logout'
     },
-    PROFILE: '/profile',
     DASHBOARD: '/dashboard',
     PATIENT_DASHBOARD: '/patient-dashboard',
     PATIENTS: {

@@ -69,6 +69,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       if (result.success) {
         setUser({email: email, userType: 'doctor'});
+        
+        // Update token state - set token directly from response data
+        if (result.data?.session) {
+          setToken(result.data.session);
+        } else if (result.data?.tokens?.id_token) {
+          setToken(result.data.tokens.id_token);
+        } else {
+          // Fallback: check localStorage after a brief delay
+          setTimeout(() => {
+            const stored = localStorage.getItem(DOCTOR_STORAGE_KEYS.authToken);
+            if (stored) setToken(stored);
+          }, 100);
+        }
+        
         sessionStorage.setItem(SESSION_START_KEY, Date.now().toString());
         if (result.data?.requiresPasswordChange) {
           setIsPasswordChangeRequired(true);

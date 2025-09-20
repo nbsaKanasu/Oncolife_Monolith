@@ -1,6 +1,5 @@
 import React, { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
-// import { useFetchProfile } from '../services/profile'; // TODO: Create profile service
 
 export interface ProfileData {
   id: string;

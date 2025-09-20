@@ -98,8 +98,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // Update token state based on environment
         if (shouldUseLocalStorage()) {
-          const stored = localStorage.getItem(PATIENT_STORAGE_KEYS.authToken);
-          if (stored) setToken(stored);
+          // Set token directly from response data
+          if (result.data?.session) {
+            setToken(result.data.session);
+          } else if (result.data?.tokens?.access_token) {
+            setToken(result.data.tokens.access_token);
+          } else {
+            // Fallback: check localStorage after a brief delay
+            setTimeout(() => {
+              const stored = localStorage.getItem(PATIENT_STORAGE_KEYS.authToken);
+              if (stored) setToken(stored);
+            }, 100);
+          }
         } else {
           // In production, we don't track token state (handled by cookies)
           setIsAuthenticatedViaApi(true);
