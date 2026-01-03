@@ -21,11 +21,13 @@ from .base import BaseService
 from .clinic_service import ClinicService
 from .staff_service import StaffService
 from .auth_service import AuthService
+from .patient_service import PatientService
 
 __all__ = [
     "BaseService",
     "ClinicService",
     "StaffService",
     "AuthService",
+    "PatientService",
 ]
 

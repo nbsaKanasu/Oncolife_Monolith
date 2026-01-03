@@ -49,17 +49,12 @@ from core import settings, get_logger
 from core.logging import setup_logging
 from core.middleware import setup_middleware
 
-# API routers
+# API routers - Modular v1 architecture only
 from api.v1 import router as api_v1_router
 
-# Legacy routers (to be migrated to api/v1/)
-from routers.auth.auth_routes import router as auth_router
-from routers.patient.patient_routes import router as patient_router
-from routers.profile.profile_routes import router as profile_router
-from routers.diary.diary_routes import router as diary_router
-from routers.summaries.summaries_routes import router as summaries_router
-from routers.chemo.chemo_routes import router as chemo_router
-from routers.chat.chat_routes import router as chat_router
+# NOTE: Legacy routers have been removed.
+# All endpoints are now served through /api/v1/
+# See api/v1/router.py for the complete API structure.
 
 
 # =============================================================================
@@ -162,29 +157,20 @@ def create_application() -> FastAPI:
     )
     
     # =========================================================================
-    # LEGACY ROUTES (Deprecated - kept for backwards compatibility)
+    # LEGACY ROUTES - REMOVED
     # =========================================================================
     # 
-    # These legacy routes are kept to prevent breaking existing clients.
-    # New clients should use the /api/v1/ endpoints.
+    # All legacy routes have been migrated to /api/v1/
     # 
-    # Migration path:
+    # Migration complete:
     # - /auth/*      -> /api/v1/auth/*
     # - /chat/*      -> /api/v1/chat/*
     # - /chemo/*     -> /api/v1/chemo/*
     # - /diary/*     -> /api/v1/diary/*
     # - /profile/*   -> /api/v1/profile/*
     # - /summaries/* -> /api/v1/summaries/*
+    # - /patient/*   -> /api/v1/patients/*
     #
-    # TODO: Remove legacy routes after all clients have migrated
-    #
-    app.include_router(auth_router)
-    app.include_router(patient_router)
-    app.include_router(profile_router)
-    app.include_router(diary_router)
-    app.include_router(summaries_router)
-    app.include_router(chemo_router)
-    app.include_router(chat_router)
     
     # =========================================================================
     # ROOT ENDPOINTS

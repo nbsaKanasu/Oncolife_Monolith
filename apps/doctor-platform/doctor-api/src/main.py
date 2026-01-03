@@ -139,17 +139,16 @@ def create_application() -> FastAPI:
         prefix="/api/v1",
     )
     
-    # Add legacy router support for backward compatibility
-    # TODO: Migrate legacy routes to new structure and remove
-    try:
-        from routers.auth.auth_routes import router as legacy_auth_router
-        from routers.staff.staff_routes import router as legacy_staff_router
-        
-        app.include_router(legacy_auth_router)
-        app.include_router(legacy_staff_router)
-        logger.info("Legacy routers mounted for backward compatibility")
-    except ImportError as e:
-        logger.debug(f"Legacy routers not available: {e}")
+    # =========================================================================
+    # LEGACY ROUTES - REMOVED
+    # =========================================================================
+    # 
+    # All legacy routes have been migrated to /api/v1/
+    # 
+    # Migration complete:
+    # - /auth/*  -> /api/v1/auth/*
+    # - /staff/* -> /api/v1/staff/*
+    #
     
     return app
 
