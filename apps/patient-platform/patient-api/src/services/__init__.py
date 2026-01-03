@@ -45,6 +45,11 @@ from .diary_service import DiaryService
 from .summary_service import SummaryService
 from .profile_service import ProfileService
 
+# Onboarding services
+from .ocr_service import OCRService
+from .notification_service import NotificationService
+from .onboarding_service import OnboardingService
+
 # Keep backward compatibility
 from .conversation_service import ConversationService
 
@@ -58,5 +63,9 @@ __all__ = [
     "SummaryService",
     "ProfileService",
     "ConversationService",  # For backward compatibility
+    # Onboarding services
+    "OCRService",
+    "NotificationService",
+    "OnboardingService",
 ]
 

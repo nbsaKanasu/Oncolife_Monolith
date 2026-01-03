@@ -6,6 +6,7 @@ Each module corresponds to a logical grouping of API endpoints.
 
 Endpoints:
 - auth: Authentication (signup, login, logout, password)
+- onboarding: Patient onboarding flow (fax, OCR, welcome, setup)
 - chat: Symptom checker chat (REST + WebSocket)
 - chemo: Chemotherapy date management
 - diary: Patient diary entries
@@ -15,7 +16,7 @@ Endpoints:
 - summaries: Conversation summaries
 """
 
-from . import auth, chat, chemo, diary, health, patients, profile, summaries
+from . import auth, chat, chemo, diary, health, onboarding, patients, profile, summaries
 
 __all__ = [
     "auth",
@@ -23,6 +24,7 @@ __all__ = [
     "chemo",
     "diary",
     "health",
+    "onboarding",
     "patients",
     "profile",
     "summaries",

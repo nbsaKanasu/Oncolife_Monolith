@@ -7,6 +7,7 @@ that can be included in the main FastAPI application.
 Endpoints:
 - /health: Health check
 - /auth: Authentication (signup, login, logout, password, delete)
+- /onboarding: Patient onboarding flow (fax, OCR, welcome, setup)
 - /patients: Patient management
 - /chat: Symptom checker chat (REST + WebSocket)
 - /chemo: Chemotherapy dates
@@ -22,7 +23,7 @@ Usage:
 
 from fastapi import APIRouter
 
-from .endpoints import auth, chat, patients, profile, health, chemo, diary, summaries
+from .endpoints import auth, chat, patients, profile, health, chemo, diary, summaries, onboarding
 
 # Create main v1 router
 router = APIRouter()
@@ -37,6 +38,11 @@ router.include_router(
     auth.router,
     prefix="/auth",
     tags=["Authentication"]
+)
+
+router.include_router(
+    onboarding.router,
+    tags=["Patient Onboarding"]
 )
 
 router.include_router(

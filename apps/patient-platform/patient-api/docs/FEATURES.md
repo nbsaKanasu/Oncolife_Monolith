@@ -351,6 +351,7 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 
 | Feature | Status | API Ready | WebSocket |
 |---------|--------|-----------|-----------|
+| **Patient Onboarding (NEW)** | ✅ Complete | ✅ | - |
 | Symptom Checker (27 modules) | ✅ Complete | ✅ | ✅ |
 | Authentication (Cognito) | ✅ Complete | ✅ | - |
 | Chemo Tracking | ✅ Complete | ✅ | - |
@@ -358,6 +359,63 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 | Conversation Summaries | ✅ Complete | ✅ | - |
 | Patient Profile | ✅ Complete | ✅ | - |
 | Health Checks | ✅ Complete | ✅ | - |
+
+---
+
+## 8. Patient Onboarding Feature (NEW - COMPLETE)
+
+Complete end-to-end patient onboarding from clinic referral to active user.
+
+### File Locations
+
+| File | Description |
+|------|-------------|
+| `services/ocr_service.py` | AWS Textract OCR integration |
+| `services/notification_service.py` | AWS SES/SNS for email/SMS |
+| `services/onboarding_service.py` | Main orchestration service |
+| `db/models/referral.py` | Referral and onboarding models |
+| `api/v1/endpoints/onboarding.py` | REST endpoints |
+
+### Flow
+
+```
+Clinic Fax → OCR (Textract) → Parse → Create Account (Cognito) 
+→ Send Welcome Email → Patient Logs In → Password Reset 
+→ Acknowledgement → Terms/Privacy → Reminders → Active User
+```
+
+### AWS Services Used
+
+| Service | Purpose |
+|---------|---------|
+| **Cognito** | Patient authentication & temp passwords |
+| **Textract** | OCR for referral documents |
+| **SES** | Welcome emails & reminders |
+| **SNS** | SMS notifications |
+| **S3** | Referral document storage |
+
+### API Endpoints
+
+```
+POST /api/v1/onboarding/webhook/fax          - Receive fax webhook
+GET  /api/v1/onboarding/status               - Get onboarding status
+POST /api/v1/onboarding/complete/password    - Complete password step
+POST /api/v1/onboarding/complete/acknowledgement - Complete acknowledgement
+POST /api/v1/onboarding/complete/terms       - Complete terms/privacy
+POST /api/v1/onboarding/complete/reminders   - Complete reminder setup
+POST /api/v1/onboarding/referral/manual      - Create manual referral (admin)
+```
+
+### Data Extracted from Referrals
+
+- **Patient**: Name, DOB, Email, Phone, MRN, Sex
+- **Physician**: Name, Clinic, NPI
+- **Diagnosis**: Cancer type, Staging, Diagnosis date
+- **Treatment**: Chemo regimen, Start/End dates, Cycles
+- **History**: Medical, Surgical, Medications, Allergies
+- **Vitals**: Height, Weight, BMI, BP, Pulse, SpO2
+
+See [ONBOARDING.md](./ONBOARDING.md) for complete documentation.
 
 ---
 

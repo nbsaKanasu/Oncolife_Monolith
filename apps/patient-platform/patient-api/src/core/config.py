@@ -180,6 +180,113 @@ class Settings(BaseSettings):
     )
     
     # ==========================================================================
+    # AWS SETTINGS
+    # ==========================================================================
+    
+    aws_region: str = Field(
+        default="us-west-2",
+        description="AWS region for all services"
+    )
+    aws_access_key_id: Optional[str] = Field(
+        default=None,
+        description="AWS access key ID"
+    )
+    aws_secret_access_key: Optional[str] = Field(
+        default=None,
+        description="AWS secret access key"
+    )
+    
+    # Cognito Settings
+    cognito_user_pool_id: Optional[str] = Field(
+        default=None,
+        description="AWS Cognito User Pool ID"
+    )
+    cognito_client_id: Optional[str] = Field(
+        default=None,
+        description="AWS Cognito App Client ID"
+    )
+    cognito_client_secret: Optional[str] = Field(
+        default=None,
+        description="AWS Cognito App Client Secret"
+    )
+    
+    # S3 Settings (for document storage)
+    s3_referral_bucket: str = Field(
+        default="oncolife-referrals",
+        description="S3 bucket for storing referral documents"
+    )
+    
+    # Textract Settings (for OCR)
+    textract_enabled: bool = Field(
+        default=True,
+        description="Enable AWS Textract for OCR processing"
+    )
+    
+    # SES Settings (for email)
+    ses_sender_email: str = Field(
+        default="noreply@oncolife.com",
+        description="Email address for sending notifications"
+    )
+    ses_sender_name: str = Field(
+        default="OncoLife Care",
+        description="Display name for email sender"
+    )
+    
+    # SNS Settings (for SMS)
+    sns_enabled: bool = Field(
+        default=True,
+        description="Enable AWS SNS for SMS notifications"
+    )
+    
+    # ==========================================================================
+    # ONBOARDING SETTINGS
+    # ==========================================================================
+    
+    onboarding_welcome_email_template: str = Field(
+        default="oncolife-welcome",
+        description="SES template name for welcome emails"
+    )
+    onboarding_temp_password_length: int = Field(
+        default=12,
+        description="Length of temporary passwords"
+    )
+    onboarding_reminder_max_count: int = Field(
+        default=3,
+        description="Max reminder emails to send for incomplete onboarding"
+    )
+    onboarding_reminder_interval_days: int = Field(
+        default=2,
+        description="Days between onboarding reminder emails"
+    )
+    
+    # Terms & Privacy versions
+    terms_version: str = Field(
+        default="1.0",
+        description="Current version of Terms & Conditions"
+    )
+    privacy_version: str = Field(
+        default="1.0",
+        description="Current version of Privacy Policy"
+    )
+    hipaa_version: str = Field(
+        default="1.0",
+        description="Current version of HIPAA Notice"
+    )
+    
+    # ==========================================================================
+    # FAX SERVICE SETTINGS
+    # ==========================================================================
+    
+    fax_inbound_number: str = Field(
+        default="+18001234567",
+        description="Inbound fax number for receiving referrals"
+    )
+    fax_webhook_secret: Optional[str] = Field(
+        default=None,
+        description="Secret for validating fax webhook requests"
+    )
+    
+    # ==========================================================================
     # EXTERNAL SERVICES
     # ==========================================================================
     

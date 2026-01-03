@@ -71,6 +71,9 @@ export const API_CONFIG = {
       DETAIL: (uuid: string) => `/summaries/${uuid}`,
     },
     
+    // Patient Onboarding
+    ONBOARDING: '/onboarding',
+    
     // Health Check
     HEALTH: '/health',
   },
