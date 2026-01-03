@@ -2,12 +2,30 @@ export interface Message {
   id: number;
   chat_uuid: string;
   sender: 'user' | 'assistant';
-  message_type: 'text' | 'button_response' | 'multi_select_response' | 'single-select' | 'multi-select' | 'button_prompt' | 'feeling-select' | 'feeling_response';
+  message_type: 
+    | 'text' 
+    | 'button_response' 
+    | 'multi_select_response' 
+    | 'single-select' 
+    | 'multi-select' 
+    | 'button_prompt' 
+    | 'feeling-select' 
+    | 'feeling_response'
+    | 'symptom-select'  // New: Symptom checker selection
+    | 'yes_no'          // New: Yes/No questions
+    | 'choice'          // New: Single choice
+    | 'multiselect'     // New: Multi-select
+    | 'number'          // New: Number input
+    | 'triage_result';  // New: Triage result display
   content: string;
   structured_data?: {
     options?: string[];
+    options_data?: Array<{ label: string; value: any; category?: string }>;
     selected_options?: string[];
     max_selections?: number;
+    frontend_type?: string;
+    triage_level?: 'call_911' | 'notify_care_team' | 'none';
+    is_complete?: boolean;
   };
   created_at: string;
 }

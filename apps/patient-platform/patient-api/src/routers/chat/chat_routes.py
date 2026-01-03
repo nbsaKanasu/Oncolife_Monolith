@@ -26,7 +26,8 @@ from .models import (
     UpdateStateRequest, ChatSummaryResponse, WebSocketMessageIn, TodaySessionResponse,
     Message  # Import the Message model for manual conversion
 )
-from .services import ConversationService
+# Use the new rule-based Symptom Checker Service instead of LLM-based ConversationService
+from .symptom_checker_service import SymptomCheckerService as ConversationService
 from db.patient_models import Conversations as ChatModel, Messages as MessageModel
 from utils.timezone_utils import utc_to_user_timezone
 

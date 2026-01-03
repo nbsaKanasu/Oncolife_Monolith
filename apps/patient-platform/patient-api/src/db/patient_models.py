@@ -31,6 +31,9 @@ class Conversations(Base):
     medication_list = Column(JSONB, nullable=True)
     bulleted_summary = Column(Text, nullable=True)
     overall_feeling = Column(String, nullable=True)
+    
+    # Symptom Checker engine state (stores the rule-based engine conversation state)
+    engine_state = Column(JSONB, nullable=True)
 
     # Relationship to the Messages table
     messages = relationship(
