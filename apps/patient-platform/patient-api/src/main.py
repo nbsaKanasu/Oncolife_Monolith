@@ -1,11 +1,58 @@
-from dotenv import load_dotenv
-import os
+"""
+OncoLife Patient API - Main Application Entry Point.
 
-# Load environment variables from .env file
+This module initializes the FastAPI application with:
+- Middleware configuration
+- API routing (versioned)
+- Logging setup
+- Error handling
+
+Architecture:
+    The application follows a layered architecture:
+    
+    ┌─────────────────────────────────────────────┐
+    │              API Layer (api/v1/)            │
+    │  Routes, Request/Response handling          │
+    ├─────────────────────────────────────────────┤
+    │            Service Layer (services/)         │
+    │  Business logic, orchestration              │
+    ├─────────────────────────────────────────────┤
+    │          Repository Layer (db/repositories/) │
+    │  Data access, queries                       │
+    ├─────────────────────────────────────────────┤
+    │            Database Layer (db/models/)       │
+    │  ORM models, schema                         │
+    └─────────────────────────────────────────────┘
+
+Usage:
+    # Development
+    uvicorn main:app --reload --port 8000
+    
+    # Production
+    uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+
+Environment:
+    See core/config.py for all configuration options.
+    Configuration is loaded from environment variables and .env file.
+"""
+
+# Load environment variables first
+from dotenv import load_dotenv
 load_dotenv()
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Core infrastructure
+from core import settings, get_logger
+from core.logging import setup_logging
+from core.middleware import setup_middleware
+
+# API routers
+from api.v1 import router as api_v1_router
+
+# Legacy routers (to be migrated to api/v1/)
 from routers.auth.auth_routes import router as auth_router
 from routers.patient.patient_routes import router as patient_router
 from routers.profile.profile_routes import router as profile_router
@@ -14,33 +61,157 @@ from routers.summaries.summaries_routes import router as summaries_router
 from routers.chemo.chemo_routes import router as chemo_router
 from routers.chat.chat_routes import router as chat_router
 
-app = FastAPI()
 
-# CORS
-_default_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-_env_origins = os.getenv("CORS_ORIGINS")
-allow_origins = [o.strip() for o in _env_origins.split(",")] if _env_origins else _default_origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allow_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# =============================================================================
+# LOGGING SETUP
+# =============================================================================
+
+# Configure logging before anything else
+setup_logging(
+    level=settings.log_level,
+    format_type=settings.log_format,
+    app_name=settings.app_name
 )
 
-app.include_router(auth_router)
-app.include_router(patient_router)
-app.include_router(profile_router)
-app.include_router(diary_router)
-app.include_router(summaries_router)
-app.include_router(chemo_router)
-app.include_router(chat_router)
+logger = get_logger(__name__)
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
+
+# =============================================================================
+# APPLICATION LIFECYCLE
+# =============================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifecycle handler.
+    
+    Runs on startup and shutdown. Use for:
+    - Database connection setup/teardown
+    - Cache initialization
+    - Background task setup
+    """
+    # Startup
+    logger.info(
+        f"Starting {settings.app_name}",
+        extra={
+            "version": settings.app_version,
+            "environment": settings.environment,
+            "debug": settings.debug
+        }
+    )
+    
+    yield
+    
+    # Shutdown
+    logger.info(f"Shutting down {settings.app_name}")
+
+
+# =============================================================================
+# APPLICATION FACTORY
+# =============================================================================
+
+def create_application() -> FastAPI:
+    """
+    Create and configure the FastAPI application.
+    
+    This factory function creates the app with all middleware,
+    routes, and configuration applied.
+    
+    Returns:
+        Configured FastAPI application
+    """
+    # Create FastAPI app
+    app = FastAPI(
+        title=settings.app_name,
+        version=settings.app_version,
+        description="OncoLife Patient API - Symptom Tracking and Patient Care",
+        docs_url="/docs" if settings.is_development else None,
+        redoc_url="/redoc" if settings.is_development else None,
+        openapi_url="/openapi.json" if settings.is_development else None,
+        lifespan=lifespan,
+    )
+    
+    # Configure CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Setup custom middleware (error handling, logging, correlation IDs)
+    setup_middleware(app)
+    
+    # =========================================================================
+    # API VERSION 1 (New modular structure)
+    # =========================================================================
+    
+    app.include_router(
+        api_v1_router,
+        prefix=settings.api_v1_prefix
+    )
+    
+    # =========================================================================
+    # LEGACY ROUTES (To be migrated to api/v1/)
+    # These are kept for backwards compatibility during migration.
+    # Gradually migrate these to the new api/v1/ structure.
+    # =========================================================================
+    
+    app.include_router(auth_router)
+    app.include_router(patient_router)
+    app.include_router(profile_router)
+    app.include_router(diary_router)
+    app.include_router(summaries_router)
+    app.include_router(chemo_router)
+    app.include_router(chat_router)
+    
+    # =========================================================================
+    # ROOT ENDPOINTS
+    # =========================================================================
+    
+    @app.get("/", include_in_schema=False)
+    async def root():
+        """Root endpoint - redirects to docs or returns API info."""
+        return {
+            "name": settings.app_name,
+            "version": settings.app_version,
+            "docs": "/docs" if settings.is_development else None,
+            "api": settings.api_v1_prefix
+        }
+    
+    @app.get("/health", tags=["Health"])
+    async def health():
+        """
+        Basic health check endpoint.
+        
+        Returns simple status for load balancer health checks.
+        For detailed health info, use /api/v1/health/ready
+        """
+        return {"status": "ok"}
+    
+    return app
+
+
+# =============================================================================
+# APPLICATION INSTANCE
+# =============================================================================
+
+# Create the application instance
+app = create_application()
+
+
+# =============================================================================
+# DEVELOPMENT SERVER
+# =============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.is_development,
+        log_level=settings.log_level.lower()
+    )
