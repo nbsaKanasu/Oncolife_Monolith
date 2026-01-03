@@ -10,9 +10,13 @@ This module provides the service layer that:
 Architecture:
     services/
     ├── base.py              # Base service class
-    ├── auth_service.py      # Authentication logic
+    ├── auth_service.py      # Authentication logic (Cognito)
     ├── patient_service.py   # Patient operations
-    └── conversation_service.py  # Symptom checker logic
+    ├── chat_service.py      # Symptom checker chat
+    ├── chemo_service.py     # Chemotherapy dates
+    ├── diary_service.py     # Patient diary entries
+    ├── summary_service.py   # Conversation summaries
+    └── profile_service.py   # Patient profile
 
 Principles:
     - Services should be stateless
@@ -21,7 +25,7 @@ Principles:
     - Services are easily testable
 
 Usage:
-    from services import PatientService, ConversationService
+    from services import PatientService, ChatService
     
     @app.get("/patients/{patient_id}")
     async def get_patient(
@@ -34,11 +38,25 @@ Usage:
 
 from .base import BaseService
 from .patient_service import PatientService
+from .auth_service import AuthService
+from .chat_service import ChatService
+from .chemo_service import ChemoService
+from .diary_service import DiaryService
+from .summary_service import SummaryService
+from .profile_service import ProfileService
+
+# Keep backward compatibility
 from .conversation_service import ConversationService
 
 __all__ = [
     "BaseService",
     "PatientService",
-    "ConversationService",
+    "AuthService",
+    "ChatService",
+    "ChemoService",
+    "DiaryService",
+    "SummaryService",
+    "ProfileService",
+    "ConversationService",  # For backward compatibility
 ]
 

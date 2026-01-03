@@ -27,6 +27,7 @@ import boto3
 from botocore.exceptions import ClientError
 import requests
 
+from uuid import UUID
 from .base import BaseService
 from db.repositories import StaffRepository
 from db.models import StaffProfile
@@ -35,6 +36,8 @@ from core.exceptions import (
     AuthenticationError,
     ExternalServiceError,
     NotFoundError,
+    ConflictError,
+    ValidationError,
 )
 from core.logging import get_logger
 
@@ -261,6 +264,196 @@ class AuthService(BaseService):
                     message=str(e.response["Error"]["Message"]),
                     service_name="AWS Cognito"
                 )
+    
+    # =========================================================================
+    # Signup
+    # =========================================================================
+    
+    def signup(
+        self,
+        email: str,
+        first_name: str,
+        last_name: str,
+        role: str = "staff",
+        clinic_uuid: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a new staff member account.
+        
+        Args:
+            email: User's email address
+            first_name: User's first name
+            last_name: User's last name
+            role: User role (staff, physician, admin)
+            clinic_uuid: Optional clinic UUID for association
+            
+        Returns:
+            Dictionary with signup result
+            
+        Raises:
+            ConflictError: If email already exists
+            ExternalServiceError: If Cognito fails
+        """
+        self.logger.info(f"Signup request for: {email} (role={role})")
+        
+        # Check if user already exists
+        existing = self.staff_repo.get_by_email(email)
+        if existing:
+            raise ConflictError(
+                message=f"A user with email {email} already exists",
+                resource_type="Staff",
+                resource_id=email,
+            )
+        
+        try:
+            # Create user in Cognito
+            user_attributes = [
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+                {"Name": "given_name", "Value": first_name},
+                {"Name": "family_name", "Value": last_name},
+            ]
+            
+            response = self.cognito_client.admin_create_user(
+                UserPoolId=settings.cognito_user_pool_id,
+                Username=email,
+                UserAttributes=user_attributes,
+                ForceAliasCreation=False,
+            )
+            
+            # Extract UUID from Cognito
+            user_sub = None
+            for attr in response["User"]["Attributes"]:
+                if attr["Name"] == "sub":
+                    user_sub = attr["Value"]
+                    break
+            
+            if not user_sub:
+                raise ExternalServiceError(
+                    message="User created but UUID not returned",
+                    service_name="AWS Cognito",
+                )
+            
+            self.logger.info(f"Cognito user created: {email} uuid={user_sub}")
+            
+            # Create staff profile in database
+            staff_profile = self.staff_repo.create(
+                staff_uuid=user_sub,
+                email_address=email,
+                first_name=first_name,
+                last_name=last_name,
+                role=role,
+            )
+            
+            # Create clinic association if provided
+            if clinic_uuid:
+                try:
+                    self.staff_repo.create_association(
+                        staff_uuid=user_sub,
+                        clinic_uuid=clinic_uuid,
+                        role=role,
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Could not create clinic association: {e}")
+            
+            self.logger.info(f"Signup complete: {email} uuid={user_sub}")
+            
+            return {
+                "message": f"User {email} created successfully. A temporary password has been sent.",
+                "email": email,
+                "user_status": response["User"]["UserStatus"],
+                "uuid": user_sub,
+            }
+            
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            error_message = e.response["Error"]["Message"]
+            self.logger.error(f"Cognito signup error: {error_code}")
+            
+            if error_code == "UsernameExistsException":
+                raise ConflictError(
+                    message=f"User with email {email} already exists",
+                    resource_type="Staff",
+                    resource_id=email,
+                )
+            
+            raise ExternalServiceError(
+                message=f"AWS Cognito error: {error_message}",
+                service_name="AWS Cognito",
+            )
+    
+    # =========================================================================
+    # Delete User
+    # =========================================================================
+    
+    def delete_user(
+        self,
+        email: Optional[str] = None,
+        uuid: Optional[str] = None,
+        skip_aws: bool = False,
+    ) -> None:
+        """
+        Delete a staff member account.
+        
+        Args:
+            email: User's email (optional if uuid provided)
+            uuid: User's UUID (optional if email provided)
+            skip_aws: If True, skip Cognito deletion
+            
+        Raises:
+            ValidationError: If neither email nor uuid provided
+            NotFoundError: If user not found
+            ExternalServiceError: If Cognito deletion fails
+        """
+        if not email and not uuid:
+            raise ValidationError(
+                message="Either email or uuid must be provided",
+                field="identifier",
+            )
+        
+        # Find the user
+        staff = None
+        if uuid:
+            try:
+                staff_uuid = UUID(uuid)
+                staff = self.staff_repo.get_by_staff_uuid(staff_uuid)
+            except ValueError:
+                raise ValidationError(
+                    message="Invalid UUID format",
+                    field="uuid",
+                )
+        else:
+            staff = self.staff_repo.get_by_email(email)
+        
+        if not staff:
+            identifier = uuid or email
+            raise NotFoundError(
+                message=f"User not found: {identifier}",
+                resource_type="Staff",
+                resource_id=identifier,
+            )
+        
+        user_email = staff.email_address
+        self.logger.warning(f"Deleting user: {user_email}")
+        
+        # Delete from Cognito if not skipped
+        if not skip_aws:
+            try:
+                self.cognito_client.admin_delete_user(
+                    UserPoolId=settings.cognito_user_pool_id,
+                    Username=user_email,
+                )
+                self.logger.info(f"Cognito user deleted: {user_email}")
+            except ClientError as e:
+                self.logger.error(f"Cognito delete failed: {e}")
+                raise ExternalServiceError(
+                    message="Failed to delete user from authentication service",
+                    service_name="AWS Cognito",
+                )
+        
+        # Soft delete from database
+        self.staff_repo.delete(staff)
+        self.logger.warning(f"User deleted: {user_email}")
     
     # =========================================================================
     # User Lookup

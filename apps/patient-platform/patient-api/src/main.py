@@ -144,20 +144,40 @@ def create_application() -> FastAPI:
     setup_middleware(app)
     
     # =========================================================================
-    # API VERSION 1 (New modular structure)
+    # API VERSION 1 (Primary modular structure)
     # =========================================================================
-    
+    # 
+    # This is the main API with the new modular architecture:
+    # - /api/v1/auth     - Authentication (signup, login, logout)
+    # - /api/v1/chat     - Symptom checker chat (REST + WebSocket)
+    # - /api/v1/chemo    - Chemotherapy dates
+    # - /api/v1/diary    - Patient diary entries
+    # - /api/v1/profile  - Patient profile
+    # - /api/v1/summaries - Conversation summaries
+    # - /api/v1/health   - Health checks
+    #
     app.include_router(
         api_v1_router,
         prefix=settings.api_v1_prefix
     )
     
     # =========================================================================
-    # LEGACY ROUTES (To be migrated to api/v1/)
-    # These are kept for backwards compatibility during migration.
-    # Gradually migrate these to the new api/v1/ structure.
+    # LEGACY ROUTES (Deprecated - kept for backwards compatibility)
     # =========================================================================
-    
+    # 
+    # These legacy routes are kept to prevent breaking existing clients.
+    # New clients should use the /api/v1/ endpoints.
+    # 
+    # Migration path:
+    # - /auth/*      -> /api/v1/auth/*
+    # - /chat/*      -> /api/v1/chat/*
+    # - /chemo/*     -> /api/v1/chemo/*
+    # - /diary/*     -> /api/v1/diary/*
+    # - /profile/*   -> /api/v1/profile/*
+    # - /summaries/* -> /api/v1/summaries/*
+    #
+    # TODO: Remove legacy routes after all clients have migrated
+    #
     app.include_router(auth_router)
     app.include_router(patient_router)
     app.include_router(profile_router)

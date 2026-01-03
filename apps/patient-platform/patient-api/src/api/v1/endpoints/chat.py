@@ -1,24 +1,40 @@
 """
-Chat / Symptom Checker Endpoints.
+Chat/Symptom Checker Endpoints - Patient API
+=============================================
 
-Provides endpoints for:
-- Session management
-- Message handling
-- Symptom tracking
-- Triage alerts
-
-These endpoints power the patient-facing symptom checker chatbot.
+Complete endpoints for the symptom checker chat:
+- GET /session/today: Get or create today's session
+- POST /session/new: Force create new session
+- GET /{chat_uuid}/full: Get full chat history
+- GET /{chat_uuid}/state: Get chat state
+- POST /{chat_uuid}/feeling: Update overall feeling
+- DELETE /{chat_uuid}: Delete chat
+- WebSocket /ws/{chat_uuid}: Real-time messaging
 """
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
-from typing import Dict, Any, List, Optional
+import json
+import os
 from uuid import UUID
-from datetime import datetime, timedelta
+from typing import List, Optional, Literal
+from datetime import date, datetime, time
 
-from api.deps import get_patient_db, get_current_user, get_pagination, PaginationParams
-from services import ConversationService
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from jose import jwt, JWTError
+import pytz
+
+from api.deps import get_patient_db
+from services import ChatService
+from db.patient_models import Conversations as ChatModel
+from routers.auth.dependencies import _get_jwks, TokenData
+from routers.chat.models import (
+    WebSocketMessageIn, Message, FullChatResponse, 
+    ChatStateResponse, TodaySessionResponse
+)
+from utils.timezone_utils import utc_to_user_timezone
 from core.logging import get_logger
+from core.exceptions import NotFoundError
 
 logger = get_logger(__name__)
 
@@ -26,303 +42,346 @@ router = APIRouter()
 
 
 # =============================================================================
-# SESSION MANAGEMENT
+# Request/Response Schemas
 # =============================================================================
 
-@router.get("/session", summary="Get or create chat session")
-async def get_or_create_session(
-    db: Session = Depends(get_patient_db),
-    current_user: dict = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    Get active conversation or create a new one.
-    
-    Returns the current active session for the patient,
-    or creates a new one if none exists.
-    
-    Returns:
-        Session info with conversation ID and messages
-    """
-    patient_uuid = current_user.get("uuid")
-    
-    service = ConversationService(db)
-    conversation, is_new = service.get_or_create_session(patient_uuid)
-    
-    # Get messages
-    messages = service.get_messages(conversation.uuid)
-    
-    return {
-        "conversation_id": str(conversation.uuid),
-        "is_new_session": is_new,
-        "state": conversation.conversation_state,
-        "symptom_list": conversation.symptom_list or [],
-        "messages": [
-            {
-                "id": msg.id,
-                "sender": msg.sender,
-                "content": msg.content,
-                "type": msg.message_type,
-                "structured_data": msg.structured_data,
-                "created_at": msg.created_at.isoformat() if msg.created_at else None
-            }
-            for msg in messages
-        ]
-    }
-
-
-@router.get("/conversations", summary="Get patient conversations")
-async def get_conversations(
-    pagination: PaginationParams = Depends(get_pagination),
-    db: Session = Depends(get_patient_db),
-    current_user: dict = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    Get all conversations for the current patient.
-    
-    Returns:
-        List of conversations (newest first)
-    """
-    patient_uuid = current_user.get("uuid")
-    
-    service = ConversationService(db)
-    conversations = service.get_patient_conversations(
-        patient_uuid,
-        skip=pagination.skip,
-        limit=pagination.limit
-    )
-    
-    return {
-        "conversations": [
-            {
-                "id": str(c.uuid),
-                "state": c.conversation_state,
-                "triage_level": c.triage_level,
-                "symptom_list": c.symptom_list or [],
-                "created_at": c.created_at.isoformat() if c.created_at else None,
-                "completed_at": c.completed_at.isoformat() if c.completed_at else None
-            }
-            for c in conversations
-        ],
-        "count": len(conversations)
-    }
+class OverallFeelingUpdate(BaseModel):
+    """Request model for updating overall feeling."""
+    feeling: Literal['Very Happy', 'Happy', 'Neutral', 'Bad', 'Very Bad']
 
 
 # =============================================================================
-# MESSAGE HANDLING
+# Helper Functions
 # =============================================================================
 
-@router.post("/message", summary="Send a message")
-async def send_message(
-    message: Dict[str, Any],  # Should be a Pydantic model
-    db: Session = Depends(get_patient_db),
-    current_user: dict = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    Send a message in the current conversation.
-    
-    Processes user input through the symptom checker engine
-    and returns the assistant's response.
-    
-    Args:
-        message: Message with content and optional type
-    
-    Returns:
-        Assistant response with message and metadata
-    """
-    patient_uuid = current_user.get("uuid")
-    
-    service = ConversationService(db)
-    
-    # Get or create session
-    conversation, _ = service.get_or_create_session(patient_uuid)
-    
-    # Process message
-    content = message.get("content", "")
-    message_type = message.get("type", "text")
-    
-    response = service.process_message(
-        conversation_id=conversation.uuid,
-        user_input=content,
-        message_type=message_type
-    )
-    
-    return {
-        "conversation_id": str(conversation.uuid),
-        "response": response
-    }
+def convert_message_for_frontend(message: Message) -> Message:
+    """Convert message types from underscore to hyphen for frontend."""
+    if hasattr(message, 'message_type') and isinstance(message.message_type, str):
+        message.message_type = message.message_type.replace('_', '-')
+    return message
 
 
-@router.get("/conversations/{conversation_id}/messages", summary="Get conversation messages")
-async def get_messages(
-    conversation_id: UUID,
-    pagination: PaginationParams = Depends(get_pagination),
-    db: Session = Depends(get_patient_db),
-    current_user: dict = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    Get messages for a specific conversation.
+def convert_chat_to_user_timezone(chat, messages, user_timezone: str = "America/Los_Angeles"):
+    """Convert chat and message timestamps to user timezone."""
+    if chat.created_at:
+        chat.created_at = utc_to_user_timezone(chat.created_at, user_timezone)
+    if chat.updated_at:
+        chat.updated_at = utc_to_user_timezone(chat.updated_at, user_timezone)
     
-    Args:
-        conversation_id: Conversation UUID
+    for message in messages:
+        if message.created_at:
+            message.created_at = utc_to_user_timezone(message.created_at, user_timezone)
     
-    Returns:
-        List of messages
-    """
-    service = ConversationService(db)
-    messages = service.get_messages(
-        conversation_id,
-        skip=pagination.skip,
-        limit=pagination.limit
-    )
-    
-    return {
-        "messages": [
-            {
-                "id": msg.id,
-                "sender": msg.sender,
-                "content": msg.content,
-                "type": msg.message_type,
-                "structured_data": msg.structured_data,
-                "created_at": msg.created_at.isoformat() if msg.created_at else None
-            }
-            for msg in messages
-        ],
-        "count": len(messages)
-    }
+    return chat, messages
 
 
-# =============================================================================
-# TRIAGE AND ALERTS (Admin/Staff endpoints)
-# =============================================================================
-
-@router.get("/alerts", summary="Get triage alerts")
-async def get_triage_alerts(
-    hours: int = 24,
-    db: Session = Depends(get_patient_db),
-    current_user: dict = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    Get conversations requiring care team attention.
-    
-    Returns conversations with notify_care_team or call_911 triage.
-    
-    Args:
-        hours: Look back period in hours (default 24)
-    
-    Returns:
-        List of alert conversations
-    """
-    since = datetime.utcnow() - timedelta(hours=hours)
-    
-    service = ConversationService(db)
-    alerts = service.get_care_team_alerts(since=since)
-    
-    return {
-        "alerts": [
-            {
-                "conversation_id": str(c.uuid),
-                "patient_id": str(c.patient_uuid),
-                "triage_level": c.triage_level,
-                "triage_message": c.triage_message,
-                "symptoms": c.symptom_list or [],
-                "created_at": c.created_at.isoformat() if c.created_at else None
-            }
-            for c in alerts
-        ],
-        "count": len(alerts),
-        "period_hours": hours
-    }
-
-
-@router.get("/stats", summary="Get triage statistics")
-async def get_triage_stats(
-    hours: int = 24,
-    db: Session = Depends(get_patient_db),
-    current_user: dict = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    Get conversation statistics by triage level.
-    
-    Args:
-        hours: Look back period in hours (default 24)
-    
-    Returns:
-        Counts by triage level
-    """
-    since = datetime.utcnow() - timedelta(hours=hours)
-    
-    service = ConversationService(db)
-    stats = service.get_triage_statistics(since=since)
-    
-    return {
-        "statistics": stats,
-        "period_hours": hours
-    }
-
-
-# =============================================================================
-# WEBSOCKET (For real-time chat)
-# =============================================================================
-
-@router.websocket("/ws/{patient_id}")
-async def websocket_chat(
-    websocket: WebSocket,
-    patient_id: UUID,
-    db: Session = Depends(get_patient_db)
-):
-    """
-    WebSocket endpoint for real-time chat.
-    
-    Provides bidirectional communication for the symptom checker.
-    
-    Note: This is a placeholder. Full implementation requires
-    proper connection management and authentication.
-    """
-    await websocket.accept()
-    
-    logger.info(f"WebSocket connected for patient {patient_id}")
+async def get_user_from_token(token: str) -> Optional[TokenData]:
+    """Validate JWT token from WebSocket."""
+    if not token:
+        return None
     
     try:
-        service = ConversationService(db)
-        conversation, is_new = service.get_or_create_session(patient_id)
+        jwks = _get_jwks()
+        unverified_header = jwt.get_unverified_header(token)
+        rsa_key = {}
         
-        # Send initial messages if new session
-        if is_new:
-            messages = service.get_messages(conversation.uuid)
-            for msg in messages:
-                await websocket.send_json({
-                    "type": "message",
-                    "data": {
-                        "sender": msg.sender,
-                        "content": msg.content,
-                        "message_type": msg.message_type,
-                        "structured_data": msg.structured_data
-                    }
-                })
+        for key in jwks["keys"]:
+            if key["kid"] == unverified_header["kid"]:
+                rsa_key = {
+                    "kty": key["kty"], "kid": key["kid"], "use": key["use"],
+                    "n": key["n"], "e": key["e"]
+                }
         
-        # Message loop
-        while True:
-            data = await websocket.receive_json()
-            
-            # Process message
-            content = data.get("content", "")
-            message_type = data.get("type", "text")
-            
-            response = service.process_message(
-                conversation_id=conversation.uuid,
-                user_input=content,
-                message_type=message_type
+        if not rsa_key:
+            return None
+        
+        issuer = f"https://cognito-idp.{os.getenv('AWS_REGION')}.amazonaws.com/{os.getenv('COGNITO_USER_POOL_ID')}"
+        client_id = os.getenv("COGNITO_CLIENT_ID")
+        
+        claims = jwt.get_unverified_claims(token)
+        token_use = claims.get("token_use")
+        
+        if token_use == "access":
+            payload = jwt.decode(
+                token, rsa_key, algorithms=["RS256"],
+                issuer=issuer, options={"verify_aud": False}
             )
-            
-            # Send response
-            await websocket.send_json({
-                "type": "message",
-                "data": response
-            })
-            
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for patient {patient_id}")
-    except Exception as e:
-        logger.error(f"WebSocket error for patient {patient_id}: {e}")
-        await websocket.close(code=1011)
+            if client_id and payload.get("client_id") != client_id:
+                return None
+        else:
+            payload = jwt.decode(
+                token, rsa_key, algorithms=["RS256"],
+                audience=client_id, issuer=issuer
+            )
+        
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        
+        return TokenData(sub=user_id, email=payload.get("email"))
+        
+    except JWTError:
+        return None
 
+
+# =============================================================================
+# REST Endpoints
+# =============================================================================
+
+@router.get(
+    "/session/today",
+    response_model=TodaySessionResponse,
+    summary="Get or create today's session",
+    description="Fetch the most recent chat for today, or create one."
+)
+def get_or_create_session(
+    db: Session = Depends(get_patient_db),
+    # current_user: TokenData = Depends(get_current_user),  # Enable with auth
+    patient_uuid: str = Query(..., description="Patient UUID"),
+    timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
+):
+    """
+    Primary endpoint for starting or resuming a conversation.
+    
+    If no chat exists for today, creates a new one and returns
+    its first message. If a chat exists, returns its full history.
+    """
+    logger.info(f"Get/create session: patient={patient_uuid} tz={timezone}")
+    
+    chat_service = ChatService(db)
+    
+    try:
+        chat, messages, is_new = chat_service.get_or_create_today_session(
+            UUID(patient_uuid), timezone
+        )
+    except Exception as e:
+        logger.error(f"Session error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    # Convert messages to Pydantic models
+    pydantic_messages = [convert_message_for_frontend(Message.from_orm(msg)) for msg in messages]
+    
+    # Convert timestamps
+    convert_chat_to_user_timezone(chat, pydantic_messages, timezone)
+    
+    logger.info(f"Session: chat={chat.uuid} is_new={is_new} messages={len(messages)}")
+    
+    return TodaySessionResponse(
+        chat_uuid=chat.uuid,
+        conversation_state=chat.conversation_state,
+        messages=pydantic_messages,
+        is_new_session=is_new,
+        symptom_list=chat.symptom_list or [],
+    )
+
+
+@router.post(
+    "/session/new",
+    response_model=TodaySessionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Force create new session",
+    description="Create a new chat session, deleting any existing ones for today."
+)
+def force_create_new_session(
+    db: Session = Depends(get_patient_db),
+    patient_uuid: str = Query(..., description="Patient UUID"),
+    timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
+):
+    """
+    Force creation of a new chat session for today.
+    
+    This deletes any existing sessions for today and creates
+    a fresh conversation.
+    """
+    logger.info(f"Force new session: patient={patient_uuid}")
+    
+    # Delete existing chats for today
+    user_tz = pytz.timezone(timezone)
+    user_now = datetime.now(user_tz)
+    today_start = datetime.combine(user_now.date(), time.min)
+    today_end = datetime.combine(user_now.date(), time.max)
+    
+    utc_today_start = user_tz.localize(today_start).astimezone(pytz.UTC)
+    utc_today_end = user_tz.localize(today_end).astimezone(pytz.UTC)
+    
+    existing_chats = db.query(ChatModel).filter(
+        ChatModel.patient_uuid == patient_uuid,
+        ChatModel.created_at >= utc_today_start,
+        ChatModel.created_at <= utc_today_end,
+    ).all()
+    
+    for chat in existing_chats:
+        db.delete(chat)
+    db.commit()
+    
+    # Create new session
+    chat_service = ChatService(db)
+    chat, messages, is_new = chat_service.get_or_create_today_session(
+        UUID(patient_uuid), timezone
+    )
+    
+    pydantic_messages = [convert_message_for_frontend(Message.from_orm(msg)) for msg in messages]
+    convert_chat_to_user_timezone(chat, pydantic_messages, timezone)
+    
+    return TodaySessionResponse(
+        chat_uuid=chat.uuid,
+        conversation_state=chat.conversation_state,
+        messages=pydantic_messages,
+        is_new_session=is_new,
+        symptom_list=chat.symptom_list or [],
+    )
+
+
+@router.get(
+    "/{chat_uuid}/full",
+    response_model=FullChatResponse,
+    summary="Get full chat history",
+    description="Fetch entire conversation with all messages."
+)
+def get_full_chat(
+    chat_uuid: UUID,
+    db: Session = Depends(get_patient_db),
+    patient_uuid: str = Query(..., description="Patient UUID"),
+):
+    """
+    Fetch the entire history of a specific chat.
+    
+    Useful for rehydrating the UI when a user resumes a conversation.
+    """
+    chat_service = ChatService(db)
+    
+    try:
+        chat = chat_service.get_chat(chat_uuid, UUID(patient_uuid))
+        return FullChatResponse.from_orm(chat)
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get(
+    "/{chat_uuid}/state",
+    response_model=ChatStateResponse,
+    summary="Get chat state",
+    description="Get current state without full message history."
+)
+def get_chat_state(
+    chat_uuid: UUID,
+    db: Session = Depends(get_patient_db),
+    patient_uuid: str = Query(..., description="Patient UUID"),
+):
+    """
+    Quickly retrieve the current state and key data of a chat.
+    """
+    chat_service = ChatService(db)
+    
+    try:
+        chat = chat_service.get_chat(chat_uuid, UUID(patient_uuid))
+        return ChatStateResponse.from_orm(chat)
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post(
+    "/{chat_uuid}/feeling",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Update overall feeling",
+    description="Update the overall feeling for a chat session."
+)
+def update_overall_feeling(
+    chat_uuid: UUID,
+    payload: OverallFeelingUpdate,
+    db: Session = Depends(get_patient_db),
+    patient_uuid: str = Query(..., description="Patient UUID"),
+):
+    """
+    Update the overall feeling for a chat.
+    """
+    chat_service = ChatService(db)
+    
+    try:
+        chat_service.update_overall_feeling(chat_uuid, UUID(patient_uuid), payload.feeling)
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.delete(
+    "/{chat_uuid}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete chat",
+    description="Delete a conversation and all its messages."
+)
+def delete_chat(
+    chat_uuid: UUID,
+    db: Session = Depends(get_patient_db),
+    patient_uuid: str = Query(..., description="Patient UUID"),
+):
+    """
+    Delete a specific conversation.
+    """
+    chat_service = ChatService(db)
+    
+    try:
+        chat_service.delete_chat(chat_uuid, UUID(patient_uuid))
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+# =============================================================================
+# WebSocket Endpoint
+# =============================================================================
+
+@router.websocket("/ws/{chat_uuid}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    chat_uuid: UUID,
+    token: str = Query(...),
+    db: Session = Depends(get_patient_db),
+):
+    """
+    Real-time bidirectional communication for chat session.
+    
+    Authenticated using JWT token from query params.
+    """
+    # Authenticate
+    current_user = await get_user_from_token(token)
+    if not current_user:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token.")
+        return
+    
+    # Verify chat access
+    chat = db.query(ChatModel).filter(
+        ChatModel.uuid == chat_uuid,
+        ChatModel.patient_uuid == UUID(current_user.sub),
+    ).first()
+    
+    if not chat:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Chat not found.")
+        return
+    
+    await websocket.accept()
+    chat_service = ChatService(db)
+    
+    # Send connection acknowledgment
+    ack_message = chat_service.get_connection_ack(chat_uuid)
+    if ack_message:
+        await websocket.send_text(ack_message.json())
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            message_data = WebSocketMessageIn(**json.loads(data))
+            
+            # Process message through engine
+            response_generator = chat_service.process_message_stream(chat_uuid, message_data)
+            
+            async for chunk in response_generator:
+                frontend_chunk = convert_message_for_frontend(chunk)
+                json_payload = frontend_chunk.json()
+                logger.info(f"WebSocket send: type={getattr(frontend_chunk, 'message_type', 'unknown')}")
+                await websocket.send_text(json_payload)
+    
+    except WebSocketDisconnect:
+        logger.info(f"Client disconnected: chat={chat_uuid}")
+    except Exception as e:
+        logger.error(f"WebSocket error: chat={chat_uuid} error={e}")
+        reason = str(e)[:120] + "..." if len(str(e)) > 120 else str(e)
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=reason)

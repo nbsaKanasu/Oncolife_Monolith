@@ -12,10 +12,13 @@ Architecture:
     ├── base.py              # Generic CRUD repository
     ├── patient_repository.py
     ├── conversation_repository.py
-    └── medical_repository.py
+    ├── chemo_repository.py
+    ├── diary_repository.py
+    ├── summary_repository.py
+    └── profile_repository.py
 
 Usage:
-    from db.repositories import PatientRepository
+    from db.repositories import PatientRepository, ChemoRepository
     
     class PatientService:
         def __init__(self, patient_repo: PatientRepository):
@@ -28,10 +31,18 @@ Usage:
 from .base import BaseRepository
 from .patient_repository import PatientRepository
 from .conversation_repository import ConversationRepository
+from .chemo_repository import ChemoRepository
+from .diary_repository import DiaryRepository
+from .summary_repository import SummaryRepository
+from .profile_repository import ProfileRepository
 
 __all__ = [
     "BaseRepository",
     "PatientRepository",
     "ConversationRepository",
+    "ChemoRepository",
+    "DiaryRepository",
+    "SummaryRepository",
+    "ProfileRepository",
 ]
 

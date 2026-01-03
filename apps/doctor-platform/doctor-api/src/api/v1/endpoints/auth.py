@@ -2,15 +2,12 @@
 Authentication Endpoints - Doctor API
 =====================================
 
-Handles user authentication using AWS Cognito.
-
-Endpoints:
-- POST /auth/login: Authenticate with email/password
-- POST /auth/logout: Logout (client-side token removal)
-- POST /auth/complete-new-password: Set new password after temp password
-
-Note: User signup is typically handled by administrators,
-not self-registration for the doctor portal.
+Complete authentication endpoints using AWS Cognito:
+- POST /signup: Register new staff member
+- POST /login: Authenticate with email/password
+- POST /complete-new-password: Complete password setup
+- POST /logout: Logout (client-side token removal)
+- DELETE /delete-user: Delete staff account
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,9 +15,15 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from typing import Optional
 
-from api.deps import get_doctor_db_session
+from api.deps import get_doctor_db_session, get_patient_db_session
 from services import AuthService
-from core.exceptions import AuthenticationError, ExternalServiceError
+from core.exceptions import (
+    AuthenticationError,
+    ExternalServiceError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -31,6 +34,22 @@ router = APIRouter()
 # =============================================================================
 # Request/Response Models
 # =============================================================================
+
+class SignupRequest(BaseModel):
+    """Signup request for new staff member."""
+    email: EmailStr
+    first_name: str
+    last_name: str
+    role: str = "staff"  # staff, physician, admin
+    clinic_uuid: Optional[str] = None
+
+
+class SignupResponse(BaseModel):
+    """Signup response."""
+    message: str
+    email: str
+    user_status: str
+
 
 class LoginRequest(BaseModel):
     """Login request with email and password."""
@@ -51,7 +70,7 @@ class LoginResponse(BaseModel):
     valid: bool
     message: str
     user_status: Optional[str] = None
-    session: Optional[str] = None  # For password change flow
+    session: Optional[str] = None
     tokens: Optional[AuthTokens] = None
 
 
@@ -68,6 +87,13 @@ class CompletePasswordResponse(BaseModel):
     tokens: AuthTokens
 
 
+class DeleteUserRequest(BaseModel):
+    """Request to delete a user."""
+    email: Optional[str] = None
+    uuid: Optional[str] = None
+    skip_aws: bool = False
+
+
 class LogoutResponse(BaseModel):
     """Logout response."""
     message: str
@@ -76,6 +102,56 @@ class LogoutResponse(BaseModel):
 # =============================================================================
 # Endpoints
 # =============================================================================
+
+@router.post(
+    "/signup",
+    response_model=SignupResponse,
+    summary="Register new staff member",
+    description="Create a new staff member in AWS Cognito and local database.",
+)
+async def signup_user(
+    request: SignupRequest,
+    db: Session = Depends(get_doctor_db_session),
+):
+    """
+    Create a new staff member account.
+    
+    Creates the user in:
+    1. AWS Cognito (authentication)
+    2. Local database (staff profile)
+    
+    A temporary password will be sent to the user's email.
+    """
+    logger.info(f"Signup request: email={request.email} role={request.role}")
+    
+    auth_service = AuthService(db)
+    
+    try:
+        result = auth_service.signup(
+            email=request.email,
+            first_name=request.first_name,
+            last_name=request.last_name,
+            role=request.role,
+            clinic_uuid=request.clinic_uuid,
+        )
+        
+        return SignupResponse(
+            message=result["message"],
+            email=result["email"],
+            user_status=result["user_status"],
+        )
+        
+    except ConflictError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except ExternalServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+
 
 @router.post(
     "/login",
@@ -93,6 +169,8 @@ async def login(
     Returns JWT tokens on success, or challenge info if password
     change is required (for users with temporary passwords).
     """
+    logger.info(f"Login request: email={request.email}")
+    
     auth_service = AuthService(db)
     
     try:
@@ -101,7 +179,6 @@ async def login(
             password=request.password,
         )
         
-        # Build response
         response = LoginResponse(
             valid=result["valid"],
             message=result.get("message", ""),
@@ -109,7 +186,6 @@ async def login(
             session=result.get("session"),
         )
         
-        # Add tokens if present
         if result.get("tokens"):
             response.tokens = AuthTokens(**result["tokens"])
         
@@ -119,25 +195,8 @@ async def login(
         logger.error(f"Login failed for {request.email}: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e.message),
+            detail=str(e),
         )
-
-
-@router.post(
-    "/logout",
-    response_model=LogoutResponse,
-    summary="Logout",
-    description="Logout the current user.",
-)
-async def logout():
-    """
-    Logout the current user.
-    
-    Note: This is primarily a client-side operation. The client
-    should delete the stored tokens. This endpoint provides a
-    consistent API response.
-    """
-    return LogoutResponse(message="Logout successful")
 
 
 @router.post(
@@ -156,6 +215,8 @@ async def complete_new_password(
     This is called after login returns a FORCE_CHANGE_PASSWORD status.
     The session token from the login response must be provided.
     """
+    logger.info(f"Complete new password: email={request.email}")
+    
     auth_service = AuthService(db)
     
     try:
@@ -173,11 +234,79 @@ async def complete_new_password(
     except AuthenticationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=e.message,
+            detail=str(e),
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
         )
     except ExternalServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=e.message,
+            detail=str(e),
         )
 
+
+@router.post(
+    "/logout",
+    response_model=LogoutResponse,
+    summary="Logout",
+    description="Logout the current user.",
+)
+async def logout():
+    """
+    Logout the current user.
+    
+    Note: This is primarily a client-side operation. The client
+    should delete the stored tokens. This endpoint provides a
+    consistent API response.
+    """
+    logger.info("Logout request")
+    return LogoutResponse(message="Logout successful")
+
+
+@router.delete(
+    "/delete-user",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete user account",
+    description="Delete a staff member account and all associated data.",
+)
+async def delete_user(
+    request: DeleteUserRequest,
+    db: Session = Depends(get_doctor_db_session),
+):
+    """
+    Delete a staff member account.
+    
+    Can delete by email or UUID.
+    Optionally skips AWS Cognito deletion.
+    
+    This is an irreversible action.
+    """
+    logger.warning(f"Delete user request: email={request.email} uuid={request.uuid}")
+    
+    auth_service = AuthService(db)
+    
+    try:
+        auth_service.delete_user(
+            email=request.email,
+            uuid=request.uuid,
+            skip_aws=request.skip_aws,
+        )
+        
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ExternalServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
