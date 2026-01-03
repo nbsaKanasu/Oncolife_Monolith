@@ -2,6 +2,20 @@
 
 A comprehensive healthcare platform for cancer patient symptom tracking and care team management.
 
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture Guide](docs/ARCHITECTURE.md) | System architecture, design patterns, code organization |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md) | Getting started, development environment, code patterns |
+| [Patient API Features](apps/patient-platform/patient-api/docs/FEATURES.md) | Complete feature documentation (27 symptom modules) |
+| [Patient API Deployment](apps/patient-platform/patient-api/docs/DEPLOYMENT.md) | AWS deployment instructions |
+| [Doctor API Docs](apps/doctor-platform/doctor-api/docs/README.md) | Doctor API endpoints and usage |
+
+---
+
 ## 🏗️ Architecture
 
 ```
@@ -14,12 +28,47 @@ OncoLife_Monolith/
 │   └── doctor-platform/
 │       ├── doctor-api/      # FastAPI - Doctor backend (Python)
 │       └── doctor-web/      # React - Doctor frontend
+├── docs/                     # Architecture & developer guides
 ├── packages/                 # Shared packages (future)
 ├── scripts/                  # Deployment & utility scripts
 │   ├── aws/                 # AWS deployment scripts
 │   └── db/                  # Database scripts
 └── docker-compose.yml       # Local development orchestration
 ```
+
+### Backend Layered Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│              API Layer (api/v1/)            │
+│  Routes, Request/Response handling          │
+├─────────────────────────────────────────────┤
+│            Service Layer (services/)         │
+│  Business logic, orchestration              │
+├─────────────────────────────────────────────┤
+│          Repository Layer (db/repositories/) │
+│  Data access, queries                       │
+├─────────────────────────────────────────────┤
+│            Database Layer (db/models/)       │
+│  ORM models, schema                         │
+└─────────────────────────────────────────────┘
+```
+
+### Frontend Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│        Components (pages/, components/)      │
+├─────────────────────────────────────────────┤
+│        Hooks (hooks/) & Context (context/)   │
+├─────────────────────────────────────────────┤
+│        API Layer (api/services/)             │
+├─────────────────────────────────────────────┤
+│        HTTP Client (api/client.ts)           │
+└─────────────────────────────────────────────┘
+```
+
+---
 
 ## ✨ Key Features
 
@@ -43,6 +92,8 @@ OncoLife_Monolith/
 | 🟡 `notify_care_team` | Alert | Care team notification needed |
 | 🟢 `none` | Monitor | Continue observation |
 
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -51,42 +102,44 @@ OncoLife_Monolith/
 - Docker & Docker Compose
 - PostgreSQL 15+ (or use Docker)
 
-### Local Development
+### Option 1: Docker Compose (Recommended)
 
-1. **Clone the repository**
 ```bash
+# Clone the repository
 git clone https://github.com/nbsaKanasu/Oncolife_Monolith.git
 cd Oncolife_Monolith
-```
 
-2. **Start all services with Docker Compose**
-```bash
+# Start all services
 docker-compose up -d
+
+# Verify services
+curl http://localhost:8000/health  # Patient API
+curl http://localhost:8001/health  # Doctor API
 ```
 
-3. **Or run services individually**
+### Option 2: Manual Setup
 
-**Patient API:**
+See the [Developer Guide](docs/DEVELOPER_GUIDE.md) for detailed instructions.
+
 ```bash
+# Patient API
 cd apps/patient-platform/patient-api
 python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
+venv\Scripts\activate  # Windows
 pip install -r requirements.txt
-cd src
-uvicorn main:app --reload --port 8000
-```
+cd src && uvicorn main:app --reload --port 8000
 
-**Doctor API:**
-```bash
+# Doctor API (in another terminal)
 cd apps/doctor-platform/doctor-api
 python -m venv venv
-source venv/bin/activate
+venv\Scripts\activate
 pip install -r requirements.txt
-cd src
-uvicorn main:app --reload --port 8001
+cd src && uvicorn main:app --reload --port 8001
 ```
 
-### Access Points
+---
+
+## 🔗 Access Points
 
 | Service | URL | Description |
 |---------|-----|-------------|
@@ -97,70 +150,38 @@ uvicorn main:app --reload --port 8001
 | Patient Web | http://localhost:5173 | React frontend |
 | Doctor Web | http://localhost:5174 | React frontend |
 
-## 📚 API Documentation
+---
 
-### Patient API Endpoints (`/api/v1/`)
+## 📡 API Endpoints
 
-#### Authentication
-```
-POST /auth/signup                - Register new patient
-POST /auth/login                 - Patient login
-POST /auth/complete-new-password - Complete password setup
-DELETE /auth/delete-patient      - Delete account
-```
+### Patient API (`/api/v1/`)
 
-#### Symptom Checker
-```
-GET  /chat/session/today         - Get/create today's session
-POST /chat/session/new           - Force new session
-WS   /chat/ws/{chat_uuid}        - Real-time chat
-POST /chat/{uuid}/feeling        - Update overall feeling
-```
+| Category | Endpoints |
+|----------|-----------|
+| **Auth** | `POST /auth/login`, `/signup`, `/logout` |
+| **Chat** | `GET /chat/session/today`, `POST /chat/session/new`, `WS /chat/ws/{uuid}` |
+| **Chemo** | `POST /chemo/log`, `GET /chemo/history` |
+| **Diary** | `GET /diary/`, `POST /diary/`, `PATCH /diary/{uuid}` |
+| **Summaries** | `GET /summaries/{year}/{month}` |
+| **Profile** | `GET /profile/`, `PATCH /profile/config` |
 
-#### Chemotherapy
-```
-POST /chemo/log                  - Log chemo date
-GET  /chemo/history              - Get all dates
-```
+### Doctor API (`/api/v1/`)
 
-#### Diary
-```
-GET  /diary/                     - Get all entries
-GET  /diary/{year}/{month}       - Get by month
-POST /diary/                     - Create entry
-PATCH /diary/{uuid}              - Update entry
-```
+| Category | Endpoints |
+|----------|-----------|
+| **Auth** | `POST /auth/login`, `/signup`, `/logout` |
+| **Patients** | `GET /patients`, `/patients/{uuid}`, `/patients/{uuid}/alerts` |
+| **Staff** | `GET /staff`, `/staff/profile`, `/staff/{uuid}` |
+| **Clinics** | `GET /clinics`, `POST /clinics` |
 
-#### Summaries
-```
-GET /summaries/{year}/{month}    - Get by month
-GET /summaries/{uuid}            - Get details
-```
-
-#### Profile
-```
-GET   /profile/                  - Get profile
-PATCH /profile/config            - Update settings
-```
-
-### Doctor API Endpoints (`/api/v1/`)
-
-```
-POST /auth/login                 - Staff login
-GET  /patients                   - List patients
-GET  /patients/{uuid}            - Patient details
-GET  /patients/{uuid}/alerts     - Patient alerts
-GET  /staff/profile              - Staff profile
-```
+---
 
 ## 🔧 Configuration
 
-### Environment Variables
-
 Create `.env` files in each API directory:
 
-**Patient API (.env):**
 ```env
+# Application
 ENVIRONMENT=development
 DEBUG=true
 LOG_LEVEL=DEBUG
@@ -169,14 +190,14 @@ LOG_LEVEL=DEBUG
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=oncolife_admin
-POSTGRES_PASSWORD=password
+POSTGRES_PASSWORD=your_password
 POSTGRES_PATIENT_DB=oncolife_patient
 POSTGRES_DOCTOR_DB=oncolife_doctor
 
 # AWS Cognito
 AWS_REGION=us-west-2
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
 COGNITO_USER_POOL_ID=us-west-2_xxx
 COGNITO_CLIENT_ID=xxx
 COGNITO_CLIENT_SECRET=xxx
@@ -185,17 +206,16 @@ COGNITO_CLIENT_SECRET=xxx
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 ```
 
+---
+
 ## 🚢 Deployment
 
 ### AWS Deployment
 
-1. **Setup Infrastructure**
 ```bash
+# Setup infrastructure
 ./scripts/aws/setup-infrastructure.sh
-```
 
-2. **Deploy Services**
-```bash
 # Deploy all services
 ./scripts/aws/deploy.sh all
 
@@ -204,57 +224,68 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 ./scripts/aws/deploy.sh doctor-api
 ```
 
-See [Deployment Guide](apps/patient-platform/patient-api/docs/DEPLOYMENT.md) for detailed instructions.
+See [Deployment Guide](apps/patient-platform/patient-api/docs/DEPLOYMENT.md) for detailed AWS instructions.
 
-## 🧪 Testing
+---
+
+## 📁 Key Files
+
+### Backend (Python/FastAPI)
+
+| File | Purpose |
+|------|---------|
+| `main.py` | Application entry point |
+| `core/config.py` | Environment configuration |
+| `core/exceptions.py` | Custom exceptions |
+| `services/*.py` | Business logic |
+| `api/v1/endpoints/*.py` | API routes |
+| `db/repositories/*.py` | Data access |
+
+### Frontend (React/TypeScript)
+
+| File | Purpose |
+|------|---------|
+| `api/client.ts` | Type-safe HTTP client |
+| `api/services/*.ts` | API service modules |
+| `hooks/*.ts` | Custom React hooks |
+| `context/*.tsx` | State providers |
+| `components/common/*.tsx` | Shared components |
+
+---
+
+## 🛠️ Development
+
+### Code Patterns
+
+- **Backend**: Repository Pattern, Service Layer, Dependency Injection
+- **Frontend**: Custom Hooks, Context API, Error Boundaries
+
+### Testing
 
 ```bash
-# Run Patient API tests
+# Backend
 cd apps/patient-platform/patient-api
 pytest
 
-# Run Doctor API tests
-cd apps/doctor-platform/doctor-api
-pytest
+# Frontend
+cd apps/patient-platform/patient-web
+npm test
 ```
 
-## 📁 Project Structure (Patient API)
+### Git Workflow
 
-```
-patient-api/src/
-├── main.py                      # Application entry point
-├── core/                        # Infrastructure
-│   ├── config.py               # Settings
-│   ├── logging.py              # Logging setup
-│   ├── exceptions.py           # Custom exceptions
-│   └── middleware/             # Request handling
-├── db/                          # Database layer
-│   ├── base.py                 # SQLAlchemy base
-│   ├── session.py              # Session management
-│   ├── models/                 # SQLAlchemy models
-│   └── repositories/           # Data access
-├── services/                    # Business logic
-│   ├── auth_service.py
-│   ├── chat_service.py
-│   ├── chemo_service.py
-│   └── ...
-├── api/                         # API layer
-│   └── v1/
-│       ├── router.py           # Main router
-│       └── endpoints/          # Route handlers
-└── routers/                     # Legacy + Symptom Engine
-    └── chat/
-        └── symptom_checker/
-            ├── symptom_definitions.py  # 27 modules
-            └── symptom_engine.py       # State machine
+```bash
+# Feature branch
+git checkout -b feature/my-feature
+
+# Commit with conventional commits
+git commit -m "feat: add new symptom module"
+
+# Push and create PR
+git push origin feature/my-feature
 ```
 
-## 🤝 Contributing
-
-1. Create a feature branch
-2. Make changes
-3. Run tests
-4. Submit pull request
+---
 
 ## 📄 License
 
