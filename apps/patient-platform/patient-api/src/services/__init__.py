@@ -49,6 +49,7 @@ from .profile_service import ProfileService
 from .ocr_service import OCRService
 from .notification_service import NotificationService
 from .onboarding_service import OnboardingService
+from .fax_service import FaxService
 
 # Keep backward compatibility
 from .conversation_service import ConversationService
@@ -67,5 +68,6 @@ __all__ = [
     "OCRService",
     "NotificationService",
     "OnboardingService",
+    "FaxService",
 ]
 

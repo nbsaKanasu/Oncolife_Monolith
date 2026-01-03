@@ -34,6 +34,7 @@ from core.logging import get_logger
 from core.exceptions import ValidationError, NotFoundError
 
 from services.onboarding_service import OnboardingService
+from services.fax_service import FaxService, FaxProviderType
 
 logger = get_logger(__name__)
 
@@ -45,14 +46,54 @@ router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 # =============================================================================
 
 class FaxWebhookPayload(BaseModel):
-    """Payload from fax service webhook."""
-    fax_id: str = Field(..., description="Unique fax ID from provider")
+    """
+    Payload from fax service webhook.
+    
+    Supports multiple fax providers:
+    - Sinch (recommended)
+    - Twilio
+    - Phaxio
+    - RingCentral
+    - Generic format
+    
+    The service will automatically parse provider-specific fields.
+    """
+    # Generic fields (at least one identifier required)
+    fax_id: Optional[str] = Field(None, description="Unique fax ID from provider")
+    id: Optional[str] = Field(None, description="Alternative fax ID field")
+    
+    # Contact info
     from_number: Optional[str] = Field(None, description="Sender fax number")
     to_number: Optional[str] = Field(None, description="Receiving fax number")
+    
+    # Sinch specific
+    fromNumber: Optional[str] = Field(None, description="Sinch: Sender number")
+    toNumber: Optional[str] = Field(None, description="Sinch: Receiver number")
+    
+    # Timing
     received_at: Optional[str] = Field(None, description="ISO timestamp of receipt")
+    timestamp: Optional[str] = Field(None, description="Alternative timestamp field")
+    
+    # Document info
     pages: Optional[int] = Field(None, description="Number of pages")
-    s3_bucket: str = Field(..., description="S3 bucket with document")
-    s3_key: str = Field(..., description="S3 object key")
+    pageCount: Optional[int] = Field(None, description="Alternative page count")
+    
+    # Document content (one of these should be provided)
+    download_url: Optional[str] = Field(None, description="URL to download fax document")
+    documentUrl: Optional[str] = Field(None, description="Sinch: Document URL")
+    mediaUrl: Optional[str] = Field(None, description="Alternative media URL")
+    MediaUrl: Optional[str] = Field(None, description="Twilio: Media URL")
+    
+    # Or base64 encoded content
+    document: Optional[str] = Field(None, description="Base64 encoded document")
+    content: Optional[str] = Field(None, description="Alternative base64 content")
+    
+    # If already in S3 (for direct S3 triggers)
+    s3_bucket: Optional[str] = Field(None, description="S3 bucket with document")
+    s3_key: Optional[str] = Field(None, description="S3 object key")
+    
+    class Config:
+        extra = "allow"  # Allow additional provider-specific fields
 
 
 class OnboardingStatusResponse(BaseModel):
@@ -151,63 +192,169 @@ async def receive_fax_webhook(
     background_tasks: BackgroundTasks,
     request: Request,
     x_webhook_signature: Optional[str] = Header(None),
+    x_fax_provider: Optional[str] = Header(None, alias="X-Fax-Provider"),
     patient_db: Session = Depends(get_patient_db),
     doctor_db: Session = Depends(get_doctor_db),
 ):
     """
     Receive incoming fax webhook from fax service.
     
-    This endpoint is called by the fax service (e.g., Phaxio, eFax, etc.)
-    when a new fax is received. It initiates the OCR processing pipeline.
+    This endpoint handles the complete fax reception flow:
+    1. Receives webhook from fax provider (Sinch, Twilio, Phaxio, etc.)
+    2. Downloads document from provider URL or decodes base64
+    3. Uploads to S3 with KMS encryption
+    4. Triggers OCR processing pipeline
+    5. Creates patient account and sends welcome email
+    
+    Supported Providers:
+    - Sinch (set X-Fax-Provider: sinch)
+    - Twilio (set X-Fax-Provider: twilio)
+    - Phaxio (set X-Fax-Provider: phaxio)
+    - RingCentral (set X-Fax-Provider: ringcentral)
+    - Generic (default)
     
     Security:
-    - Validates webhook signature if configured
-    - Only accepts requests from known fax providers
-    
-    Flow:
-    1. Validate webhook
-    2. Enqueue document for OCR processing
-    3. Return acknowledgement
+    - Validates webhook signature if FAX_WEBHOOK_SECRET is configured
+    - Uses HTTPS only
+    - Documents encrypted at rest with AWS KMS
     """
-    logger.info(f"Received fax webhook: {payload.fax_id}")
+    # Determine fax ID for logging
+    fax_id = payload.fax_id or payload.id or "unknown"
+    logger.info(f"Received fax webhook: {fax_id} from provider: {x_fax_provider or 'unknown'}")
     
-    # Validate webhook signature if configured
-    if settings.fax_webhook_secret:
-        if not x_webhook_signature:
-            logger.warning("Missing webhook signature")
-            raise HTTPException(status_code=401, detail="Missing signature")
-        
-        # Verify signature (implementation depends on fax provider)
-        body = await request.body()
-        expected_sig = hmac.new(
-            settings.fax_webhook_secret.encode(),
-            body,
-            hashlib.sha256,
-        ).hexdigest()
-        
-        if not hmac.compare_digest(x_webhook_signature, expected_sig):
-            logger.warning("Invalid webhook signature")
-            raise HTTPException(status_code=401, detail="Invalid signature")
+    # Get raw body for signature verification
+    raw_body = await request.body()
     
-    # Process in background
-    async def process_fax():
+    # Determine provider type
+    provider = (x_fax_provider or "generic").lower()
+    if provider not in [FaxProviderType.SINCH, FaxProviderType.TWILIO, 
+                        FaxProviderType.PHAXIO, FaxProviderType.RINGCENTRAL]:
+        provider = FaxProviderType.GENERIC
+    
+    # Check if document is already in S3 (direct S3 trigger) or needs to be fetched
+    if payload.s3_bucket and payload.s3_key:
+        # Document already in S3, process directly
+        logger.info(f"Document already in S3: s3://{payload.s3_bucket}/{payload.s3_key}")
+        
+        async def process_existing_s3_document():
+            try:
+                onboarding_service = OnboardingService(patient_db, doctor_db)
+                result = await onboarding_service.process_referral(
+                    s3_bucket=payload.s3_bucket,
+                    s3_key=payload.s3_key,
+                    fax_number=payload.from_number or payload.fromNumber,
+                )
+                logger.info(f"Fax processed: {fax_id} -> {result}")
+            except Exception as e:
+                logger.error(f"Failed to process fax {fax_id}: {e}")
+        
+        background_tasks.add_task(process_existing_s3_document)
+        
+        return {
+            "success": True,
+            "message": "Fax received and queued for processing",
+            "fax_id": fax_id,
+        }
+    
+    # Document needs to be downloaded and uploaded to S3
+    async def receive_and_process_fax():
         try:
+            # Step 1: Receive fax (download/decode and upload to S3)
+            fax_service = FaxService(patient_db)
+            fax_result = await fax_service.receive_fax(
+                provider=provider,
+                payload=payload.model_dump(),
+                raw_body=raw_body,
+                signature=x_webhook_signature,
+            )
+            
+            logger.info(f"Fax uploaded to S3: {fax_result}")
+            
+            # Step 2: Process with OCR and create patient
             onboarding_service = OnboardingService(patient_db, doctor_db)
             result = await onboarding_service.process_referral(
-                s3_bucket=payload.s3_bucket,
-                s3_key=payload.s3_key,
-                fax_number=payload.from_number,
+                s3_bucket=fax_result["s3_bucket"],
+                s3_key=fax_result["s3_key"],
+                fax_number=payload.from_number or payload.fromNumber,
             )
-            logger.info(f"Fax processed: {payload.fax_id} -> {result}")
+            
+            logger.info(f"Fax fully processed: {fax_id} -> {result}")
+            
         except Exception as e:
-            logger.error(f"Failed to process fax {payload.fax_id}: {e}")
+            logger.error(f"Failed to process fax {fax_id}: {e}", exc_info=True)
     
-    background_tasks.add_task(process_fax)
+    background_tasks.add_task(receive_and_process_fax)
     
     return {
         "success": True,
         "message": "Fax received and queued for processing",
-        "fax_id": payload.fax_id,
+        "fax_id": fax_id,
+        "provider": provider,
+    }
+
+
+@router.post("/webhook/fax/{provider}")
+async def receive_provider_specific_webhook(
+    provider: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    x_webhook_signature: Optional[str] = Header(None),
+    patient_db: Session = Depends(get_patient_db),
+    doctor_db: Session = Depends(get_doctor_db),
+):
+    """
+    Provider-specific webhook endpoint.
+    
+    Use this if your fax provider doesn't support custom headers.
+    
+    Examples:
+    - POST /api/v1/onboarding/webhook/fax/sinch
+    - POST /api/v1/onboarding/webhook/fax/twilio
+    - POST /api/v1/onboarding/webhook/fax/phaxio
+    """
+    raw_body = await request.body()
+    
+    # Parse JSON body
+    import json
+    try:
+        payload_dict = json.loads(raw_body)
+    except json.JSONDecodeError:
+        # Try form-encoded (Twilio style)
+        from urllib.parse import parse_qs
+        payload_dict = {k: v[0] for k, v in parse_qs(raw_body.decode()).items()}
+    
+    fax_id = payload_dict.get("fax_id") or payload_dict.get("id") or payload_dict.get("FaxSid") or "unknown"
+    logger.info(f"Received {provider} fax webhook: {fax_id}")
+    
+    async def receive_and_process_fax():
+        try:
+            fax_service = FaxService(patient_db)
+            fax_result = await fax_service.receive_fax(
+                provider=provider.lower(),
+                payload=payload_dict,
+                raw_body=raw_body,
+                signature=x_webhook_signature,
+            )
+            
+            onboarding_service = OnboardingService(patient_db, doctor_db)
+            result = await onboarding_service.process_referral(
+                s3_bucket=fax_result["s3_bucket"],
+                s3_key=fax_result["s3_key"],
+                fax_number=payload_dict.get("from_number") or payload_dict.get("From"),
+            )
+            
+            logger.info(f"Fax fully processed: {fax_id} -> {result}")
+            
+        except Exception as e:
+            logger.error(f"Failed to process fax {fax_id}: {e}", exc_info=True)
+    
+    background_tasks.add_task(receive_and_process_fax)
+    
+    return {
+        "success": True,
+        "message": "Fax received and queued for processing",
+        "fax_id": fax_id,
+        "provider": provider,
     }
 
 

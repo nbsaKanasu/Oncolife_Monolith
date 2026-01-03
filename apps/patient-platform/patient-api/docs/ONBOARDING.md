@@ -30,6 +30,14 @@ The Patient Onboarding System handles the complete patient registration flow fro
 
 ### 1. Backend Services
 
+#### Fax Service (`services/fax_service.py`) ⭐ NEW
+- **Webhook receiver** for fax providers (Sinch, Twilio, Phaxio, RingCentral)
+- **Signature validation** for webhook security
+- **Document download** from provider URLs
+- **Base64 decoding** for inline document payloads
+- **S3 upload** with KMS encryption (HIPAA compliant)
+- **Provider-specific payload parsing**
+
 #### OCR Service (`services/ocr_service.py`)
 - **AWS Textract** integration for document processing
 - Extracts patient demographics, treatment info, medical history
@@ -89,12 +97,99 @@ The Patient Onboarding System handles the complete patient registration flow fro
 
 ## Detailed Flow
 
-### Phase 1: Referral Reception (Doctor → OncoLife)
+### Phase 1: Fax Reception (Complete Flow)
 
-1. **Clinic sends fax** containing patient referral
-2. **Fax service** (Phaxio, eFax, etc.) receives and stores in S3
-3. **Webhook** is triggered to OncoLife API
-4. **Fax document** is queued for OCR processing
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 1: Clinic (EHR) → Dedicated Fax Number                                │
+│  - Epic/Cerner sends referral to Oncolife's fax number                      │
+│  - AWS is NOT involved yet                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 2: Fax Provider (Sinch) → Digital Conversion                          │
+│  - Receives analog fax                                                       │
+│  - Converts to PDF/TIFF                                                      │
+│  - Triggers webhook when complete                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 3: Webhook → Oncolife API (FastAPI or AWS Lambda)                     │
+│  - POST /api/v1/onboarding/webhook/fax                                       │
+│  - Validates signature (HMAC-SHA256)                                         │
+│  - Downloads document from provider URL                                      │
+│  - Or decodes base64 payload                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 4: Upload to S3 (Encrypted)                                           │
+│  - Stored in: s3://oncolife-referrals/referrals/YYYY/MM/DD/fax_id.pdf       │
+│  - Encrypted with AWS KMS (HIPAA compliant)                                  │
+│  - Metadata stored in RDS                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 5: OCR Processing (AWS Textract)                                      │
+│  - Extracts text, forms, tables                                              │
+│  - Parses patient demographics, treatment info                               │
+│  - Confidence scoring per field                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 6: Data Normalization → Patient Record                                │
+│  - Structured fields stored in RDS                                           │
+│  - Linked to original fax for auditability                                   │
+│  - Validation for required fields                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 7: Patient Account Creation (Cognito + DB)                            │
+│  - Pre-register in AWS Cognito                                               │
+│  - Generate temporary password                                               │
+│  - Create local DB records                                                   │
+│  - Send welcome email/SMS                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Fax Provider Integration Details
+
+#### Supported Providers
+
+| Provider | Webhook URL | Signature Method |
+|----------|-------------|------------------|
+| **Sinch** (recommended) | `/api/v1/onboarding/webhook/fax/sinch` | HMAC-SHA256 |
+| **Twilio** | `/api/v1/onboarding/webhook/fax/twilio` | HMAC-SHA1 |
+| **Phaxio** | `/api/v1/onboarding/webhook/fax/phaxio` | HMAC-SHA256 |
+| **RingCentral** | `/api/v1/onboarding/webhook/fax/ringcentral` | HMAC-SHA256 |
+| **Generic** | `/api/v1/onboarding/webhook/fax` | HMAC-SHA256 |
+
+#### Sinch Webhook Configuration
+
+```
+Webhook URL: https://api.oncolife.com/api/v1/onboarding/webhook/fax/sinch
+Method: POST
+Content-Type: application/json
+Headers:
+  X-Webhook-Signature: <HMAC-SHA256 of body>
+```
+
+#### Twilio Webhook Configuration
+
+```
+Webhook URL: https://api.oncolife.com/api/v1/onboarding/webhook/fax/twilio
+Method: POST
+Content-Type: application/x-www-form-urlencoded
+Headers:
+  X-Twilio-Signature: <HMAC-SHA1 signature>
+```
+
+### Phase 2: Referral Reception (Legacy - Direct S3)
 
 ### Phase 2: OCR Processing
 
