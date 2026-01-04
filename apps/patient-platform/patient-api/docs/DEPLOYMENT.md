@@ -1376,5 +1376,376 @@ python scripts/seed_education.py
 
 ---
 
+---
+
+## Doctor Dashboard Module Deployment
+
+The Doctor Dashboard provides analytics-driven clinical monitoring for physicians and staff.
+
+### Step 1: Create Database Tables
+
+```bash
+#!/bin/bash
+# Run against the DOCTOR database
+
+psql -h $RDS_HOST -U $DB_USER -d oncolife_doctor -f scripts/db/schema_patient_diary_doctor_dashboard.sql
+
+# Verify tables created
+psql -h $RDS_HOST -U $DB_USER -d oncolife_doctor -c "
+SELECT table_name FROM information_schema.tables 
+WHERE table_name IN (
+  'symptom_time_series', 
+  'treatment_events',
+  'physician_reports',
+  'audit_logs'
+);
+"
+```
+
+### Step 2: Create Cognito User Pool for Physicians
+
+```bash
+#!/bin/bash
+# scripts/create-doctor-cognito.sh
+
+AWS_REGION=${AWS_REGION:-"us-west-2"}
+
+# Create separate user pool for physicians/staff
+aws cognito-idp create-user-pool \
+    --pool-name oncolife-physicians \
+    --auto-verified-attributes email \
+    --username-attributes email \
+    --mfa-configuration OPTIONAL \
+    --software-token-mfa-configuration Enabled=true \
+    --email-configuration SourceArn=arn:aws:ses:us-west-2:xxx:identity/noreply@oncolife.com \
+    --admin-create-user-config AllowAdminCreateUserOnly=true \
+    --password-policy '{
+        "MinimumLength": 12,
+        "RequireUppercase": true,
+        "RequireLowercase": true,
+        "RequireNumbers": true,
+        "RequireSymbols": true
+    }' \
+    --schema \
+        Name=email,Required=true \
+        Name=given_name,Required=true \
+        Name=family_name,Required=true \
+    --user-attribute-update-settings AttributesRequireVerificationBeforeUpdate=email
+
+# Create App Client
+aws cognito-idp create-user-pool-client \
+    --user-pool-id us-west-2_xxx \
+    --client-name doctor-api-client \
+    --generate-secret \
+    --explicit-auth-flows ADMIN_NO_SRP_AUTH ALLOW_REFRESH_TOKEN_AUTH \
+    --read-attributes email given_name family_name custom:role custom:physician_id \
+    --write-attributes email given_name family_name
+
+echo "Physician Cognito pool created"
+```
+
+### Step 3: Create Admin User (One-Time)
+
+```bash
+#!/bin/bash
+# Create the first admin user who can create physicians
+
+ADMIN_EMAIL="admin@oncolife.com"
+ADMIN_TEMP_PASSWORD="TempPass123!"
+
+aws cognito-idp admin-create-user \
+    --user-pool-id $COGNITO_POOL_ID \
+    --username $ADMIN_EMAIL \
+    --temporary-password $ADMIN_TEMP_PASSWORD \
+    --user-attributes \
+        Name=email,Value=$ADMIN_EMAIL \
+        Name=email_verified,Value=true \
+        Name=custom:role,Value=admin
+
+# Also insert into database
+psql -h $RDS_HOST -U $DB_USER -d oncolife_doctor -c "
+INSERT INTO staff_profiles (email_address, first_name, last_name, role)
+VALUES ('$ADMIN_EMAIL', 'System', 'Admin', 'admin');
+"
+
+echo "Admin user created: $ADMIN_EMAIL"
+```
+
+### Step 4: Configure ECS Task Definition for Doctor API
+
+```json
+{
+  "family": "oncolife-doctor-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/oncolifeDoctorTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "doctor-api",
+      "image": "ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/oncolife-doctor-api:latest",
+      "portMappings": [
+        {
+          "containerPort": 8001,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {"name": "ENVIRONMENT", "value": "production"},
+        {"name": "LOG_LEVEL", "value": "INFO"},
+        {"name": "AWS_REGION", "value": "us-west-2"}
+      ],
+      "secrets": [
+        {
+          "name": "DOCTOR_DB_HOST",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/db:host::"
+        },
+        {
+          "name": "DOCTOR_DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/db:password::"
+        },
+        {
+          "name": "COGNITO_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/cognito-doctor:client_secret::"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8001/api/v1/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3
+      }
+    }
+  ]
+}
+```
+
+### Step 5: Create IAM Role for Doctor API
+
+```bash
+#!/bin/bash
+# scripts/create-doctor-iam-role.sh
+
+ROLE_NAME="OncolifeDoctorTaskRole"
+
+aws iam create-role \
+    --role-name $ROLE_NAME \
+    --assume-role-policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "ecs-tasks.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole"
+            }
+        ]
+    }'
+
+# Cognito Admin Access (for physician/staff registration)
+aws iam put-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-name "CognitoAdminAccess" \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "cognito-idp:AdminCreateUser",
+                    "cognito-idp:AdminDeleteUser",
+                    "cognito-idp:AdminInitiateAuth",
+                    "cognito-idp:AdminRespondToAuthChallenge",
+                    "cognito-idp:AdminSetUserMFAPreference"
+                ],
+                "Resource": "arn:aws:cognito-idp:*:*:userpool/*"
+            }
+        ]
+    }'
+
+# SES Access (for invite emails)
+aws iam put-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-name "SESAccess" \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["ses:SendEmail", "ses:SendRawEmail"],
+                "Resource": "*"
+            }
+        ]
+    }'
+
+# S3 Access (for weekly reports)
+aws iam put-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-name "S3ReportAccess" \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:PutObject", "s3:GetObject"],
+                "Resource": "arn:aws:s3:::oncolife-reports/*"
+            }
+        ]
+    }'
+
+echo "Doctor API IAM role created: $ROLE_NAME"
+```
+
+### Step 6: Deploy Doctor API
+
+```bash
+#!/bin/bash
+# scripts/deploy-doctor-api.sh
+
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+AWS_REGION=${AWS_REGION:-"us-west-2"}
+ECR_REPO_NAME="oncolife-doctor-api"
+
+# Build and push
+docker build -t $ECR_REPO_NAME \
+    -f apps/doctor-platform/doctor-api/Dockerfile \
+    apps/doctor-platform/doctor-api/
+
+ECR_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
+
+docker tag $ECR_REPO_NAME:latest $ECR_URI/$ECR_REPO_NAME:latest
+docker push $ECR_URI/$ECR_REPO_NAME:latest
+
+# Update ECS service
+aws ecs update-service \
+    --cluster oncolife-production \
+    --service doctor-api-service \
+    --force-new-deployment
+
+echo "Doctor API deployed"
+```
+
+### Step 7: Verify Dashboard Endpoints
+
+```bash
+# Test health check
+curl -X GET "https://doctor-api.oncolife.com/api/v1/health"
+
+# Login as admin
+TOKEN=$(curl -s -X POST "https://doctor-api.oncolife.com/api/v1/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"email": "admin@oncolife.com", "password": "YourPassword"}' \
+    | jq -r '.tokens.access_token')
+
+# Get dashboard
+curl -X GET "https://doctor-api.oncolife.com/api/v1/dashboard" \
+    -H "Authorization: Bearer $TOKEN"
+
+# Get patient timeline
+curl -X GET "https://doctor-api.oncolife.com/api/v1/dashboard/patient/{patient_uuid}" \
+    -H "Authorization: Bearer $TOKEN"
+```
+
+### Step 8: Set Up Weekly Report Cron (EventBridge)
+
+```bash
+#!/bin/bash
+# Create EventBridge rule for weekly reports
+
+aws events put-rule \
+    --name "oncolife-weekly-reports" \
+    --schedule-expression "cron(0 6 ? * MON *)" \
+    --state ENABLED \
+    --description "Generate weekly physician reports every Monday at 6 AM"
+
+# Add Lambda target (or ECS task) to generate reports
+# This would invoke a Lambda or ECS task that:
+# 1. Queries dashboard service for each physician
+# 2. Generates PDF from report data
+# 3. Stores in S3
+# 4. Sends email notification
+```
+
+---
+
+## Doctor Dashboard Security Checklist
+
+### Authentication & Authorization
+- [ ] Separate Cognito pool for physicians/staff
+- [ ] `AdminCreateUserOnly=true` for physician pool
+- [ ] MFA enabled (OPTIONAL or REQUIRED)
+- [ ] Password policy enforced (12+ chars, mixed)
+- [ ] Admin user created and secured
+
+### Data Access
+- [ ] All queries scoped by physician_id
+- [ ] Staff can only see their physician's patients
+- [ ] No cross-physician data leakage
+- [ ] Patient questions filtered by share_with_physician
+
+### Audit & Compliance
+- [ ] Audit logs table created
+- [ ] All patient views logged
+- [ ] All report downloads logged
+- [ ] IP addresses captured
+- [ ] No PHI in CloudWatch logs
+
+### Registration Flow
+- [ ] Physicians created by admin only
+- [ ] Staff created by physicians only
+- [ ] Invite emails sent with temp passwords
+- [ ] Force password change on first login
+
+---
+
+## Doctor Dashboard Environment Variables
+
+```env
+# Application
+ENVIRONMENT=production
+APP_NAME="OncoLife Doctor API"
+APP_VERSION="1.0.0"
+
+# Server
+HOST=0.0.0.0
+PORT=8001
+
+# Doctor Database
+DOCTOR_DB_HOST=oncolife-db.xxx.us-west-2.rds.amazonaws.com
+DOCTOR_DB_PORT=5432
+DOCTOR_DB_USER=oncolife_admin
+DOCTOR_DB_PASSWORD=<from-secrets-manager>
+DOCTOR_DB_NAME=oncolife_doctor
+
+# Patient Database (read-only access)
+PATIENT_DB_HOST=oncolife-db.xxx.us-west-2.rds.amazonaws.com
+PATIENT_DB_PORT=5432
+PATIENT_DB_USER=oncolife_readonly
+PATIENT_DB_PASSWORD=<from-secrets-manager>
+PATIENT_DB_NAME=oncolife_patient
+
+# AWS Cognito (Physician Pool)
+COGNITO_USER_POOL_ID=us-west-2_xxx
+COGNITO_CLIENT_ID=xxx
+COGNITO_CLIENT_SECRET=<from-secrets-manager>
+
+# AWS SES (Invite emails)
+SES_SENDER_EMAIL=noreply@oncolife.com
+SES_SENDER_NAME="OncoLife Portal"
+
+# AWS S3 (Reports)
+S3_REPORTS_BUCKET=oncolife-reports
+
+# CORS
+CORS_ORIGINS=https://doctor.oncolife.com
+```
+
+---
+
 *Last Updated: January 2026*
 

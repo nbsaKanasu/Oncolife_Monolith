@@ -24,6 +24,7 @@ from .endpoints import (
     staff,
     patients,
     dashboard,
+    registration,
 )
 
 # Create the main API router for v1
@@ -73,6 +74,13 @@ api_router.include_router(
     dashboard.router,
     prefix="/dashboard",
     tags=["Dashboard"],
+)
+
+# Registration - admin-controlled physician/staff creation
+api_router.include_router(
+    registration.router,
+    prefix="/registration",
+    tags=["Registration"],
 )
 
 
