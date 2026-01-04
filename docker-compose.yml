@@ -48,21 +48,35 @@ services:
       dockerfile: Dockerfile
     container_name: oncolife-patient-api
     environment:
+      # Application
       - ENVIRONMENT=development
       - DEBUG=true
       - LOG_LEVEL=DEBUG
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=oncolife_admin
-      - POSTGRES_PASSWORD=oncolife_dev_password
-      - POSTGRES_PATIENT_DB=oncolife_patient
-      - POSTGRES_DOCTOR_DB=oncolife_doctor
+      - LOG_FORMAT=text
+      # Patient Database
+      - PATIENT_DB_HOST=postgres
+      - PATIENT_DB_PORT=5432
+      - PATIENT_DB_USER=oncolife_admin
+      - PATIENT_DB_PASSWORD=oncolife_dev_password
+      - PATIENT_DB_NAME=oncolife_patient
+      # Doctor Database (read-only)
+      - DOCTOR_DB_HOST=postgres
+      - DOCTOR_DB_PORT=5432
+      - DOCTOR_DB_USER=oncolife_admin
+      - DOCTOR_DB_PASSWORD=oncolife_dev_password
+      - DOCTOR_DB_NAME=oncolife_doctor
+      # AWS
       - AWS_REGION=${AWS_REGION:-us-west-2}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      # Cognito
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID:-}
       - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID:-}
       - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET:-}
+      # S3 Buckets
+      - S3_REFERRAL_BUCKET=${S3_REFERRAL_BUCKET:-oncolife-referrals}
+      - S3_EDUCATION_BUCKET=${S3_EDUCATION_BUCKET:-oncolife-education}
+      # Other
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
     ports:
       - "8000:8000"
@@ -86,21 +100,28 @@ services:
       dockerfile: Dockerfile
     container_name: oncolife-doctor-api
     environment:
+      # Application
       - ENVIRONMENT=development
       - DEBUG=true
       - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=text
+      # Doctor Database (primary)
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=oncolife_admin
       - POSTGRES_PASSWORD=oncolife_dev_password
-      - POSTGRES_PATIENT_DB=oncolife_patient
       - POSTGRES_DOCTOR_DB=oncolife_doctor
+      # Patient Database (read-only)
+      - POSTGRES_PATIENT_DB=oncolife_patient
+      # AWS
       - AWS_REGION=${AWS_REGION:-us-west-2}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      # Cognito
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID:-}
       - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID:-}
       - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET:-}
+      # Other
       - CORS_ORIGINS=http://localhost:3001,http://localhost:5174
     ports:
       - "8001:8001"

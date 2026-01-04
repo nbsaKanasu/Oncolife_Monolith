@@ -215,6 +215,10 @@ class Settings(BaseSettings):
         default="oncolife-referrals",
         description="S3 bucket for storing referral documents"
     )
+    s3_education_bucket: str = Field(
+        default="oncolife-education",
+        description="S3 bucket for storing education documents"
+    )
     
     # Textract Settings (for OCR)
     textract_enabled: bool = Field(

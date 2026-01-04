@@ -10,12 +10,13 @@ A comprehensive healthcare platform for cancer patient symptom tracking and care
 
 | Document | Description |
 |----------|-------------|
+| [**Step-by-Step Deployment**](docs/STEP_BY_STEP_DEPLOYMENT.md) | 🚀 **Complete AWS deployment walkthrough** |
 | [Architecture Guide](docs/ARCHITECTURE.md) | System architecture, design patterns, code organization |
 | [Developer Guide](docs/DEVELOPER_GUIDE.md) | Getting started, development environment, code patterns |
 | [Patient Onboarding](apps/patient-platform/patient-api/docs/ONBOARDING.md) | Fax/OCR → Cognito → Welcome flow |
-| [Patient Education](apps/patient-platform/patient-api/docs/EDUCATION.md) | **NEW!** Post-session education delivery |
+| [Patient Education](apps/patient-platform/patient-api/docs/EDUCATION.md) | Post-session education delivery |
 | [Patient API Features](apps/patient-platform/patient-api/docs/FEATURES.md) | Complete feature documentation (27 symptom modules) |
-| [Patient API Deployment](apps/patient-platform/patient-api/docs/DEPLOYMENT.md) | AWS deployment instructions |
+| [Patient API Deployment](apps/patient-platform/patient-api/docs/DEPLOYMENT.md) | AWS deployment details |
 | [Doctor API Docs](apps/doctor-platform/doctor-api/docs/README.md) | Doctor API endpoints and usage |
 
 ---

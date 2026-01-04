@@ -112,7 +112,7 @@ class EducationService:
         """
         self.db = db
         self._s3_client = s3_client
-        self.s3_bucket = settings.s3_referral_bucket.replace("referrals", "education")
+        self.s3_bucket = settings.s3_education_bucket
     
     @property
     def s3_client(self):
