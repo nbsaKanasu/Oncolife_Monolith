@@ -24,6 +24,58 @@ from db.patient_models import Conversations as ChatModel, Messages as MessageMod
 logger = logging.getLogger(__name__)
 
 
+# Diary auto-populate helper
+async def _trigger_diary_auto_populate(
+    db: Session,
+    chat: ChatModel,
+    state: ConversationState,
+    triage_level: TriageLevel,
+) -> None:
+    """
+    Auto-populate patient diary with symptom session summary.
+    
+    Creates a diary entry when symptom checker completes, allowing
+    patients to reference their check-in history.
+    """
+    try:
+        from services.diary_service import DiaryService
+        
+        diary_service = DiaryService(db)
+        
+        # Build symptoms list
+        symptoms = []
+        for result in state.triage_results:
+            symptoms.append({
+                "code": result.get('symptom_id', 'unknown'),
+                "name": result.get('symptom_id', 'Unknown').replace('-', ' ').title(),
+                "severity": result.get('severity', 'mild'),
+            })
+        
+        # Map triage level to string
+        triage_str = "none"
+        if triage_level == TriageLevel.CALL_911:
+            triage_str = "call_911"
+        elif triage_level in [TriageLevel.URGENT, TriageLevel.NOTIFY_CARE_TEAM]:
+            triage_str = "notify_care_team"
+        
+        # Create diary entry
+        diary_service.create_from_symptom_session(
+            patient_uuid=chat.patient_uuid,
+            conversation_uuid=chat.uuid,
+            symptoms=symptoms,
+            triage_level=triage_str,
+            overall_feeling=getattr(chat, 'overall_feeling', None),
+            summary_text=getattr(chat, 'bulleted_summary', None),
+        )
+        
+        logger.info(f"Diary entry auto-populated for session: {chat.uuid}")
+        
+    except ImportError:
+        logger.warning("Diary service not available - skipping auto-populate")
+    except Exception as e:
+        logger.error(f"Diary auto-populate failed: {e}")
+
+
 # Education integration helper
 async def _trigger_education_delivery(
     db: Session,
@@ -346,6 +398,14 @@ class SymptomCheckerService:
                 education_frontend = Message.from_orm(education_msg)
                 education_frontend.message_type = "education"
                 yield education_frontend
+            
+            # 8. Auto-populate diary entry from session
+            await _trigger_diary_auto_populate(
+                db=self.db,
+                chat=chat,
+                state=engine_response.state,
+                triage_level=engine_response.triage_level or TriageLevel.NONE,
+            )
 
     def _parse_user_response(self, message: WebSocketMessageIn) -> Any:
         """Parse the user's response based on message type."""

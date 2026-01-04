@@ -301,6 +301,107 @@ class DiaryService:
         else:
             logger.info(f"Diary entry already deleted: entry_uuid={entry_uuid}")
             return {"success": True, "message": "Diary entry was already deleted"}
+    
+    # =========================================================================
+    # Auto-populate from Symptom Checker
+    # =========================================================================
+    
+    def create_from_symptom_session(
+        self,
+        patient_uuid: UUID,
+        conversation_uuid: UUID,
+        symptoms: List[Dict[str, Any]],
+        triage_level: str,
+        overall_feeling: Optional[str] = None,
+        summary_text: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Auto-populate a diary entry from a symptom checker session.
+        
+        Called automatically when a symptom checker conversation completes.
+        Creates a system-generated summary entry that patients can reference.
+        
+        Args:
+            patient_uuid: The patient's UUID
+            conversation_uuid: The conversation UUID for reference
+            symptoms: List of symptoms with severity
+            triage_level: The triage outcome (call_911, notify_care_team, none)
+            overall_feeling: Patient's reported feeling
+            summary_text: Optional pre-generated summary
+            
+        Returns:
+            The created diary entry
+        """
+        logger.info(f"Auto-populating diary from symptom session: patient={patient_uuid}")
+        
+        # Build the diary entry content
+        today = datetime.utcnow().strftime("%B %d, %Y")
+        
+        # Format symptoms
+        symptom_lines = []
+        max_severity = "mild"
+        severity_order = {"mild": 1, "moderate": 2, "severe": 3, "urgent": 4}
+        
+        for symptom in symptoms:
+            name = symptom.get("name", symptom.get("code", "Unknown"))
+            severity = symptom.get("severity", "mild")
+            symptom_lines.append(f"• {name}: {severity}")
+            
+            if severity_order.get(severity, 0) > severity_order.get(max_severity, 0):
+                max_severity = severity
+        
+        # Build entry text
+        parts = [f"Daily Check-in Summary - {today}"]
+        
+        if overall_feeling:
+            parts.append(f"\nOverall feeling: {overall_feeling}")
+        
+        if symptom_lines:
+            parts.append("\nSymptoms reported:")
+            parts.extend(symptom_lines)
+        
+        # Add triage outcome (if concerning)
+        if triage_level == "call_911":
+            parts.append("\n⚠️ Urgent: Emergency care recommended")
+        elif triage_level == "notify_care_team":
+            parts.append("\n📞 Care team notification sent")
+        
+        # Add custom summary if provided
+        if summary_text:
+            parts.append(f"\n\n{summary_text}")
+        
+        parts.append(f"\n\n[Auto-generated from symptom check session]")
+        
+        diary_entry = "\n".join(parts)
+        title = f"Symptom Check - {today}"
+        
+        # Create the entry (marked for doctor if concerning)
+        marked_for_doctor = triage_level in ["call_911", "notify_care_team"]
+        
+        entry = self.diary_repo.create_entry(
+            patient_uuid=patient_uuid,
+            diary_entry=diary_entry,
+            title=title,
+            marked_for_doctor=marked_for_doctor,
+        )
+        
+        logger.info(
+            f"Auto-populated diary entry created: id={entry.id} "
+            f"marked_for_doctor={marked_for_doctor}"
+        )
+        
+        return {
+            "id": entry.id,
+            "created_at": entry.created_at,
+            "last_updated_at": entry.last_updated_at,
+            "patient_uuid": str(entry.patient_uuid),
+            "title": entry.title,
+            "diary_entry": entry.diary_entry,
+            "entry_uuid": str(entry.entry_uuid),
+            "marked_for_doctor": entry.marked_for_doctor,
+            "is_deleted": entry.is_deleted,
+            "auto_generated": True,
+        }
 
 
 

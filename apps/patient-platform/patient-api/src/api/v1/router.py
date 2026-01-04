@@ -26,7 +26,7 @@ from fastapi import APIRouter
 
 from .endpoints import (
     auth, chat, patients, profile, health, 
-    chemo, diary, summaries, onboarding, education
+    chemo, diary, summaries, onboarding, education, questions
 )
 
 # Create main v1 router
@@ -89,5 +89,11 @@ router.include_router(
     education.router,
     prefix="/education",
     tags=["Patient Education"]
+)
+
+router.include_router(
+    questions.router,
+    prefix="/questions",
+    tags=["Questions to Ask Doctor"]
 )
 

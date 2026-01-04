@@ -23,6 +23,7 @@ from .endpoints import (
     clinics,
     staff,
     patients,
+    dashboard,
 )
 
 # Create the main API router for v1
@@ -65,6 +66,13 @@ api_router.include_router(
     patients.router,
     prefix="/patients",
     tags=["Patients"],
+)
+
+# Dashboard - analytics and clinical monitoring
+api_router.include_router(
+    dashboard.router,
+    prefix="/dashboard",
+    tags=["Dashboard"],
 )
 
 

@@ -15,6 +15,7 @@ A comprehensive healthcare platform for cancer patient symptom tracking and care
 | [Developer Guide](docs/DEVELOPER_GUIDE.md) | Getting started, development environment, code patterns |
 | [Patient Onboarding](apps/patient-platform/patient-api/docs/ONBOARDING.md) | Fax/OCR → Cognito → Welcome flow |
 | [Patient Education](apps/patient-platform/patient-api/docs/EDUCATION.md) | Post-session education delivery |
+| [**Diary & Dashboard**](docs/PATIENT_DIARY_DOCTOR_DASHBOARD.md) | 🆕 Patient questions, doctor analytics dashboard |
 | [Patient API Features](apps/patient-platform/patient-api/docs/FEATURES.md) | Complete feature documentation (27 symptom modules) |
 | [Patient API Deployment](apps/patient-platform/patient-api/docs/DEPLOYMENT.md) | AWS deployment details |
 | [Doctor API Docs](apps/doctor-platform/doctor-api/docs/README.md) | Doctor API endpoints and usage |
@@ -96,13 +97,18 @@ OncoLife_Monolith/
 - **27 Symptom Modules**: Rule-based symptom checker with clinical triage logic
 - **Real-time Chat**: WebSocket-based symptom assessment conversations
 - **Chemotherapy Tracking**: Log and view treatment dates
-- **Patient Diary**: Daily health journal entries
+- **Patient Diary**: Daily health journal + auto-populated symptom summaries
+- **Questions to Ask Doctor**: Create and share questions with physicians 🆕
 - **Conversation Summaries**: Review past symptom checker sessions
 
 ### Doctor Platform
+- **Analytics Dashboard**: Severity-ranked patient list, trend detection 🆕
+- **Symptom Timeline**: Multi-line time series with treatment overlays 🆕
+- **Patient Questions**: View patient-shared questions 🆕
+- **Weekly Reports**: Automated weekly physician reports 🆕
 - **Patient Management**: View and manage assigned patients
 - **Alert Dashboard**: Monitor patient symptom alerts by triage level
-- **Conversation Review**: Review patient symptom checker transcripts
+- **Audit Logging**: HIPAA-compliant access tracking 🆕
 - **Staff Management**: Manage clinic staff and permissions
 - **Patient Summaries**: View immutable patient-generated summaries
 
@@ -180,11 +186,12 @@ cd src && uvicorn main:app --reload --port 8001
 | Category | Endpoints |
 |----------|-----------|
 | **Onboarding** | `POST /onboarding/webhook/fax`, `GET /onboarding/status`, `POST /onboarding/complete/*` |
-| **Education** 🆕 | `POST /education/deliver`, `GET /education/tab`, `POST /education/summary`, `GET /education/search` |
+| **Education** | `POST /education/deliver`, `GET /education/tab`, `POST /education/summary` |
 | **Auth** | `POST /auth/login`, `/signup`, `/logout` |
 | **Chat** | `GET /chat/session/today`, `POST /chat/session/new`, `WS /chat/ws/{uuid}` |
 | **Chemo** | `POST /chemo/log`, `GET /chemo/history` |
 | **Diary** | `GET /diary/`, `POST /diary/`, `PATCH /diary/{uuid}` |
+| **Questions** 🆕 | `GET /questions`, `POST /questions`, `PATCH /questions/{id}`, `POST /questions/{id}/share` |
 | **Summaries** | `GET /summaries/{year}/{month}` |
 | **Profile** | `GET /profile/`, `PATCH /profile/config` |
 
@@ -192,6 +199,7 @@ cd src && uvicorn main:app --reload --port 8001
 
 | Category | Endpoints |
 |----------|-----------|
+| **Dashboard** 🆕 | `GET /dashboard`, `/dashboard/patient/{uuid}`, `/dashboard/reports/weekly` |
 | **Auth** | `POST /auth/login`, `/signup`, `/logout` |
 | **Patients** | `GET /patients`, `/patients/{uuid}`, `/patients/{uuid}/alerts` |
 | **Staff** | `GET /staff`, `/staff/profile`, `/staff/{uuid}` |

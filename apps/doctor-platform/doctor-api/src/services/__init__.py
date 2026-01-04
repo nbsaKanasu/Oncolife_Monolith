@@ -22,6 +22,8 @@ from .clinic_service import ClinicService
 from .staff_service import StaffService
 from .auth_service import AuthService
 from .patient_service import PatientService
+from .dashboard_service import DashboardService
+from .audit_service import AuditService
 
 __all__ = [
     "BaseService",
@@ -29,5 +31,7 @@ __all__ = [
     "StaffService",
     "AuthService",
     "PatientService",
+    "DashboardService",
+    "AuditService",
 ]
 
