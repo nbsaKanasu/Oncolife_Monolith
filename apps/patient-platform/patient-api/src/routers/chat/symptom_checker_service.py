@@ -2,6 +2,8 @@
 Symptom Checker Service.
 Provides the main interface for the symptom checker conversation flow.
 Replaces the LLM-based chat service with a rule-based approach.
+
+Integrates with Education Service to deliver education after session completion.
 """
 from typing import Dict, Any, List, Tuple, Optional, AsyncGenerator
 from uuid import UUID
@@ -20,6 +22,92 @@ from .models import (
 from db.patient_models import Conversations as ChatModel, Messages as MessageModel
 
 logger = logging.getLogger(__name__)
+
+
+# Education integration helper
+async def _trigger_education_delivery(
+    db: Session,
+    chat: ChatModel,
+    state: ConversationState,
+    triage_level: TriageLevel,
+) -> Optional[Dict[str, Any]]:
+    """
+    Trigger education delivery after symptom checker completion.
+    
+    This is called when the rule engine marks the conversation as complete.
+    Returns education payload or None if education service is not available.
+    """
+    try:
+        from services.education_service import EducationService
+        from db.models.education import SymptomSession
+        
+        education_service = EducationService(db)
+        
+        # Create a symptom session for tracking
+        session = education_service.create_symptom_session(
+            patient_id=chat.patient_uuid,
+            conversation_uuid=chat.uuid,
+        )
+        
+        # Build symptom codes and severity levels from triage results
+        symptom_codes = state.selected_symptoms or []
+        severity_levels = {}
+        
+        for result in state.triage_results:
+            symptom_id = result.get('symptom_id')
+            severity = result.get('severity', 'mild')
+            if symptom_id:
+                severity_levels[symptom_id] = severity
+                
+                # Record rule evaluation for audit
+                education_service.record_rule_evaluation(
+                    session_id=session.id,
+                    symptom_code=symptom_id,
+                    rule_id=result.get('rule_id', 'UNKNOWN'),
+                    condition_met=True,
+                    severity=severity,
+                    escalation=result.get('escalation', False),
+                    triage_message=result.get('message', ''),
+                )
+        
+        # Determine if escalation occurred
+        escalation = triage_level in [TriageLevel.CALL_911, TriageLevel.URGENT]
+        
+        # Deliver education content
+        education_payload = await education_service.deliver_post_session_education(
+            session_id=session.id,
+            symptom_codes=symptom_codes,
+            severity_levels=severity_levels,
+            escalation=escalation,
+        )
+        
+        # Generate patient summary
+        symptoms_for_summary = [
+            {
+                "code": code,
+                "name": code.replace("-", " ").title(),
+                "severity": severity_levels.get(code, "mild"),
+            }
+            for code in symptom_codes
+        ]
+        
+        education_service.generate_patient_summary(
+            session_id=session.id,
+            patient_id=chat.patient_uuid,
+            symptoms=symptoms_for_summary,
+            medications_tried=[],  # Will be populated from screening questions
+            escalation=escalation,
+        )
+        
+        logger.info(f"Education delivered for session: {session.id}")
+        return education_payload
+        
+    except ImportError:
+        logger.warning("Education service not available - skipping education delivery")
+        return None
+    except Exception as e:
+        logger.error(f"Education delivery failed: {e}")
+        return None
 
 
 class SymptomCheckerService:
@@ -227,6 +315,37 @@ class SymptomCheckerService:
         frontend_message.message_type = self._map_frontend_type(engine_response.message_type)
         
         yield frontend_message
+        
+        # 7. Trigger education delivery if conversation is complete
+        if engine_response.is_complete and engine_response.state:
+            education_payload = await _trigger_education_delivery(
+                db=self.db,
+                chat=chat,
+                state=engine_response.state,
+                triage_level=engine_response.triage_level or TriageLevel.NONE,
+            )
+            
+            if education_payload:
+                # Create education message
+                education_msg = MessageModel(
+                    chat_uuid=chat_uuid,
+                    sender="assistant",
+                    message_type="education",
+                    content="Here is some helpful information about your symptoms:",
+                    structured_data={
+                        "frontend_type": "education",
+                        "education_blocks": education_payload.get("educationBlocks", []),
+                        "disclaimer": education_payload.get("disclaimer", {}),
+                        "session_id": education_payload.get("session_id"),
+                    }
+                )
+                self.db.add(education_msg)
+                self.db.commit()
+                self.db.refresh(education_msg)
+                
+                education_frontend = Message.from_orm(education_msg)
+                education_frontend.message_type = "education"
+                yield education_frontend
 
     def _parse_user_response(self, message: WebSocketMessageIn) -> Any:
         """Parse the user's response based on message type."""

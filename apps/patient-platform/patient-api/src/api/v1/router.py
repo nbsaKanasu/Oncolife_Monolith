@@ -14,6 +14,7 @@ Endpoints:
 - /diary: Patient diary entries
 - /summaries: Conversation summaries
 - /profile: Patient profile and configuration
+- /education: Patient education resources and summaries
 
 Usage:
     from api.v1 import router as api_v1_router
@@ -23,7 +24,10 @@ Usage:
 
 from fastapi import APIRouter
 
-from .endpoints import auth, chat, patients, profile, health, chemo, diary, summaries, onboarding
+from .endpoints import (
+    auth, chat, patients, profile, health, 
+    chemo, diary, summaries, onboarding, education
+)
 
 # Create main v1 router
 router = APIRouter()
@@ -79,5 +83,11 @@ router.include_router(
     profile.router,
     prefix="/profile",
     tags=["Profile"]
+)
+
+router.include_router(
+    education.router,
+    prefix="/education",
+    tags=["Patient Education"]
 )
 

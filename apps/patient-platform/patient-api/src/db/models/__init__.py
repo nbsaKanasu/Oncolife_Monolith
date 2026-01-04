@@ -8,6 +8,7 @@ This module organizes SQLAlchemy models by domain:
 - medical.py: Medical records, chemo, and clinical data
 - referral.py: Patient referrals, onboarding, and notifications
 - onboarding_schema.py: Normalized schema for fax/OCR onboarding
+- education.py: Patient education resources and delivery
 
 All models inherit from Base and use appropriate mixins.
 
@@ -16,6 +17,7 @@ Usage:
     from db.models import User, PatientProfile
     from db.models import PatientReferral, PatientOnboardingStatus
     from db.models import Provider, OncologyProfile, Medication
+    from db.models import Symptom, EducationDocument, PatientSummary
 """
 
 from .user import User, PatientProfile, StaffProfile
@@ -49,6 +51,25 @@ from .onboarding_schema import (
     get_confidence_threshold,
     is_field_acceptable,
 )
+from .education import (
+    Symptom,
+    SymptomSession,
+    RuleEvaluation,
+    EducationDocument,
+    Disclaimer,
+    CareTeamHandout,
+    PatientSummary,
+    MedicationTried,
+    EducationDeliveryLog,
+    EducationAccessLog,
+    SymptomCategory,
+    SessionStatus,
+    TriageSeverity,
+    DocumentStatus,
+    MedicationEffectiveness,
+    get_default_disclaimer,
+    get_symptom_catalog,
+)
 
 __all__ = [
     # User models
@@ -73,7 +94,7 @@ __all__ = [
     "ReferralStatus",
     "OnboardingStep",
     "NotificationChannel",
-    # Normalized Onboarding Schema (NEW)
+    # Normalized Onboarding Schema
     "Provider",
     "OncologyProfile",
     "Medication",
@@ -85,5 +106,23 @@ __all__ = [
     "OCR_CONFIDENCE_THRESHOLDS",
     "get_confidence_threshold",
     "is_field_acceptable",
+    # Education Module
+    "Symptom",
+    "SymptomSession",
+    "RuleEvaluation",
+    "EducationDocument",
+    "Disclaimer",
+    "CareTeamHandout",
+    "PatientSummary",
+    "MedicationTried",
+    "EducationDeliveryLog",
+    "EducationAccessLog",
+    "SymptomCategory",
+    "SessionStatus",
+    "TriageSeverity",
+    "DocumentStatus",
+    "MedicationEffectiveness",
+    "get_default_disclaimer",
+    "get_symptom_catalog",
 ]
 

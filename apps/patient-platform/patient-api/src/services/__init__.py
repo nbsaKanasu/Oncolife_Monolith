@@ -21,7 +21,8 @@ Architecture:
     ├── notification_service.py  # AWS SES/SNS notifications
     ├── onboarding_service.py    # Patient onboarding orchestration
     ├── fax_service.py           # Fax reception and processing
-    └── medication_categorizer.py # Medication categorization
+    ├── medication_categorizer.py # Medication categorization
+    └── education_service.py     # Patient education delivery
 
 Principles:
     - Services should be stateless
@@ -32,6 +33,7 @@ Principles:
 Usage:
     from services import PatientService, ChatService
     from services import OnboardingService, OCRService
+    from services import EducationService
     from services.medication_categorizer import categorize_medication
     
     @app.get("/patients/{patient_id}")
@@ -70,6 +72,9 @@ from .medication_categorizer import (
     MedicationCategory,
 )
 
+# Education services
+from .education_service import EducationService
+
 # Keep backward compatibility
 from .conversation_service import ConversationService
 
@@ -99,5 +104,7 @@ __all__ = [
     "get_neutropenia_risk_medications",
     "extract_regimen_medications",
     "MedicationCategory",
+    # Education services
+    "EducationService",
 ]
 
