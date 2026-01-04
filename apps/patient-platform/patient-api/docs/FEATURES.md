@@ -351,7 +351,8 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 
 | Feature | Status | API Ready | WebSocket |
 |---------|--------|-----------|-----------|
-| **Patient Onboarding (NEW)** | ✅ Complete | ✅ | - |
+| **Patient Education (NEW)** | ✅ Complete | ✅ | - |
+| **Patient Onboarding** | ✅ Complete | ✅ | - |
 | Symptom Checker (27 modules) | ✅ Complete | ✅ | ✅ |
 | Authentication (Cognito) | ✅ Complete | ✅ | - |
 | Chemo Tracking | ✅ Complete | ✅ | - |
@@ -362,7 +363,7 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 
 ---
 
-## 8. Patient Onboarding Feature (NEW - COMPLETE)
+## 8. Patient Onboarding Feature (COMPLETE)
 
 Complete end-to-end patient onboarding from clinic referral to active user.
 
@@ -416,6 +417,184 @@ POST /api/v1/onboarding/referral/manual      - Create manual referral (admin)
 - **Vitals**: Height, Weight, BMI, BP, Pulse, SpO2
 
 See [ONBOARDING.md](./ONBOARDING.md) for complete documentation.
+
+---
+
+## 9. Patient Education Feature (NEW - COMPLETE)
+
+Rule-based, non-AI education delivery system that provides clinician-approved content after every symptom session.
+
+### Design Principles
+
+| Principle | Implementation |
+|-----------|----------------|
+| **No AI/LLM** | All content is clinician-approved, copied verbatim |
+| **Mandatory Disclaimer** | Cannot be removed, shown every time |
+| **Care Team Handout** | Always included in every response |
+| **Full Audit Trail** | Every delivery logged for HIPAA |
+| **Immutable Summaries** | Patient summaries cannot be modified |
+
+### File Locations
+
+| File | Description |
+|------|-------------|
+| `db/models/education.py` | 11 database models for education |
+| `services/education_service.py` | Education delivery logic |
+| `api/v1/endpoints/education.py` | REST endpoints |
+| `scripts/seed_education.py` | Database seeding script |
+
+### Database Schema
+
+```sql
+-- Core Tables
+symptoms                 -- Symptom catalog
+education_documents      -- Clinician-approved content
+disclaimers              -- Mandatory disclaimer
+care_team_handouts       -- Always-included handout
+
+-- Session Tracking
+symptom_sessions         -- Session management
+rule_evaluations         -- Audit of which rules fired
+
+-- Patient Data
+patient_summaries        -- Immutable summaries
+medications_tried        -- Medication effectiveness
+
+-- Audit Tables
+education_delivery_log   -- What patient saw
+education_access_log     -- Tab access analytics
+```
+
+### API Endpoints
+
+```
+POST /api/v1/education/deliver              - Deliver post-session education
+POST /api/v1/education/summary              - Generate patient summary
+POST /api/v1/education/summary/{id}/note    - Add patient note (max 300 chars)
+GET  /api/v1/education/summary/{session}    - Get summary for session
+GET  /api/v1/education/tab                  - Education library
+GET  /api/v1/education/search?q=nausea      - Simple ILIKE search
+GET  /api/v1/education/document/{id}        - Get specific document
+GET  /api/v1/education/symptoms             - Get symptom catalog
+POST /api/v1/education/session              - Create symptom session
+GET  /api/v1/education/disclaimer           - Get mandatory disclaimer
+```
+
+### Education Delivery Flow
+
+```
+Symptom Session Completes
+         │
+         ▼
+┌─────────────────────────┐
+│  Fetch Education Docs   │
+│  for each symptom       │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Add Care Team Handout  │
+│  (always included)      │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Append Mandatory       │
+│  Disclaimer             │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Log Delivery           │
+│  (audit trail)          │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Generate Patient       │
+│  Summary (template)     │
+└───────────┬─────────────┘
+            │
+            ▼
+      Return to UI
+```
+
+### Content Rules
+
+| Rule | Requirement |
+|------|-------------|
+| Inline Text | 4-6 bullets max, Grade 6-8 reading level |
+| No Generation | Content copied verbatim from approved docs |
+| source_document_id | Required on all documents (audit) |
+| Pre-signed URLs | 30 min expiry, HTTPS only |
+| status = 'active' | Only active documents rendered |
+
+### Summary Templates (No AI)
+
+```python
+SUMMARY_TEMPLATES = {
+    "default": (
+        "You reported {symptom_list} with {severity_list} severity. "
+        "{medication_sentence}"
+        "{escalation_sentence}"
+    ),
+    "single_symptom": (
+        "You reported {symptom_name} ({severity}). "
+        "{medication_sentence}"
+        "{escalation_sentence}"
+    ),
+}
+```
+
+**Example Output:**
+```
+You reported nausea (moderate) and fatigue (mild).
+You tried ondansetron with partial relief.
+No urgent symptoms were detected.
+```
+
+### AWS Integration
+
+| Service | Purpose |
+|---------|---------|
+| **S3** | Education PDFs (KMS encrypted) |
+| **Pre-signed URLs** | Secure document access (30 min) |
+| **CloudTrail** | Access audit logging |
+
+### S3 Bucket Structure
+
+```
+s3://oncolife-education/
+├── symptoms/
+│   ├── fever/
+│   │   ├── fever_v1.pdf
+│   │   └── fever_v1.txt
+│   ├── nausea/
+│   │   ├── nausea_v1.pdf
+│   │   └── nausea_v1.txt
+│   └── ...
+└── care-team/
+    ├── care_team_handout_v1.pdf
+    └── care_team_handout_v1.txt
+```
+
+### Anti-Hallucination Safeguards
+
+| Allowed | Forbidden |
+|---------|-----------|
+| Copy-paste from approved docs | Paraphrasing |
+| Light truncation | Sentence recombination |
+| | Multi-document merging |
+| | Any AI/LLM generation |
+
+**Engineering Control:**
+```python
+# Every education block must reference:
+education_documents.source_document_id
+# If missing → block rendering FAILS
+```
+
+See [EDUCATION.md](./EDUCATION.md) for complete documentation.
 
 ---
 

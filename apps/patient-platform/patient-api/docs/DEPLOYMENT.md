@@ -925,6 +925,310 @@ aws ecs update-service \
 
 ---
 
+## Patient Education Module Setup (NEW)
+
+The Patient Education module delivers clinician-approved education content after every symptom checker session.
+
+### Step 1: Create S3 Bucket for Education Content
+
+```bash
+#!/bin/bash
+# scripts/create-education-bucket.sh
+
+BUCKET_NAME="oncolife-education"
+AWS_REGION=${AWS_REGION:-"us-west-2"}
+
+# Create bucket
+aws s3api create-bucket \
+    --bucket $BUCKET_NAME \
+    --region $AWS_REGION \
+    --create-bucket-configuration LocationConstraint=$AWS_REGION
+
+# Enable versioning (no overwrite)
+aws s3api put-bucket-versioning \
+    --bucket $BUCKET_NAME \
+    --versioning-configuration Status=Enabled
+
+# Enable KMS encryption
+aws s3api put-bucket-encryption \
+    --bucket $BUCKET_NAME \
+    --server-side-encryption-configuration '{
+        "Rules": [
+            {
+                "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "aws:kms",
+                    "KMSMasterKeyID": "alias/oncolife-education-key"
+                }
+            }
+        ]
+    }'
+
+# Block public access
+aws s3api put-public-access-block \
+    --bucket $BUCKET_NAME \
+    --public-access-block-configuration \
+        BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+
+# Enable CloudTrail logging for audit
+echo "S3 bucket created: $BUCKET_NAME"
+```
+
+### Step 2: Create S3 Folder Structure
+
+```bash
+#!/bin/bash
+# scripts/setup-education-folders.sh
+
+BUCKET_NAME="oncolife-education"
+
+# Create folder structure (S3 uses prefixes)
+aws s3api put-object --bucket $BUCKET_NAME --key "symptoms/"
+aws s3api put-object --bucket $BUCKET_NAME --key "symptoms/fever/"
+aws s3api put-object --bucket $BUCKET_NAME --key "symptoms/nausea/"
+aws s3api put-object --bucket $BUCKET_NAME --key "symptoms/bleeding/"
+aws s3api put-object --bucket $BUCKET_NAME --key "symptoms/fatigue/"
+aws s3api put-object --bucket $BUCKET_NAME --key "symptoms/pain/"
+aws s3api put-object --bucket $BUCKET_NAME --key "symptoms/diarrhea/"
+aws s3api put-object --bucket $BUCKET_NAME --key "symptoms/constipation/"
+aws s3api put-object --bucket $BUCKET_NAME --key "symptoms/mouth/"
+aws s3api put-object --bucket $BUCKET_NAME --key "care-team/"
+
+echo "Education folder structure created"
+```
+
+### Step 3: Upload Education PDFs
+
+```bash
+#!/bin/bash
+# scripts/upload-education-pdfs.sh
+
+BUCKET_NAME="oncolife-education"
+LOCAL_DOCS_DIR="./education-docs"  # Local directory with PDFs
+
+# Upload symptom-specific documents
+for symptom_dir in $LOCAL_DOCS_DIR/symptoms/*/; do
+    symptom_name=$(basename $symptom_dir)
+    echo "Uploading $symptom_name documents..."
+    
+    for file in $symptom_dir*.pdf; do
+        if [ -f "$file" ]; then
+            aws s3 cp "$file" "s3://$BUCKET_NAME/symptoms/$symptom_name/" \
+                --sse aws:kms \
+                --sse-kms-key-id alias/oncolife-education-key
+        fi
+    done
+    
+    # Also upload text versions for inline content
+    for file in $symptom_dir*.txt; do
+        if [ -f "$file" ]; then
+            aws s3 cp "$file" "s3://$BUCKET_NAME/symptoms/$symptom_name/" \
+                --sse aws:kms \
+                --sse-kms-key-id alias/oncolife-education-key
+        fi
+    done
+done
+
+# Upload care team handout
+aws s3 cp "$LOCAL_DOCS_DIR/care-team/care_team_handout_v1.pdf" \
+    "s3://$BUCKET_NAME/care-team/" \
+    --sse aws:kms \
+    --sse-kms-key-id alias/oncolife-education-key
+
+aws s3 cp "$LOCAL_DOCS_DIR/care-team/care_team_handout_v1.txt" \
+    "s3://$BUCKET_NAME/care-team/" \
+    --sse aws:kms \
+    --sse-kms-key-id alias/oncolife-education-key
+
+echo "Education documents uploaded to S3"
+```
+
+### Step 4: Run Database Seed Script
+
+The seed script populates the database with:
+- Symptom catalog
+- Mandatory disclaimer
+- Care Team Handout metadata
+- Sample education document metadata
+
+```bash
+#!/bin/bash
+# Run from project root
+
+cd apps/patient-platform/patient-api
+
+# Activate virtual environment
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate   # Windows
+
+# Set database URL (use production URL)
+export DATABASE_URL="postgresql://user:password@host:5432/oncolife_patient"
+
+# Run seed script
+python scripts/seed_education.py
+
+echo "Education seed data loaded"
+```
+
+### Step 5: Verify Education Tables
+
+```sql
+-- Connect to database and verify tables exist
+\dt symptoms
+\dt education_documents
+\dt disclaimers
+\dt care_team_handouts
+\dt symptom_sessions
+\dt rule_evaluations
+\dt patient_summaries
+\dt medications_tried
+\dt education_delivery_log
+\dt education_access_log
+
+-- Verify seed data
+SELECT * FROM symptoms LIMIT 5;
+SELECT * FROM disclaimers;
+SELECT * FROM care_team_handouts WHERE is_current = true;
+SELECT COUNT(*) FROM education_documents WHERE status = 'active';
+```
+
+### Step 6: Add IAM Policy for Education Access
+
+```bash
+#!/bin/bash
+# scripts/add-education-iam-policy.sh
+
+ROLE_NAME="OncolifeOnboardingRole"  # Or your ECS task role
+
+# Add S3 policy for education bucket
+aws iam put-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-name "S3EducationAccess" \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "s3:GetObject",
+                    "s3:ListBucket"
+                ],
+                "Resource": [
+                    "arn:aws:s3:::oncolife-education",
+                    "arn:aws:s3:::oncolife-education/*"
+                ]
+            }
+        ]
+    }'
+
+echo "Education IAM policy added to role: $ROLE_NAME"
+```
+
+### Step 7: Update Task Definition
+
+Add the education S3 bucket to your ECS task definition environment variables:
+
+```json
+{
+  "containerDefinitions": [
+    {
+      "environment": [
+        {"name": "S3_EDUCATION_BUCKET", "value": "oncolife-education"}
+      ]
+    }
+  ]
+}
+```
+
+### Step 8: Test Education Delivery
+
+```bash
+# Start a symptom checker session
+curl -X POST "http://localhost:8000/api/v1/education/session" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json"
+
+# Complete session and get education
+curl -X POST "http://localhost:8000/api/v1/education/deliver" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "<session_uuid>",
+    "symptom_codes": ["NAUSEA-101"],
+    "severity_levels": {"NAUSEA-101": "moderate"},
+    "escalation": false
+  }'
+
+# Verify education tab
+curl -X GET "http://localhost:8000/api/v1/education/tab" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## Complete Deployment Checklist
+
+### Infrastructure Setup
+- [ ] ECR repository created
+- [ ] ECS cluster created
+- [ ] RDS PostgreSQL created
+- [ ] S3 referrals bucket created (KMS encrypted)
+- [ ] S3 education bucket created (KMS encrypted)
+- [ ] Cognito User Pool created
+- [ ] SES sender email verified
+- [ ] SNS SMS configured
+- [ ] ALB created with HTTPS
+- [ ] CloudWatch log groups created
+- [ ] Secrets Manager secrets created
+
+### Database Setup
+- [ ] RDS accessible from ECS tasks
+- [ ] Database migrations run (`alembic upgrade head`)
+- [ ] Education seed script run
+- [ ] Verify all tables created
+
+### Content Setup
+- [ ] Education PDFs uploaded to S3
+- [ ] Text versions uploaded (for inline content)
+- [ ] Care Team Handout uploaded
+- [ ] All documents are clinician-approved
+- [ ] source_document_id matches database records
+
+### Security Setup
+- [ ] VPC Flow Logs enabled
+- [ ] Security Groups configured (least privilege)
+- [ ] RDS encryption at rest enabled
+- [ ] S3 buckets block public access
+- [ ] IAM roles follow least privilege
+- [ ] CloudTrail enabled for audit
+- [ ] WAF configured on ALB
+- [ ] GuardDuty enabled
+
+### Application Setup
+- [ ] ECS task definition registered
+- [ ] ECS service created with proper task count
+- [ ] Health checks passing
+- [ ] CloudWatch alarms configured
+- [ ] CI/CD pipeline configured
+
+### Testing
+- [ ] Health endpoint returns 200
+- [ ] Authentication flow works
+- [ ] Symptom checker completes
+- [ ] Education delivered after session
+- [ ] Patient summary generated
+- [ ] Education tab loads
+- [ ] S3 pre-signed URLs work
+- [ ] Fax webhook receives test fax
+
+### Monitoring
+- [ ] CloudWatch dashboards created
+- [ ] Alerts configured for 5xx errors
+- [ ] Alerts configured for high CPU/memory
+- [ ] Log retention set (30+ days)
+- [ ] Access logs enabled on ALB
+
+---
+
 ## Security Checklist
 
 ### General
@@ -947,6 +1251,128 @@ aws ecs update-service \
 - [ ] Cognito password policy meets requirements
 - [ ] Onboarding notification logs retained
 - [ ] PHI data encrypted in transit and at rest
+
+### Patient Education (HIPAA)
+- [ ] Education S3 bucket has versioning
+- [ ] Education S3 bucket has KMS encryption
+- [ ] Education S3 bucket blocks public access
+- [ ] Pre-signed URLs expire in ≤30 minutes
+- [ ] All education content clinician-approved
+- [ ] source_document_id on all documents
+- [ ] Education delivery logged for audit
+- [ ] Patient summaries are immutable (locked=true)
+- [ ] No PHI in CloudWatch logs
+
+---
+
+## Production Environment Variables
+
+Complete list of environment variables for production:
+
+```env
+# Application
+ENVIRONMENT=production
+DEBUG=false
+LOG_LEVEL=INFO
+APP_NAME=OncoLife Patient API
+APP_VERSION=1.0.0
+
+# Server
+HOST=0.0.0.0
+PORT=8000
+
+# Database
+POSTGRES_HOST=oncolife-db.xxx.us-west-2.rds.amazonaws.com
+POSTGRES_PORT=5432
+POSTGRES_USER=oncolife_admin
+POSTGRES_PASSWORD=<from-secrets-manager>
+POSTGRES_PATIENT_DB=oncolife_patient
+
+# AWS Core
+AWS_REGION=us-west-2
+AWS_ACCESS_KEY_ID=<use-iam-role-instead>
+AWS_SECRET_ACCESS_KEY=<use-iam-role-instead>
+
+# AWS Cognito
+COGNITO_USER_POOL_ID=us-west-2_xxx
+COGNITO_CLIENT_ID=xxx
+COGNITO_CLIENT_SECRET=<from-secrets-manager>
+
+# AWS S3
+S3_REFERRAL_BUCKET=oncolife-referrals
+S3_EDUCATION_BUCKET=oncolife-education
+
+# AWS SES
+SES_SENDER_EMAIL=noreply@oncolife.com
+SES_SENDER_NAME=OncoLife Care
+
+# AWS SNS
+SNS_ENABLED=true
+
+# Fax Webhook
+FAX_WEBHOOK_SECRET=<from-secrets-manager>
+
+# CORS
+CORS_ORIGINS=https://app.oncolife.com
+```
+
+---
+
+## Troubleshooting
+
+### Education Not Delivered
+
+1. Check if session completed:
+```sql
+SELECT * FROM symptom_sessions WHERE id = '<session_id>';
+-- status should be 'COMPLETED', education_delivered should be true
+```
+
+2. Check if documents exist:
+```sql
+SELECT * FROM education_documents 
+WHERE symptom_code = 'NAUSEA-101' AND status = 'active';
+```
+
+3. Check S3 access:
+```bash
+aws s3 ls s3://oncolife-education/symptoms/nausea/
+```
+
+4. Check pre-signed URL generation:
+```bash
+# In Python
+import boto3
+s3 = boto3.client('s3')
+url = s3.generate_presigned_url('get_object', 
+    Params={'Bucket': 'oncolife-education', 'Key': 'symptoms/nausea/nausea_v1.pdf'},
+    ExpiresIn=1800)
+print(url)
+```
+
+### Summary Not Generated
+
+1. Check session has symptoms:
+```sql
+SELECT selected_symptoms FROM symptom_sessions WHERE id = '<session_id>';
+```
+
+2. Check summary table:
+```sql
+SELECT * FROM patient_summaries WHERE session_id = '<session_id>';
+```
+
+### Disclaimer Missing
+
+1. Verify disclaimer seeded:
+```sql
+SELECT * FROM disclaimers WHERE active = true;
+```
+
+2. Re-run seed script if needed:
+```bash
+python scripts/seed_education.py
+```
 
 ---
 
