@@ -4,12 +4,21 @@ Patient Onboarding Service.
 This is the main orchestration service for the patient onboarding flow:
 1. Receive and process referral faxes (OCR)
 2. Create patient accounts in Cognito
-3. Send welcome notifications
-4. Track onboarding progress
-5. Handle multi-step first login
+3. Store data in normalized schema (providers, oncology_profile, medications)
+4. Track per-field OCR confidence
+5. Send welcome notifications
+6. Handle multi-step first login
+
+Schema Used:
+    - patient_info: Patient demographics
+    - providers: Physician/clinic information
+    - oncology_profiles: Cancer & treatment details
+    - medications: Normalized medication list
+    - fax_ingestion_log: Fax processing audit
+    - ocr_field_confidence: Per-field confidence tracking
 
 Flow:
-    Fax → OCR → Parse → Create Account → Send Welcome → Track Progress → Complete
+    Fax → OCR → Validate Confidence → Create Records → Send Welcome → Track Progress
 
 Usage:
     from services import OnboardingService
@@ -23,6 +32,7 @@ import string
 from typing import Optional, Dict, Any, List
 from datetime import datetime, date
 from uuid import UUID
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
@@ -43,11 +53,25 @@ from db.models.referral import (
     ReferralStatus,
     OnboardingStep,
 )
+from db.models.onboarding_schema import (
+    Provider,
+    OncologyProfile,
+    Medication,
+    FaxIngestionLog,
+    OcrFieldConfidence,
+    MedicationCategory,
+    OcrFieldStatus,
+    FaxProcessingStatus,
+    OCR_CONFIDENCE_THRESHOLDS,
+    get_confidence_threshold,
+    is_field_acceptable,
+)
 from db.patient_models import PatientInfo, PatientConfigurations, PatientPhysicianAssociations
 
-from services.ocr_service import OCRService
+from services.ocr_service import OCRService, OCRResult, ExtractedField
 from services.notification_service import NotificationService
 from services.auth_service import AuthService
+from services.medication_categorizer import categorize_medication, MedicationCategory as MedCat
 
 logger = get_logger(__name__)
 
@@ -57,7 +81,8 @@ class OnboardingService:
     Main service for patient onboarding.
     
     Orchestrates:
-    - Referral processing (fax → OCR → database)
+    - Referral processing (fax → OCR → normalized database)
+    - Per-field confidence validation
     - Patient account creation (Cognito + local DB)
     - Welcome notifications (email + SMS)
     - Onboarding step tracking
@@ -98,29 +123,51 @@ class OnboardingService:
         s3_key: str,
         fax_number: Optional[str] = None,
         fax_received_at: Optional[datetime] = None,
+        fax_provider: Optional[str] = None,
+        provider_fax_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Process a referral document from S3.
         
         Full flow:
-        1. Create referral record
+        1. Create fax ingestion log
         2. Process document with OCR
-        3. Parse extracted data
-        4. Create patient account
-        5. Send welcome notifications
+        3. Store per-field confidence scores
+        4. Validate confidence thresholds
+        5. Create normalized records (provider, oncology_profile, medications)
+        6. Create patient account
+        7. Send welcome notifications
         
         Args:
             s3_bucket: S3 bucket containing the document
             s3_key: S3 object key
             fax_number: Source fax number (optional)
             fax_received_at: When fax was received (optional)
+            fax_provider: Fax provider name (optional)
+            provider_fax_id: Provider's fax ID (optional)
             
         Returns:
             Dict with referral status and patient info
         """
         logger.info(f"Processing referral: s3://{s3_bucket}/{s3_key}")
         
-        # Step 1: Create referral record
+        # Step 1: Create fax ingestion log
+        fax_log = FaxIngestionLog(
+            source_number=fax_number,
+            received_at=fax_received_at or datetime.utcnow(),
+            fax_provider=fax_provider,
+            provider_fax_id=provider_fax_id,
+            s3_bucket=s3_bucket,
+            s3_key=s3_key,
+            ocr_status=FaxProcessingStatus.RECEIVED.value,
+        )
+        self.patient_db.add(fax_log)
+        self.patient_db.flush()
+        
+        fax_id = fax_log.fax_id
+        logger.info(f"Created fax log: {fax_id}")
+        
+        # Also create legacy referral record for compatibility
         referral = PatientReferral(
             status=ReferralStatus.PROCESSING.value,
             fax_number=fax_number,
@@ -130,7 +177,7 @@ class OnboardingService:
         self.patient_db.flush()
         
         referral_uuid = referral.uuid
-        logger.info(f"Created referral record: {referral_uuid}")
+        fax_log.referral_uuid = referral_uuid
         
         try:
             # Step 2: Create document record
@@ -141,44 +188,91 @@ class OnboardingService:
             )
             self.patient_db.add(document)
             
-            # Step 3: Process with OCR
-            ocr_result = await self.ocr_service.process_document(s3_bucket, s3_key)
-            
-            # Update document with OCR results
-            document.raw_ocr_text = ocr_result["raw_text"]
-            document.ocr_confidence = ocr_result["confidence"]
-            document.page_count = ocr_result["page_count"]
-            document.processed_at = datetime.utcnow()
-            
-            # Step 4: Parse and store extracted data
-            extracted = ocr_result["extracted_fields"]
-            self._populate_referral_from_ocr(referral, extracted)
-            
-            referral.raw_extracted_data = extracted
-            referral.extraction_confidence = ocr_result["confidence"]
-            referral.status = ReferralStatus.PARSED.value
-            
+            # Step 3: Update status and process with OCR
+            fax_log.ocr_status = FaxProcessingStatus.OCR_STARTED.value
+            fax_log.ocr_started_at = datetime.utcnow()
             self.patient_db.flush()
             
-            # Step 5: Validate required fields
-            validation_errors = self._validate_referral(referral)
-            if validation_errors:
+            ocr_start = datetime.utcnow()
+            ocr_result = await self.ocr_service.process_document(s3_bucket, s3_key)
+            ocr_end = datetime.utcnow()
+            
+            # Update fax log with OCR results
+            fax_log.ocr_status = FaxProcessingStatus.OCR_COMPLETED.value
+            fax_log.ocr_completed_at = ocr_end
+            fax_log.ocr_duration_ms = int((ocr_end - ocr_start).total_seconds() * 1000)
+            fax_log.overall_confidence = ocr_result.overall_confidence
+            fax_log.page_count = ocr_result.page_count
+            
+            # Update document with OCR results
+            document.raw_ocr_text = ocr_result.raw_text
+            document.ocr_confidence = ocr_result.overall_confidence
+            document.page_count = ocr_result.page_count
+            document.processed_at = datetime.utcnow()
+            
+            # Step 4: Store per-field confidence scores
+            self._store_field_confidences(fax_log, ocr_result)
+            
+            # Step 5: Populate referral from OCR
+            fax_log.ocr_status = FaxProcessingStatus.PARSING.value
+            self._populate_referral_from_ocr(referral, ocr_result)
+            
+            referral.raw_extracted_data = ocr_result.to_dict()
+            referral.extraction_confidence = ocr_result.overall_confidence
+            
+            # Step 6: Check if manual review is needed
+            if ocr_result.requires_manual_review:
+                fax_log.ocr_status = FaxProcessingStatus.REVIEW_NEEDED.value
+                fax_log.manual_review_required = True
+                fax_log.manual_review_reason = f"Fields with low confidence: {', '.join(ocr_result.fields_needing_review)}"
+                
                 referral.status = ReferralStatus.REVIEW_NEEDED.value
-                referral.fields_needing_review = validation_errors
+                referral.fields_needing_review = ocr_result.fields_needing_review
+                
                 self.patient_db.commit()
                 
                 logger.warning(f"Referral needs review: {referral_uuid}")
                 return {
                     "success": False,
+                    "fax_id": str(fax_id),
                     "referral_uuid": str(referral_uuid),
                     "status": ReferralStatus.REVIEW_NEEDED.value,
-                    "validation_errors": validation_errors,
+                    "requires_manual_review": True,
+                    "fields_needing_review": ocr_result.fields_needing_review,
+                    "overall_confidence": ocr_result.overall_confidence,
                 }
             
-            # Step 6: Create patient account
-            patient_result = await self._create_patient_from_referral(referral)
+            fax_log.ocr_status = FaxProcessingStatus.PARSED.value
+            referral.status = ReferralStatus.PARSED.value
+            self.patient_db.flush()
             
-            # Step 7: Send welcome notifications
+            # Step 7: Create normalized records (provider, oncology profile, medications)
+            provider = self._create_or_get_provider(ocr_result)
+            
+            # Step 8: Create patient account
+            patient_result = await self._create_patient_from_referral(referral)
+            patient_uuid = patient_result["uuid"]
+            
+            # Step 9: Create oncology profile
+            oncology_profile = self._create_oncology_profile(
+                patient_uuid=patient_uuid,
+                provider=provider,
+                referral=referral,
+                ocr_result=ocr_result,
+            )
+            
+            # Step 10: Create medication records
+            self._create_medications(
+                patient_uuid=patient_uuid,
+                oncology_profile=oncology_profile,
+                ocr_result=ocr_result,
+            )
+            
+            # Update fax log
+            fax_log.ocr_status = FaxProcessingStatus.PATIENT_CREATED.value
+            fax_log.patient_uuid = patient_uuid
+            
+            # Step 11: Send welcome notifications
             await self._send_welcome_notifications(referral)
             
             referral.status = ReferralStatus.WELCOME_SENT.value
@@ -188,13 +282,18 @@ class OnboardingService:
             
             return {
                 "success": True,
+                "fax_id": str(fax_id),
                 "referral_uuid": str(referral_uuid),
-                "patient_uuid": str(referral.patient_uuid),
+                "patient_uuid": str(patient_uuid),
                 "status": ReferralStatus.WELCOME_SENT.value,
                 "patient_email": referral.patient_email,
+                "overall_confidence": ocr_result.overall_confidence,
+                "fields_extracted": len(ocr_result.extracted_fields),
             }
             
         except Exception as e:
+            fax_log.ocr_status = FaxProcessingStatus.FAILED.value
+            fax_log.error_message = str(e)
             referral.status = ReferralStatus.FAILED.value
             referral.status_message = str(e)
             self.patient_db.commit()
@@ -202,14 +301,39 @@ class OnboardingService:
             logger.error(f"Referral processing failed: {referral_uuid} - {e}")
             raise
     
+    def _store_field_confidences(
+        self,
+        fax_log: FaxIngestionLog,
+        ocr_result: OCRResult,
+    ) -> None:
+        """Store per-field confidence scores for audit and review."""
+        for field in ocr_result.extracted_fields:
+            confidence_record = OcrFieldConfidence(
+                fax_id=fax_log.fax_id,
+                field_name=field.field_name,
+                field_category=field.field_category,
+                extracted_value=field.extracted_value,
+                normalized_value=field.normalized_value,
+                confidence_score=Decimal(str(round(field.confidence_score, 4))),
+                confidence_threshold=Decimal(str(round(field.confidence_threshold, 4))),
+                status=(
+                    OcrFieldStatus.ACCEPTED.value 
+                    if field.is_acceptable 
+                    else OcrFieldStatus.REQUIRES_REVIEW.value
+                ),
+                accepted=field.is_acceptable,
+                source_page=field.source_page,
+            )
+            self.patient_db.add(confidence_record)
+    
     def _populate_referral_from_ocr(
         self,
         referral: PatientReferral,
-        extracted: Dict[str, Any],
+        ocr_result: OCRResult,
     ) -> None:
-        """Populate referral fields from OCR extracted data."""
+        """Populate referral fields from OCR result."""
         # Patient demographics
-        patient = extracted.get("patient", {})
+        patient = ocr_result.patient_data
         referral.patient_first_name = patient.get("first_name")
         referral.patient_last_name = patient.get("last_name")
         referral.patient_email = patient.get("email")
@@ -222,17 +346,17 @@ class OnboardingService:
             referral.patient_sex = patient["sex"]
         
         # Physician
-        physician = extracted.get("physician", {})
-        referral.attending_physician_name = physician.get("name")
-        referral.clinic_name = physician.get("clinic")
+        provider = ocr_result.provider_data
+        referral.attending_physician_name = provider.get("name")
+        referral.clinic_name = provider.get("clinic")
         
         # Diagnosis
-        diagnosis = extracted.get("diagnosis", {})
+        diagnosis = ocr_result.diagnosis_data
         referral.cancer_type = diagnosis.get("cancer_type")
         referral.cancer_staging = diagnosis.get("staging") or diagnosis.get("ajcc_stage")
         
         # Treatment
-        treatment = extracted.get("treatment", {})
+        treatment = ocr_result.treatment_data
         referral.chemo_plan_name = treatment.get("plan_name")
         if treatment.get("start_date"):
             referral.chemo_start_date = treatment["start_date"]
@@ -240,10 +364,10 @@ class OnboardingService:
             referral.chemo_end_date = treatment["end_date"]
         referral.chemo_current_cycle = treatment.get("current_cycle")
         referral.chemo_total_cycles = treatment.get("total_cycles")
-        referral.treatment_goal = treatment.get("treatment_goal")
+        referral.line_of_treatment = treatment.get("line_of_treatment")
         
         # Vitals
-        vitals = extracted.get("vitals", {})
+        vitals = ocr_result.vitals_data
         referral.bmi = vitals.get("bmi")
         referral.height_cm = vitals.get("height_cm")
         referral.weight_kg = vitals.get("weight_kg")
@@ -251,20 +375,128 @@ class OnboardingService:
         referral.pulse = vitals.get("pulse")
         referral.spo2 = vitals.get("spo2")
         
-        # History
-        history = extracted.get("history", {})
-        referral.past_medical_history = history.get("past_medical")
-        referral.past_surgical_history = history.get("past_surgical")
+        # Medications as JSON
+        if ocr_result.medications_data:
+            referral.current_medications = ocr_result.medications_data
+    
+    def _create_or_get_provider(
+        self,
+        ocr_result: OCRResult,
+    ) -> Optional[Provider]:
+        """Create or retrieve provider record."""
+        provider_data = ocr_result.provider_data
         
-        # Medications
-        medications = extracted.get("medications", [])
+        if not provider_data.get("name"):
+            return None
+        
+        # Check if provider already exists
+        existing = self.patient_db.query(Provider).filter(
+            Provider.full_name == provider_data["name"],
+            Provider.clinic_name == provider_data.get("clinic"),
+            Provider.is_deleted == False,
+        ).first()
+        
+        if existing:
+            return existing
+        
+        # Create new provider
+        provider = Provider(
+            full_name=provider_data["name"],
+            clinic_name=provider_data.get("clinic"),
+        )
+        self.patient_db.add(provider)
+        self.patient_db.flush()
+        
+        logger.info(f"Created provider: {provider.provider_id}")
+        return provider
+    
+    def _create_oncology_profile(
+        self,
+        patient_uuid: str,
+        provider: Optional[Provider],
+        referral: PatientReferral,
+        ocr_result: OCRResult,
+    ) -> OncologyProfile:
+        """Create oncology profile from referral data."""
+        diagnosis = ocr_result.diagnosis_data
+        treatment = ocr_result.treatment_data
+        vitals = ocr_result.vitals_data
+        
+        profile = OncologyProfile(
+            patient_id=patient_uuid,
+            provider_id=provider.provider_id if provider else None,
+            referral_uuid=referral.uuid,
+            
+            # Diagnosis
+            cancer_type=diagnosis.get("cancer_type") or referral.cancer_type,
+            cancer_stage=diagnosis.get("staging") or referral.cancer_staging,
+            
+            # Treatment
+            line_of_treatment=treatment.get("line_of_treatment") or referral.line_of_treatment,
+            chemo_plan_name=treatment.get("plan_name") or referral.chemo_plan_name,
+            chemo_start_date=treatment.get("start_date") or referral.chemo_start_date,
+            chemo_end_date=treatment.get("end_date") or referral.chemo_end_date,
+            current_cycle=treatment.get("current_cycle") or referral.chemo_current_cycle,
+            total_cycles=treatment.get("total_cycles") or referral.chemo_total_cycles,
+            
+            # Vitals
+            bmi=Decimal(str(vitals.get("bmi"))) if vitals.get("bmi") else None,
+            height_cm=vitals.get("height_cm"),
+            weight_kg=vitals.get("weight_kg"),
+            
+            # History (not displayed to patient)
+            past_medical_history=referral.past_medical_history,
+            past_surgical_history=referral.past_surgical_history,
+        )
+        
+        self.patient_db.add(profile)
+        self.patient_db.flush()
+        
+        logger.info(f"Created oncology profile: {profile.profile_id}")
+        return profile
+    
+    def _create_medications(
+        self,
+        patient_uuid: str,
+        oncology_profile: OncologyProfile,
+        ocr_result: OCRResult,
+    ) -> List[Medication]:
+        """Create normalized medication records with categorization."""
+        medications = []
+        
+        for med_data in ocr_result.medications_data:
+            med_name = med_data.get("name", "")
+            if not med_name:
+                continue
+            
+            # Get category from categorizer
+            category, metadata = categorize_medication(med_name)
+            
+            medication = Medication(
+                patient_id=patient_uuid,
+                oncology_profile_id=oncology_profile.profile_id,
+                medication_name=med_name,
+                category=category.value,
+                source="ocr",
+                ocr_confidence=med_data.get("confidence", 0.85),
+                active=True,
+            )
+            
+            # Add details if available
+            if med_data.get("details"):
+                # Try to parse dose from details
+                import re
+                dose_match = re.search(r"(\d+\.?\d*)\s*(mg|g|ml|mcg)", med_data["details"], re.IGNORECASE)
+                if dose_match:
+                    medication.dose = f"{dose_match.group(1)} {dose_match.group(2)}"
+            
+            self.patient_db.add(medication)
+            medications.append(medication)
+        
         if medications:
-            referral.current_medications = medications
+            logger.info(f"Created {len(medications)} medication records")
         
-        # Social
-        social = extracted.get("social", {})
-        referral.tobacco_use = social.get("tobacco")
-        referral.alcohol_use = social.get("alcohol")
+        return medications
     
     def _validate_referral(self, referral: PatientReferral) -> List[str]:
         """
@@ -329,8 +561,7 @@ class OnboardingService:
                 field="patient_email",
             )
         
-        # Create via auth service (handles Cognito + DB records)
-        # Note: We need to use admin_create_user with temp password
+        # Create via Cognito
         auth_result = await self._create_cognito_user(
             email=email,
             first_name=referral.patient_first_name,
@@ -522,7 +753,6 @@ class OnboardingService:
     ) -> None:
         """Send welcome email and SMS."""
         # Get temp password (stored during creation)
-        # In production, you'd retrieve this securely or regenerate
         temp_password = self._generate_temp_password()  # Regenerate for demo
         
         # Get onboarding status
@@ -669,15 +899,7 @@ class OnboardingService:
         self,
         patient_uuid: str,
     ) -> Dict[str, Any]:
-        """
-        Mark password reset step as complete.
-        
-        Args:
-            patient_uuid: Patient UUID
-            
-        Returns:
-            Updated status
-        """
+        """Mark password reset step as complete."""
         status = self._get_or_create_onboarding_status(patient_uuid)
         
         status.password_reset_completed = True
@@ -697,17 +919,7 @@ class OnboardingService:
         acknowledgement_text: str,
         ip_address: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Mark acknowledgement step as complete.
-        
-        Args:
-            patient_uuid: Patient UUID
-            acknowledgement_text: The exact text the patient acknowledged
-            ip_address: Client IP for audit
-            
-        Returns:
-            Updated status
-        """
+        """Mark acknowledgement step as complete."""
         status = self._get_or_create_onboarding_status(patient_uuid)
         
         status.acknowledgement_completed = True
@@ -727,18 +939,7 @@ class OnboardingService:
         privacy_accepted: bool,
         hipaa_acknowledged: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Mark terms and privacy step as complete.
-        
-        Args:
-            patient_uuid: Patient UUID
-            terms_accepted: Whether terms were accepted
-            privacy_accepted: Whether privacy policy was accepted
-            hipaa_acknowledged: Whether HIPAA notice was acknowledged
-            
-        Returns:
-            Updated status
-        """
+        """Mark terms and privacy step as complete."""
         if not terms_accepted or not privacy_accepted:
             raise ValidationError(
                 message="Both terms and privacy policy must be accepted",
@@ -783,20 +984,7 @@ class OnboardingService:
         reminder_time: Optional[str] = None,
         timezone: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Complete reminder setup and finalize onboarding.
-        
-        Args:
-            patient_uuid: Patient UUID
-            channel: 'email', 'sms', or 'both'
-            email: Email for reminders (optional, uses account email)
-            phone: Phone for reminders (optional, uses account phone)
-            reminder_time: Time for daily reminders (HH:MM format)
-            timezone: User's timezone
-            
-        Returns:
-            Updated status
-        """
+        """Complete reminder setup and finalize onboarding."""
         status = self._get_or_create_onboarding_status(patient_uuid)
         
         status.reminder_preference_set = True
@@ -861,6 +1049,155 @@ class OnboardingService:
         return status
     
     # =========================================================================
+    # MANUAL REVIEW
+    # =========================================================================
+    
+    def get_fields_needing_review(
+        self,
+        fax_id: str,
+    ) -> List[Dict]:
+        """
+        Get all fields that need manual review for a fax.
+        
+        Args:
+            fax_id: Fax ingestion log UUID
+            
+        Returns:
+            List of fields with their values and confidence scores
+        """
+        fields = self.patient_db.query(OcrFieldConfidence).filter(
+            OcrFieldConfidence.fax_id == fax_id,
+            OcrFieldConfidence.accepted == False,
+        ).all()
+        
+        return [
+            {
+                "id": field.id,
+                "field_name": field.field_name,
+                "field_category": field.field_category,
+                "extracted_value": field.extracted_value,
+                "confidence_score": float(field.confidence_score),
+                "confidence_threshold": float(field.confidence_threshold),
+                "status": field.status,
+            }
+            for field in fields
+        ]
+    
+    def approve_field(
+        self,
+        field_id: int,
+        approved_by: str,
+    ) -> Dict:
+        """
+        Approve an extracted field value.
+        
+        Args:
+            field_id: OcrFieldConfidence record ID
+            approved_by: User who approved
+            
+        Returns:
+            Updated field data
+        """
+        field = self.patient_db.query(OcrFieldConfidence).filter(
+            OcrFieldConfidence.id == field_id
+        ).first()
+        
+        if not field:
+            raise NotFoundError(
+                message=f"Field {field_id} not found",
+                resource_type="OcrFieldConfidence",
+                resource_id=str(field_id),
+            )
+        
+        field.status = OcrFieldStatus.MANUALLY_VERIFIED.value
+        field.accepted = True
+        field.reviewed_at = datetime.utcnow()
+        field.reviewed_by = approved_by
+        
+        self.patient_db.commit()
+        
+        # Check if all fields are now approved
+        self._check_review_complete(field.fax_id)
+        
+        return {
+            "id": field.id,
+            "field_name": field.field_name,
+            "status": field.status,
+            "accepted": field.accepted,
+        }
+    
+    def correct_field(
+        self,
+        field_id: int,
+        corrected_value: str,
+        corrected_by: str,
+        reason: Optional[str] = None,
+    ) -> Dict:
+        """
+        Correct an extracted field value.
+        
+        Args:
+            field_id: OcrFieldConfidence record ID
+            corrected_value: The correct value
+            corrected_by: User who corrected
+            reason: Reason for correction (optional)
+            
+        Returns:
+            Updated field data
+        """
+        field = self.patient_db.query(OcrFieldConfidence).filter(
+            OcrFieldConfidence.id == field_id
+        ).first()
+        
+        if not field:
+            raise NotFoundError(
+                message=f"Field {field_id} not found",
+                resource_type="OcrFieldConfidence",
+                resource_id=str(field_id),
+            )
+        
+        field.status = OcrFieldStatus.CORRECTED.value
+        field.accepted = True
+        field.corrected_value = corrected_value
+        field.normalized_value = corrected_value
+        field.correction_reason = reason
+        field.reviewed_at = datetime.utcnow()
+        field.reviewed_by = corrected_by
+        
+        self.patient_db.commit()
+        
+        # Check if all fields are now approved
+        self._check_review_complete(field.fax_id)
+        
+        return {
+            "id": field.id,
+            "field_name": field.field_name,
+            "original_value": field.extracted_value,
+            "corrected_value": field.corrected_value,
+            "status": field.status,
+            "accepted": field.accepted,
+        }
+    
+    def _check_review_complete(self, fax_id: UUID) -> None:
+        """Check if all fields for a fax have been reviewed."""
+        pending_fields = self.patient_db.query(OcrFieldConfidence).filter(
+            OcrFieldConfidence.fax_id == fax_id,
+            OcrFieldConfidence.accepted == False,
+        ).count()
+        
+        if pending_fields == 0:
+            # All fields reviewed, update fax log
+            fax_log = self.patient_db.query(FaxIngestionLog).filter(
+                FaxIngestionLog.fax_id == fax_id
+            ).first()
+            
+            if fax_log and fax_log.ocr_status == FaxProcessingStatus.REVIEW_NEEDED.value:
+                fax_log.ocr_status = FaxProcessingStatus.APPROVED.value
+                fax_log.reviewed_at = datetime.utcnow()
+                
+                logger.info(f"All fields reviewed for fax: {fax_id}")
+    
+    # =========================================================================
     # MANUAL REFERRAL ENTRY
     # =========================================================================
     
@@ -907,12 +1244,39 @@ class OnboardingService:
             referral.chemo_plan_name = treatment_data.get("plan_name")
             referral.chemo_start_date = treatment_data.get("start_date")
             referral.chemo_end_date = treatment_data.get("end_date")
+            referral.line_of_treatment = treatment_data.get("line_of_treatment")
         
         self.patient_db.add(referral)
         self.patient_db.flush()
         
+        # Create provider if provided
+        provider = None
+        if physician_data and physician_data.get("name"):
+            provider = Provider(
+                full_name=physician_data["name"],
+                clinic_name=physician_data.get("clinic"),
+            )
+            self.patient_db.add(provider)
+            self.patient_db.flush()
+        
         # Create patient account
         patient_result = await self._create_patient_from_referral(referral)
+        patient_uuid = patient_result["uuid"]
+        
+        # Create oncology profile if treatment data provided
+        if treatment_data:
+            profile = OncologyProfile(
+                patient_id=patient_uuid,
+                provider_id=provider.provider_id if provider else None,
+                referral_uuid=referral.uuid,
+                cancer_type=treatment_data.get("cancer_type"),
+                cancer_stage=treatment_data.get("staging"),
+                line_of_treatment=treatment_data.get("line_of_treatment"),
+                chemo_plan_name=treatment_data.get("plan_name"),
+                chemo_start_date=treatment_data.get("start_date"),
+                chemo_end_date=treatment_data.get("end_date"),
+            )
+            self.patient_db.add(profile)
         
         # Send welcome if requested
         if send_welcome:
@@ -924,9 +1288,6 @@ class OnboardingService:
         return {
             "success": True,
             "referral_uuid": str(referral.uuid),
-            "patient_uuid": str(referral.patient_uuid),
+            "patient_uuid": str(patient_uuid),
             "status": referral.status,
         }
-
-
-

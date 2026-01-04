@@ -7,6 +7,7 @@ This module organizes SQLAlchemy models by domain:
 - conversation.py: Chat, messages, and symptom tracking
 - medical.py: Medical records, chemo, and clinical data
 - referral.py: Patient referrals, onboarding, and notifications
+- onboarding_schema.py: Normalized schema for fax/OCR onboarding
 
 All models inherit from Base and use appropriate mixins.
 
@@ -14,6 +15,7 @@ Usage:
     from db.models import Patient, Conversation, Message
     from db.models import User, PatientProfile
     from db.models import PatientReferral, PatientOnboardingStatus
+    from db.models import Provider, OncologyProfile, Medication
 """
 
 from .user import User, PatientProfile, StaffProfile
@@ -33,6 +35,19 @@ from .referral import (
     ReferralStatus,
     OnboardingStep,
     NotificationChannel,
+)
+from .onboarding_schema import (
+    Provider,
+    OncologyProfile,
+    Medication,
+    FaxIngestionLog,
+    OcrFieldConfidence,
+    MedicationCategory,
+    OcrFieldStatus,
+    FaxProcessingStatus,
+    OCR_CONFIDENCE_THRESHOLDS,
+    get_confidence_threshold,
+    is_field_acceptable,
 )
 
 __all__ = [
@@ -58,5 +73,17 @@ __all__ = [
     "ReferralStatus",
     "OnboardingStep",
     "NotificationChannel",
+    # Normalized Onboarding Schema (NEW)
+    "Provider",
+    "OncologyProfile",
+    "Medication",
+    "FaxIngestionLog",
+    "OcrFieldConfidence",
+    "MedicationCategory",
+    "OcrFieldStatus",
+    "FaxProcessingStatus",
+    "OCR_CONFIDENCE_THRESHOLDS",
+    "get_confidence_threshold",
+    "is_field_acceptable",
 ]
 

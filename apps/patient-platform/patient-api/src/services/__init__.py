@@ -9,14 +9,19 @@ This module provides the service layer that:
 
 Architecture:
     services/
-    ├── base.py              # Base service class
-    ├── auth_service.py      # Authentication logic (Cognito)
-    ├── patient_service.py   # Patient operations
-    ├── chat_service.py      # Symptom checker chat
-    ├── chemo_service.py     # Chemotherapy dates
-    ├── diary_service.py     # Patient diary entries
-    ├── summary_service.py   # Conversation summaries
-    └── profile_service.py   # Patient profile
+    ├── base.py                  # Base service class
+    ├── auth_service.py          # Authentication logic (Cognito)
+    ├── patient_service.py       # Patient operations
+    ├── chat_service.py          # Symptom checker chat
+    ├── chemo_service.py         # Chemotherapy dates
+    ├── diary_service.py         # Patient diary entries
+    ├── summary_service.py       # Conversation summaries
+    ├── profile_service.py       # Patient profile
+    ├── ocr_service.py           # AWS Textract OCR with confidence tracking
+    ├── notification_service.py  # AWS SES/SNS notifications
+    ├── onboarding_service.py    # Patient onboarding orchestration
+    ├── fax_service.py           # Fax reception and processing
+    └── medication_categorizer.py # Medication categorization
 
 Principles:
     - Services should be stateless
@@ -26,6 +31,8 @@ Principles:
 
 Usage:
     from services import PatientService, ChatService
+    from services import OnboardingService, OCRService
+    from services.medication_categorizer import categorize_medication
     
     @app.get("/patients/{patient_id}")
     async def get_patient(
@@ -46,10 +53,22 @@ from .summary_service import SummaryService
 from .profile_service import ProfileService
 
 # Onboarding services
-from .ocr_service import OCRService
+from .ocr_service import OCRService, OCRResult, ExtractedField
 from .notification_service import NotificationService
 from .onboarding_service import OnboardingService
 from .fax_service import FaxService
+
+# Medication categorization
+from .medication_categorizer import (
+    categorize_medication,
+    categorize_medications,
+    is_chemotherapy,
+    is_supportive,
+    is_growth_factor,
+    get_neutropenia_risk_medications,
+    extract_regimen_medications,
+    MedicationCategory,
+)
 
 # Keep backward compatibility
 from .conversation_service import ConversationService
@@ -66,8 +85,19 @@ __all__ = [
     "ConversationService",  # For backward compatibility
     # Onboarding services
     "OCRService",
+    "OCRResult",
+    "ExtractedField",
     "NotificationService",
     "OnboardingService",
     "FaxService",
+    # Medication categorization
+    "categorize_medication",
+    "categorize_medications",
+    "is_chemotherapy",
+    "is_supportive",
+    "is_growth_factor",
+    "get_neutropenia_risk_medications",
+    "extract_regimen_medications",
+    "MedicationCategory",
 ]
 

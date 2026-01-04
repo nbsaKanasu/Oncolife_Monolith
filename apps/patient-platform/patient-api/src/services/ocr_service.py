@@ -1,5 +1,5 @@
 """
-OCR Service - AWS Textract Integration.
+OCR Service - AWS Textract Integration with Per-Field Confidence.
 
 This service processes referral documents using AWS Textract to extract
 patient and treatment information from clinic fax referrals.
@@ -8,8 +8,19 @@ Features:
 - Asynchronous document processing (for large multi-page faxes)
 - Synchronous processing (for single-page documents)
 - Form and table extraction
-- Confidence scoring
-- Field-specific parsing (dates, names, medications, etc.)
+- PER-FIELD confidence scoring with thresholds
+- Automatic REQUIRES_MANUAL_REVIEW flagging
+- Medical field parsing (dates, names, medications, etc.)
+
+Confidence Thresholds (per spec):
+    Patient Name: ≥ 0.95
+    DOB: ≥ 0.98
+    Phone: ≥ 0.95
+    Email: ≥ 0.95
+    Cancer Type: ≥ 0.90
+    Chemo Plan Name: ≥ 0.90
+    Start/End Dates: ≥ 0.95
+    Medications: ≥ 0.90
 
 Usage:
     from services import OCRService
@@ -22,6 +33,7 @@ import re
 import json
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, date
+from dataclasses import dataclass, field, asdict
 import asyncio
 
 import boto3
@@ -34,6 +46,165 @@ from core.exceptions import ExternalServiceError, ValidationError
 logger = get_logger(__name__)
 
 
+# =============================================================================
+# CONFIDENCE THRESHOLDS (Per Spec)
+# =============================================================================
+
+OCR_CONFIDENCE_THRESHOLDS = {
+    # Patient Identifiers (Visible to Patient) - HIGH THRESHOLD
+    "patient_name": 0.95,
+    "patient_first_name": 0.95,
+    "patient_last_name": 0.95,
+    "patient_dob": 0.98,  # DOB requires highest confidence
+    "patient_phone": 0.95,
+    "patient_email": 0.95,
+    
+    # Provider Information
+    "attending_physician_name": 0.90,
+    "clinic_name": 0.90,
+    
+    # Cancer & Treatment (Patient-Facing)
+    "cancer_type": 0.90,
+    "cancer_staging": 0.85,  # Optional field, lower threshold OK
+    "line_of_treatment": 0.90,
+    "chemo_plan_name": 0.90,
+    "chemo_start_date": 0.95,
+    "chemo_end_date": 0.95,
+    
+    # Medications
+    "medication_name": 0.90,
+    "medication_dose": 0.85,
+    
+    # Clinical Context (NOT Displayed to Patient) - Lower thresholds OK
+    "history_of_cancer": 0.75,
+    "past_medical_history": 0.75,
+    "past_surgical_history": 0.75,
+    "bmi": 0.90,
+    "height": 0.85,
+    "weight": 0.85,
+    "blood_pressure": 0.85,
+    "pulse": 0.85,
+    "spo2": 0.85,
+}
+
+
+@dataclass
+class ExtractedField:
+    """
+    Represents a single extracted field with confidence tracking.
+    
+    Attributes:
+        field_name: Name of the field (e.g., "patient_first_name")
+        field_category: Category (patient, provider, diagnosis, treatment, etc.)
+        extracted_value: Raw extracted value
+        normalized_value: Cleaned/formatted value
+        confidence_score: OCR confidence (0.0 to 1.0)
+        confidence_threshold: Required threshold for this field
+        is_acceptable: True if confidence >= threshold
+        requires_review: True if confidence < threshold
+        source_page: Which page of the document
+        source_location: Bounding box coordinates (optional)
+    """
+    field_name: str
+    field_category: str
+    extracted_value: str
+    normalized_value: Optional[str] = None
+    confidence_score: float = 0.0
+    confidence_threshold: float = 0.85
+    is_acceptable: bool = False
+    requires_review: bool = True
+    source_page: int = 1
+    source_location: Optional[Dict] = None
+    
+    def __post_init__(self):
+        """Calculate acceptability based on confidence."""
+        self.confidence_threshold = OCR_CONFIDENCE_THRESHOLDS.get(
+            self.field_name, 0.85
+        )
+        self.is_acceptable = self.confidence_score >= self.confidence_threshold
+        self.requires_review = not self.is_acceptable
+        
+        # Set normalized value if not provided
+        if self.normalized_value is None:
+            self.normalized_value = self.extracted_value
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for storage."""
+        return asdict(self)
+
+
+@dataclass
+class OCRResult:
+    """
+    Complete result of OCR processing.
+    
+    Contains all extracted fields, overall statistics, and
+    flags for manual review requirements.
+    """
+    raw_text: str
+    forms: Dict[str, str]
+    tables: List[List[str]]
+    page_count: int
+    overall_confidence: float
+    
+    # Per-field extracted data
+    extracted_fields: List[ExtractedField] = field(default_factory=list)
+    
+    # Grouped data for easy access
+    patient_data: Dict[str, Any] = field(default_factory=dict)
+    provider_data: Dict[str, Any] = field(default_factory=dict)
+    diagnosis_data: Dict[str, Any] = field(default_factory=dict)
+    treatment_data: Dict[str, Any] = field(default_factory=dict)
+    vitals_data: Dict[str, Any] = field(default_factory=dict)
+    medications_data: List[Dict] = field(default_factory=list)
+    
+    # Review tracking
+    requires_manual_review: bool = False
+    fields_needing_review: List[str] = field(default_factory=list)
+    
+    def add_field(self, extracted_field: ExtractedField):
+        """Add an extracted field and update review status."""
+        self.extracted_fields.append(extracted_field)
+        
+        if extracted_field.requires_review:
+            self.requires_manual_review = True
+            self.fields_needing_review.append(extracted_field.field_name)
+    
+    def get_field(self, field_name: str) -> Optional[ExtractedField]:
+        """Get a specific field by name."""
+        for f in self.extracted_fields:
+            if f.field_name == field_name:
+                return f
+        return None
+    
+    def get_acceptable_fields(self) -> List[ExtractedField]:
+        """Get all fields that meet confidence threshold."""
+        return [f for f in self.extracted_fields if f.is_acceptable]
+    
+    def get_review_fields(self) -> List[ExtractedField]:
+        """Get all fields that need review."""
+        return [f for f in self.extracted_fields if f.requires_review]
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for API response."""
+        return {
+            "raw_text": self.raw_text,
+            "forms": self.forms,
+            "tables": self.tables,
+            "page_count": self.page_count,
+            "overall_confidence": self.overall_confidence,
+            "extracted_fields": [f.to_dict() for f in self.extracted_fields],
+            "patient_data": self.patient_data,
+            "provider_data": self.provider_data,
+            "diagnosis_data": self.diagnosis_data,
+            "treatment_data": self.treatment_data,
+            "vitals_data": self.vitals_data,
+            "medications_data": self.medications_data,
+            "requires_manual_review": self.requires_manual_review,
+            "fields_needing_review": self.fields_needing_review,
+        }
+
+
 class OCRService:
     """
     AWS Textract OCR service for processing referral documents.
@@ -42,7 +213,9 @@ class OCRService:
     - Document text extraction
     - Form field extraction
     - Table extraction
+    - Per-field confidence tracking
     - Smart field parsing for medical data
+    - Automatic review flagging
     """
     
     # Field patterns for extracting specific data
@@ -115,7 +288,7 @@ class OCRService:
         s3_bucket: str,
         s3_key: str,
         use_async: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> OCRResult:
         """
         Process a document from S3 using AWS Textract.
         
@@ -125,7 +298,7 @@ class OCRService:
             use_async: Use async processing for large documents
             
         Returns:
-            Dict containing extracted text, forms, tables, and parsed fields
+            OCRResult with all extracted data and confidence scores
             
         Raises:
             ExternalServiceError: If Textract fails
@@ -136,27 +309,39 @@ class OCRService:
             if use_async:
                 # Start async job
                 job_id = await self._start_async_job(s3_bucket, s3_key)
-                result = await self._wait_for_job(job_id)
+                textract_result = await self._wait_for_job(job_id)
             else:
                 # Synchronous processing
-                result = await self._process_sync(s3_bucket, s3_key)
+                textract_result = await self._process_sync(s3_bucket, s3_key)
             
             # Parse the Textract result
-            parsed_data = self._parse_textract_result(result)
+            parsed_data = self._parse_textract_result(textract_result)
             
-            # Extract specific medical fields
-            extracted_fields = self._extract_medical_fields(parsed_data)
+            # Create OCR result
+            ocr_result = OCRResult(
+                raw_text=parsed_data["raw_text"],
+                forms=parsed_data["forms"],
+                tables=parsed_data["tables"],
+                page_count=parsed_data.get("page_count", 1),
+                overall_confidence=parsed_data.get("avg_confidence", 0),
+            )
             
-            logger.info(f"Document processed successfully: {s3_key}")
+            # Extract medical fields with per-field confidence
+            self._extract_medical_fields_with_confidence(
+                parsed_data, 
+                textract_result,
+                ocr_result,
+            )
             
-            return {
-                "raw_text": parsed_data["raw_text"],
-                "forms": parsed_data["forms"],
-                "tables": parsed_data["tables"],
-                "extracted_fields": extracted_fields,
-                "confidence": parsed_data.get("avg_confidence", 0),
-                "page_count": parsed_data.get("page_count", 1),
-            }
+            # Log summary
+            logger.info(
+                f"Document processed: {s3_key} | "
+                f"Confidence: {ocr_result.overall_confidence:.2f} | "
+                f"Fields: {len(ocr_result.extracted_fields)} | "
+                f"Review needed: {ocr_result.requires_manual_review}"
+            )
+            
+            return ocr_result
             
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
@@ -273,8 +458,10 @@ class OCRService:
             "raw_text": "\n".join(raw_text_lines),
             "forms": forms,
             "tables": tables,
-            "avg_confidence": avg_confidence,
+            "avg_confidence": avg_confidence / 100,  # Normalize to 0-1
             "page_count": response.get("DocumentMetadata", {}).get("Pages", 1),
+            "block_map": block_map,
+            "blocks": blocks,
         }
     
     def _get_text_from_block(
@@ -302,6 +489,24 @@ class OCRService:
                 if rel["Type"] == "VALUE":
                     return rel["Ids"][0] if rel["Ids"] else None
         return None
+    
+    def _get_block_confidence(
+        self,
+        block: Dict[str, Any],
+        block_map: Dict[str, Dict],
+    ) -> float:
+        """Get average confidence for a block and its children."""
+        confidences = [block.get("Confidence", 0)]
+        
+        if "Relationships" in block:
+            for rel in block["Relationships"]:
+                if rel["Type"] == "CHILD":
+                    for child_id in rel["Ids"]:
+                        child_block = block_map.get(child_id, {})
+                        if "Confidence" in child_block:
+                            confidences.append(child_block["Confidence"])
+        
+        return sum(confidences) / len(confidences) / 100 if confidences else 0
     
     def _parse_table(
         self,
@@ -341,231 +546,441 @@ class OCRService:
         return table
     
     # =========================================================================
-    # MEDICAL FIELD EXTRACTION
+    # MEDICAL FIELD EXTRACTION WITH CONFIDENCE
     # =========================================================================
     
-    def _extract_medical_fields(self, parsed_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract specific medical fields from parsed OCR data."""
+    def _extract_medical_fields_with_confidence(
+        self,
+        parsed_data: Dict[str, Any],
+        textract_response: Dict[str, Any],
+        ocr_result: OCRResult,
+    ) -> None:
+        """Extract medical fields with per-field confidence tracking."""
         raw_text = parsed_data.get("raw_text", "")
         forms = parsed_data.get("forms", {})
+        block_map = parsed_data.get("block_map", {})
+        blocks = parsed_data.get("blocks", [])
         
-        extracted = {
-            "patient": {},
-            "physician": {},
-            "diagnosis": {},
-            "treatment": {},
-            "vitals": {},
-            "history": {},
-            "medications": [],
-            "labs": {},
-            "social": {},
-        }
+        # Extract patient info
+        self._extract_patient_info_with_confidence(
+            forms, raw_text, blocks, block_map, ocr_result
+        )
         
-        # Extract from forms (key-value pairs)
-        extracted["patient"] = self._extract_patient_info(forms, raw_text)
-        extracted["physician"] = self._extract_physician_info(forms, raw_text)
-        extracted["diagnosis"] = self._extract_diagnosis(forms, raw_text)
-        extracted["treatment"] = self._extract_treatment(forms, raw_text)
-        extracted["vitals"] = self._extract_vitals(forms, raw_text)
-        extracted["history"] = self._extract_history(raw_text)
-        extracted["medications"] = self._extract_medications(raw_text)
-        extracted["social"] = self._extract_social(raw_text)
+        # Extract physician info
+        self._extract_physician_info_with_confidence(
+            forms, raw_text, blocks, block_map, ocr_result
+        )
         
-        return extracted
+        # Extract diagnosis
+        self._extract_diagnosis_with_confidence(
+            forms, raw_text, blocks, block_map, ocr_result
+        )
+        
+        # Extract treatment
+        self._extract_treatment_with_confidence(
+            forms, raw_text, blocks, block_map, ocr_result
+        )
+        
+        # Extract vitals
+        self._extract_vitals_with_confidence(
+            forms, raw_text, blocks, block_map, ocr_result
+        )
+        
+        # Extract medications
+        self._extract_medications_with_confidence(
+            raw_text, blocks, block_map, ocr_result
+        )
     
-    def _extract_patient_info(
+    def _add_extracted_field(
+        self,
+        ocr_result: OCRResult,
+        field_name: str,
+        field_category: str,
+        value: Any,
+        confidence: float,
+        normalized_value: Any = None,
+    ) -> None:
+        """Helper to add an extracted field to the result."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return
+        
+        str_value = str(value).strip() if value else ""
+        norm_value = str(normalized_value).strip() if normalized_value else str_value
+        
+        field = ExtractedField(
+            field_name=field_name,
+            field_category=field_category,
+            extracted_value=str_value,
+            normalized_value=norm_value,
+            confidence_score=confidence,
+        )
+        
+        ocr_result.add_field(field)
+    
+    def _extract_patient_info_with_confidence(
         self,
         forms: Dict[str, str],
         raw_text: str,
-    ) -> Dict[str, Any]:
-        """Extract patient demographic information."""
-        info = {}
+        blocks: List[Dict],
+        block_map: Dict,
+        ocr_result: OCRResult,
+    ) -> None:
+        """Extract patient demographic information with confidence."""
+        patient_data = {}
         
-        # Look for name
+        # Look for name in forms
         for key, value in forms.items():
             key_lower = key.lower()
+            # Get confidence for this form field
+            confidence = 0.85  # Default if we can't find block
+            
+            # Try to find the matching block for confidence
+            for block in blocks:
+                if block.get("BlockType") == "KEY_VALUE_SET":
+                    if "KEY" in block.get("EntityTypes", []):
+                        block_key = self._get_text_from_block(block, block_map)
+                        if block_key.lower().strip() == key.lower().strip():
+                            confidence = self._get_block_confidence(block, block_map)
+                            break
+            
             if "name" in key_lower and "physician" not in key_lower:
                 parts = value.split()
                 if len(parts) >= 2:
-                    info["first_name"] = parts[0]
-                    info["last_name"] = parts[-1]
-                elif len(parts) == 1:
-                    info["first_name"] = parts[0]
+                    self._add_extracted_field(
+                        ocr_result, "patient_first_name", "patient",
+                        parts[0], confidence
+                    )
+                    patient_data["first_name"] = parts[0]
+                    
+                    self._add_extracted_field(
+                        ocr_result, "patient_last_name", "patient",
+                        parts[-1], confidence
+                    )
+                    patient_data["last_name"] = parts[-1]
+                    
             elif "first" in key_lower and "name" in key_lower:
-                info["first_name"] = value
+                self._add_extracted_field(
+                    ocr_result, "patient_first_name", "patient",
+                    value, confidence
+                )
+                patient_data["first_name"] = value
+                
             elif "last" in key_lower and "name" in key_lower:
-                info["last_name"] = value
+                self._add_extracted_field(
+                    ocr_result, "patient_last_name", "patient",
+                    value, confidence
+                )
+                patient_data["last_name"] = value
+                
             elif "dob" in key_lower or "date of birth" in key_lower or "birth" in key_lower:
-                info["dob"] = self._parse_date(value)
+                parsed_date = self._parse_date(value)
+                self._add_extracted_field(
+                    ocr_result, "patient_dob", "patient",
+                    value, confidence, str(parsed_date) if parsed_date else value
+                )
+                patient_data["dob"] = parsed_date
+                
             elif "sex" in key_lower or "gender" in key_lower:
-                info["sex"] = value.strip().capitalize()
+                self._add_extracted_field(
+                    ocr_result, "patient_sex", "patient",
+                    value.strip().capitalize(), confidence
+                )
+                patient_data["sex"] = value.strip().capitalize()
         
-        # Extract from raw text
+        # Extract email from raw text
         email_match = re.search(self.PATTERNS["email"], raw_text)
         if email_match:
-            info["email"] = email_match.group(0)
+            email = email_match.group(0)
+            # Estimate confidence based on pattern match quality
+            confidence = 0.95 if "@" in email and "." in email.split("@")[1] else 0.80
+            self._add_extracted_field(
+                ocr_result, "patient_email", "patient",
+                email, confidence
+            )
+            patient_data["email"] = email
         
+        # Extract phone from raw text
         phone_matches = re.findall(self.PATTERNS["phone"], raw_text)
         if phone_matches:
-            info["phone"] = phone_matches[0]
+            phone = phone_matches[0]
+            # Clean phone number
+            phone_clean = re.sub(r'[^\d]', '', phone)
+            confidence = 0.95 if len(phone_clean) >= 10 else 0.80
+            self._add_extracted_field(
+                ocr_result, "patient_phone", "patient",
+                phone, confidence, phone_clean
+            )
+            patient_data["phone"] = phone
         
+        # Extract MRN
         mrn_match = re.search(self.PATTERNS["mrn"], raw_text, re.IGNORECASE)
         if mrn_match:
-            info["mrn"] = mrn_match.group(1)
+            self._add_extracted_field(
+                ocr_result, "patient_mrn", "patient",
+                mrn_match.group(1), 0.90
+            )
+            patient_data["mrn"] = mrn_match.group(1)
         
-        return info
+        ocr_result.patient_data = patient_data
     
-    def _extract_physician_info(
+    def _extract_physician_info_with_confidence(
         self,
         forms: Dict[str, str],
         raw_text: str,
-    ) -> Dict[str, Any]:
-        """Extract physician and clinic information."""
-        info = {}
+        blocks: List[Dict],
+        block_map: Dict,
+        ocr_result: OCRResult,
+    ) -> None:
+        """Extract physician and clinic information with confidence."""
+        provider_data = {}
         
         for key, value in forms.items():
             key_lower = key.lower()
+            confidence = 0.85
+            
+            # Find matching block for confidence
+            for block in blocks:
+                if block.get("BlockType") == "KEY_VALUE_SET":
+                    if "KEY" in block.get("EntityTypes", []):
+                        block_key = self._get_text_from_block(block, block_map)
+                        if block_key.lower().strip() == key.lower().strip():
+                            confidence = self._get_block_confidence(block, block_map)
+                            break
+            
             if "physician" in key_lower or "provider" in key_lower or "doctor" in key_lower:
-                info["name"] = value.strip()
+                self._add_extracted_field(
+                    ocr_result, "attending_physician_name", "provider",
+                    value.strip(), confidence
+                )
+                provider_data["name"] = value.strip()
+                
             elif "clinic" in key_lower or "facility" in key_lower or "department" in key_lower:
-                info["clinic"] = value.strip()
+                self._add_extracted_field(
+                    ocr_result, "clinic_name", "provider",
+                    value.strip(), confidence
+                )
+                provider_data["clinic"] = value.strip()
         
         # Look for physician name patterns in text
-        physician_pattern = r"(?:Dr\.|Doctor|MD|DO)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)"
-        match = re.search(physician_pattern, raw_text)
-        if match and "name" not in info:
-            info["name"] = match.group(0)
+        if "name" not in provider_data:
+            physician_pattern = r"(?:Dr\.|Doctor|MD|DO)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)"
+            match = re.search(physician_pattern, raw_text)
+            if match:
+                self._add_extracted_field(
+                    ocr_result, "attending_physician_name", "provider",
+                    match.group(0), 0.80  # Lower confidence for regex extraction
+                )
+                provider_data["name"] = match.group(0)
         
-        return info
+        ocr_result.provider_data = provider_data
     
-    def _extract_diagnosis(
+    def _extract_diagnosis_with_confidence(
         self,
         forms: Dict[str, str],
         raw_text: str,
-    ) -> Dict[str, Any]:
-        """Extract cancer diagnosis and staging."""
-        info = {}
+        blocks: List[Dict],
+        block_map: Dict,
+        ocr_result: OCRResult,
+    ) -> None:
+        """Extract cancer diagnosis and staging with confidence."""
+        diagnosis_data = {}
         
         # Look for cancer type
         cancer_patterns = [
             r"(?:carcinoma|cancer|malignancy|tumor)\s+(?:of\s+)?(?:the\s+)?(\w+(?:\s+\w+)?)",
             r"(\w+(?:\s+\w+)?)\s+(?:carcinoma|cancer|malignancy)",
         ]
+        
         for pattern in cancer_patterns:
             match = re.search(pattern, raw_text, re.IGNORECASE)
             if match:
-                info["cancer_type"] = match.group(0).strip()
+                cancer_type = match.group(0).strip()
+                self._add_extracted_field(
+                    ocr_result, "cancer_type", "diagnosis",
+                    cancer_type, 0.85  # Regex extraction gets moderate confidence
+                )
+                diagnosis_data["cancer_type"] = cancer_type
                 break
         
         # Look for staging
         staging_pattern = r"(?:Stage|Staging)[:\s]*([IViv0-4ABC]+)"
         match = re.search(staging_pattern, raw_text)
         if match:
-            info["staging"] = match.group(1).upper()
+            staging = match.group(1).upper()
+            self._add_extracted_field(
+                ocr_result, "cancer_staging", "diagnosis",
+                staging, 0.85
+            )
+            diagnosis_data["staging"] = staging
         
         # AJCC staging
         ajcc_pattern = r"AJCC\s+(?:Stage|Staging)?[:\s]*([IViv0-4ABC]+)"
         match = re.search(ajcc_pattern, raw_text)
         if match:
-            info["ajcc_stage"] = match.group(1).upper()
+            staging = match.group(1).upper()
+            self._add_extracted_field(
+                ocr_result, "cancer_staging", "diagnosis",
+                staging, 0.90  # AJCC explicitly stated gets higher confidence
+            )
+            diagnosis_data["ajcc_stage"] = staging
         
-        return info
+        ocr_result.diagnosis_data = diagnosis_data
     
-    def _extract_treatment(
+    def _extract_treatment_with_confidence(
         self,
         forms: Dict[str, str],
         raw_text: str,
-    ) -> Dict[str, Any]:
-        """Extract treatment/chemotherapy information."""
-        info = {}
+        blocks: List[Dict],
+        block_map: Dict,
+        ocr_result: OCRResult,
+    ) -> None:
+        """Extract treatment/chemotherapy information with confidence."""
+        treatment_data = {}
         
         for key, value in forms.items():
             key_lower = key.lower()
+            confidence = 0.85
+            
+            # Find matching block
+            for block in blocks:
+                if block.get("BlockType") == "KEY_VALUE_SET":
+                    if "KEY" in block.get("EntityTypes", []):
+                        block_key = self._get_text_from_block(block, block_map)
+                        if block_key.lower().strip() == key.lower().strip():
+                            confidence = self._get_block_confidence(block, block_map)
+                            break
+            
             if "plan name" in key_lower or "regimen" in key_lower:
-                info["plan_name"] = value.strip()
+                self._add_extracted_field(
+                    ocr_result, "chemo_plan_name", "treatment",
+                    value.strip(), confidence
+                )
+                treatment_data["plan_name"] = value.strip()
+                
             elif "start date" in key_lower:
-                info["start_date"] = self._parse_date(value)
+                parsed_date = self._parse_date(value)
+                self._add_extracted_field(
+                    ocr_result, "chemo_start_date", "treatment",
+                    value, confidence, str(parsed_date) if parsed_date else value
+                )
+                treatment_data["start_date"] = parsed_date
+                
             elif "end date" in key_lower:
-                info["end_date"] = self._parse_date(value)
+                parsed_date = self._parse_date(value)
+                self._add_extracted_field(
+                    ocr_result, "chemo_end_date", "treatment",
+                    value, confidence, str(parsed_date) if parsed_date else value
+                )
+                treatment_data["end_date"] = parsed_date
+                
             elif "cycle" in key_lower:
                 cycle_match = re.search(r"(\d+)\s*(?:of|/)\s*(\d+)", value)
                 if cycle_match:
-                    info["current_cycle"] = int(cycle_match.group(1))
-                    info["total_cycles"] = int(cycle_match.group(2))
+                    treatment_data["current_cycle"] = int(cycle_match.group(1))
+                    treatment_data["total_cycles"] = int(cycle_match.group(2))
         
-        # Look for treatment goal
+        # Look for treatment goal / line of treatment
         goal_pattern = r"(?:Treatment Goal|Line of Treatment)[:\s]*(\w+)"
         match = re.search(goal_pattern, raw_text)
         if match:
-            info["treatment_goal"] = match.group(1)
+            self._add_extracted_field(
+                ocr_result, "line_of_treatment", "treatment",
+                match.group(1), 0.85
+            )
+            treatment_data["line_of_treatment"] = match.group(1)
         
-        return info
+        ocr_result.treatment_data = treatment_data
     
-    def _extract_vitals(
+    def _extract_vitals_with_confidence(
         self,
         forms: Dict[str, str],
         raw_text: str,
-    ) -> Dict[str, Any]:
-        """Extract vital signs."""
-        vitals = {}
+        blocks: List[Dict],
+        block_map: Dict,
+        ocr_result: OCRResult,
+    ) -> None:
+        """Extract vital signs with confidence."""
+        vitals_data = {}
         
         # BMI
         bmi_match = re.search(self.PATTERNS["bmi"], raw_text)
         if bmi_match:
-            vitals["bmi"] = float(bmi_match.group(1))
+            bmi = float(bmi_match.group(1))
+            self._add_extracted_field(
+                ocr_result, "bmi", "vitals",
+                bmi_match.group(1), 0.90, str(bmi)
+            )
+            vitals_data["bmi"] = bmi
         
         # Blood Pressure
         bp_match = re.search(self.PATTERNS["bp"], raw_text)
         if bp_match:
-            vitals["blood_pressure"] = bp_match.group(1)
+            self._add_extracted_field(
+                ocr_result, "blood_pressure", "vitals",
+                bp_match.group(1), 0.90
+            )
+            vitals_data["blood_pressure"] = bp_match.group(1)
         
         # Pulse
         pulse_match = re.search(self.PATTERNS["pulse"], raw_text)
         if pulse_match:
-            vitals["pulse"] = int(pulse_match.group(1))
+            pulse = int(pulse_match.group(1))
+            self._add_extracted_field(
+                ocr_result, "pulse", "vitals",
+                pulse_match.group(1), 0.90, str(pulse)
+            )
+            vitals_data["pulse"] = pulse
         
         # SpO2
         spo2_match = re.search(self.PATTERNS["spo2"], raw_text)
         if spo2_match:
-            vitals["spo2"] = int(spo2_match.group(1))
+            spo2 = int(spo2_match.group(1))
+            self._add_extracted_field(
+                ocr_result, "spo2", "vitals",
+                spo2_match.group(1), 0.90, str(spo2)
+            )
+            vitals_data["spo2"] = spo2
         
-        # Height and Weight
+        # Height
         height_pattern = r"Height[:\s]*(\d+)['\s]?(?:ft)?\s*(\d+)?[\"']?\s*(?:in)?"
         height_match = re.search(height_pattern, raw_text, re.IGNORECASE)
         if height_match:
             feet = int(height_match.group(1))
             inches = int(height_match.group(2) or 0)
-            vitals["height_cm"] = round((feet * 12 + inches) * 2.54, 1)
+            height_cm = round((feet * 12 + inches) * 2.54, 1)
+            self._add_extracted_field(
+                ocr_result, "height", "vitals",
+                f"{feet}'{inches}\"", 0.85, str(height_cm)
+            )
+            vitals_data["height_cm"] = height_cm
         
+        # Weight
         weight_match = re.search(self.PATTERNS["weight"], raw_text, re.IGNORECASE)
         if weight_match:
             weight = float(weight_match.group(1))
             unit = (weight_match.group(2) or "").lower()
             if unit in ["lb", "lbs", "pounds"]:
-                weight = round(weight * 0.453592, 1)
-            vitals["weight_kg"] = weight
+                weight_kg = round(weight * 0.453592, 1)
+            else:
+                weight_kg = weight
+            self._add_extracted_field(
+                ocr_result, "weight", "vitals",
+                f"{weight_match.group(1)} {unit}", 0.85, str(weight_kg)
+            )
+            vitals_data["weight_kg"] = weight_kg
         
-        return vitals
+        ocr_result.vitals_data = vitals_data
     
-    def _extract_history(self, raw_text: str) -> Dict[str, str]:
-        """Extract medical and surgical history."""
-        history = {}
+    def _extract_medications_with_confidence(
+        self,
+        raw_text: str,
+        blocks: List[Dict],
+        block_map: Dict,
+        ocr_result: OCRResult,
+    ) -> None:
+        """Extract medications with confidence and categorization."""
+        from services.medication_categorizer import categorize_medication
         
-        # Look for history sections
-        pmh_pattern = r"(?:Past Medical History|PMH)[:\s]*(.+?)(?=Past Surgical|PSH|Medications|$)"
-        pmh_match = re.search(pmh_pattern, raw_text, re.IGNORECASE | re.DOTALL)
-        if pmh_match:
-            history["past_medical"] = pmh_match.group(1).strip()[:2000]  # Limit length
-        
-        psh_pattern = r"(?:Past Surgical History|PSH)[:\s]*(.+?)(?=Medications|Social|Family|$)"
-        psh_match = re.search(psh_pattern, raw_text, re.IGNORECASE | re.DOTALL)
-        if psh_match:
-            history["past_surgical"] = psh_match.group(1).strip()[:2000]
-        
-        return history
-    
-    def _extract_medications(self, raw_text: str) -> List[Dict[str, str]]:
-        """Extract current medications."""
         medications = []
         
         # Look for medications section
@@ -583,30 +998,26 @@ class OCRService:
                     # Try to parse medication name and dosage
                     med_match = re.match(r"([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\s*(.+)?", line)
                     if med_match:
+                        med_name = med_match.group(1).strip()
+                        details = (med_match.group(2) or "").strip()
+                        
+                        # Categorize the medication
+                        category, metadata = categorize_medication(med_name)
+                        
+                        # Add field for tracking
+                        self._add_extracted_field(
+                            ocr_result, "medication_name", "medication",
+                            med_name, 0.85
+                        )
+                        
                         medications.append({
-                            "name": med_match.group(1).strip(),
-                            "details": (med_match.group(2) or "").strip(),
+                            "name": med_name,
+                            "details": details,
+                            "category": category.value,
+                            "confidence": 0.85,
                         })
         
-        return medications[:20]  # Limit to 20 medications
-    
-    def _extract_social(self, raw_text: str) -> Dict[str, str]:
-        """Extract social history (tobacco, alcohol, etc.)."""
-        social = {}
-        
-        # Tobacco
-        tobacco_pattern = r"(?:Tobacco|Smoking)[:\s]*(\w+(?:\s+\w+)?)"
-        tobacco_match = re.search(tobacco_pattern, raw_text, re.IGNORECASE)
-        if tobacco_match:
-            social["tobacco"] = tobacco_match.group(1).strip()
-        
-        # Alcohol
-        alcohol_pattern = r"(?:Alcohol)[:\s]*(\w+(?:\s+\w+)?)"
-        alcohol_match = re.search(alcohol_pattern, raw_text, re.IGNORECASE)
-        if alcohol_match:
-            social["alcohol"] = alcohol_match.group(1).strip()
-        
-        return social
+        ocr_result.medications_data = medications[:20]  # Limit to 20
     
     # =========================================================================
     # UTILITIES
@@ -675,6 +1086,3 @@ class OCRService:
                 message="Failed to upload document",
                 service_name="AWS S3",
             )
-
-
-
