@@ -167,3 +167,5 @@ class SummaryService:
         """
         return self.summary_repo.count_by_patient(patient_uuid)
 
+
+

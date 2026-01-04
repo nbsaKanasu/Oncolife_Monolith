@@ -474,3 +474,5 @@ class PatientService(BaseService):
             "total_diary_entries": total_diary_entries,
         }
 
+
+

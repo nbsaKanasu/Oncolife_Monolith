@@ -309,3 +309,5 @@ class PatientService(BaseService):
             return self.patient_repo.count_active()
         return self.patient_repo.count()
 
+
+

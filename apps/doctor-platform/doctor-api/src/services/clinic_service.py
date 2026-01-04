@@ -261,3 +261,5 @@ class ClinicService(BaseService):
         """
         return self.clinic_repo.count()
 
+
+

@@ -10,6 +10,7 @@ A comprehensive healthcare platform for cancer patient symptom tracking and care
 |----------|-------------|
 | [Architecture Guide](docs/ARCHITECTURE.md) | System architecture, design patterns, code organization |
 | [Developer Guide](docs/DEVELOPER_GUIDE.md) | Getting started, development environment, code patterns |
+| [Patient Onboarding](apps/patient-platform/patient-api/docs/ONBOARDING.md) | **NEW!** Fax/OCR → Cognito → Welcome flow |
 | [Patient API Features](apps/patient-platform/patient-api/docs/FEATURES.md) | Complete feature documentation (27 symptom modules) |
 | [Patient API Deployment](apps/patient-platform/patient-api/docs/DEPLOYMENT.md) | AWS deployment instructions |
 | [Doctor API Docs](apps/doctor-platform/doctor-api/docs/README.md) | Doctor API endpoints and usage |
@@ -71,6 +72,12 @@ OncoLife_Monolith/
 ---
 
 ## ✨ Key Features
+
+### Patient Onboarding (Zero-Friction) 🆕
+- **Fax → OCR**: Clinic sends referral fax → AWS Textract extracts patient data
+- **Pre-Registration**: System creates Cognito account automatically
+- **Welcome Email/SMS**: Patient receives credentials via AWS SES/SNS
+- **Guided Setup**: Password reset → Acknowledgement → Terms → Reminders
 
 ### Patient Platform
 - **27 Symptom Modules**: Rule-based symptom checker with clinical triage logic
@@ -158,6 +165,7 @@ cd src && uvicorn main:app --reload --port 8001
 
 | Category | Endpoints |
 |----------|-----------|
+| **Onboarding** 🆕 | `POST /onboarding/webhook/fax`, `GET /onboarding/status`, `POST /onboarding/complete/*` |
 | **Auth** | `POST /auth/login`, `/signup`, `/logout` |
 | **Chat** | `GET /chat/session/today`, `POST /chat/session/new`, `WS /chat/ws/{uuid}` |
 | **Chemo** | `POST /chemo/log`, `GET /chemo/history` |
@@ -194,13 +202,28 @@ POSTGRES_PASSWORD=your_password
 POSTGRES_PATIENT_DB=oncolife_patient
 POSTGRES_DOCTOR_DB=oncolife_doctor
 
-# AWS Cognito
+# AWS Core
 AWS_REGION=us-west-2
 AWS_ACCESS_KEY_ID=your_key
 AWS_SECRET_ACCESS_KEY=your_secret
+
+# AWS Cognito (Authentication)
 COGNITO_USER_POOL_ID=us-west-2_xxx
 COGNITO_CLIENT_ID=xxx
 COGNITO_CLIENT_SECRET=xxx
+
+# AWS S3 (Document Storage)
+S3_REFERRAL_BUCKET=oncolife-referrals
+
+# AWS SES (Email)
+SES_SENDER_EMAIL=noreply@oncolife.com
+SES_SENDER_NAME=OncoLife Care
+
+# AWS SNS (SMS)
+SNS_ENABLED=true
+
+# Fax Webhook (Sinch/Twilio)
+FAX_WEBHOOK_SECRET=your_webhook_secret
 
 # CORS
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173

@@ -381,3 +381,5 @@ class ConversationRepository(BaseRepository[Conversation]):
             Conversation.patient_uuid == patient_uuid
         ).count()
 
+
+

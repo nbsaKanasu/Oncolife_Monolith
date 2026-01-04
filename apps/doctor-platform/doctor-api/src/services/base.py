@@ -54,3 +54,5 @@ class BaseService:
         """Rollback the current transaction."""
         self.db.rollback()
 
+
+

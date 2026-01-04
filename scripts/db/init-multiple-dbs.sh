@@ -30,3 +30,5 @@ if [ -n "$POSTGRES_MULTIPLE_DATABASES" ]; then
     echo "All databases created!"
 fi
 
+
+

@@ -39,8 +39,16 @@ OncoLife is a healthcare platform built with a modular monorepo architecture. Th
 │  └─────────────────────────┘         └─────────────────────────┘           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                         EXTERNAL SERVICES                                    │
+│  ┌─────────────────────────┐  ┌─────────────────────────┐                   │
+│  │     AWS Cognito         │  │    Fax Provider         │                   │
+│  │  Authentication         │  │  (Sinch/Twilio)         │                   │
+│  └─────────────────────────┘  └─────────────────────────┘                   │
+│  ┌─────────────────────────┐  ┌─────────────────────────┐                   │
+│  │     AWS Textract        │  │     AWS SES/SNS         │                   │
+│  │     (OCR)               │  │  (Email/SMS)            │                   │
+│  └─────────────────────────┘  └─────────────────────────┘                   │
 │  ┌─────────────────────────┐                                                │
-│  │     AWS Cognito         │  Authentication & User Management              │
+│  │     AWS S3              │  Document Storage (KMS Encrypted)              │
 │  └─────────────────────────┘                                                │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -119,7 +127,13 @@ patient-api/src/
 │   ├── diary_service.py        # Diary entries
 │   ├── summary_service.py      # Conversation summaries
 │   ├── profile_service.py      # Patient profiles
-│   └── patient_service.py      # Patient operations
+│   ├── patient_service.py      # Patient operations
+│   │
+│   │ # Patient Onboarding Services (NEW)
+│   ├── fax_service.py          # Fax webhook reception & S3 upload
+│   ├── ocr_service.py          # AWS Textract OCR processing
+│   ├── notification_service.py # AWS SES/SNS email & SMS
+│   └── onboarding_service.py   # Main orchestration service
 │
 ├── api/                         # API layer (versioned)
 │   ├── __init__.py
@@ -130,6 +144,7 @@ patient-api/src/
 │       └── endpoints/
 │           ├── __init__.py
 │           ├── auth.py         # POST /auth/login, /signup
+│           ├── onboarding.py   # POST /onboarding/webhook/fax, status, complete/*
 │           ├── chat.py         # GET/POST /chat/*, WS /chat/ws/*
 │           ├── chemo.py        # POST /chemo/log, GET /chemo/history
 │           ├── diary.py        # CRUD /diary/*
@@ -223,6 +238,70 @@ patient-web/src/
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Patient Onboarding Architecture (NEW)
+
+### Zero-Friction Onboarding Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      PATIENT ONBOARDING PIPELINE                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+  │ CLINIC  │───▶│ FAX PROVIDER │───▶│  WEBHOOK    │───▶│  S3 UPLOAD  │
+  │ (Epic)  │    │   (Sinch)    │    │ /fax/sinch  │    │ (KMS Enc.)  │
+  └─────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+                                                              │
+                                                              ▼
+  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+  │  WELCOME    │◀───│   COGNITO   │◀───│    DB       │◀───│  TEXTRACT   │
+  │  EMAIL/SMS  │    │   Account   │    │   Store     │    │   (OCR)     │
+  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+        │
+        ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                    FIRST LOGIN ONBOARDING WIZARD                         │
+  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
+  │  │  PASSWORD   │─▶│   MEDICAL   │─▶│   TERMS &   │─▶│  REMINDER   │    │
+  │  │   RESET     │  │ ACKNOWLEDGE │  │   PRIVACY   │  │   SETUP     │    │
+  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
+  └─────────────────────────────────────────────────────────────────────────┘
+```
+
+### AWS Services Used
+
+| Service | Purpose | HIPAA |
+|---------|---------|-------|
+| **S3** | Store referral documents | ✅ KMS encrypted |
+| **Textract** | OCR for fax documents | ✅ HIPAA eligible |
+| **Cognito** | User authentication | ✅ HIPAA eligible |
+| **SES** | Welcome/reminder emails | ✅ HIPAA eligible |
+| **SNS** | SMS notifications | ✅ HIPAA eligible |
+
+### Data Extracted from Referrals
+
+| Category | Fields |
+|----------|--------|
+| **Patient** | Name, DOB, Email, Phone, MRN, Sex |
+| **Physician** | Name, NPI, Clinic |
+| **Diagnosis** | Cancer type, Staging, Date |
+| **Treatment** | Chemo regimen, Start/End dates, Cycles |
+| **History** | Medical, Surgical, Medications |
+| **Vitals** | Height, Weight, BMI, BP, Pulse |
+
+### Onboarding Database Tables
+
+| Table | Description |
+|-------|-------------|
+| `patient_referrals` | All referral data from clinic faxes |
+| `patient_onboarding_status` | Progress through onboarding steps |
+| `referral_documents` | S3 references to fax documents |
+| `onboarding_notification_log` | Audit trail of emails/SMS |
+
+See [ONBOARDING.md](../apps/patient-platform/patient-api/docs/ONBOARDING.md) for complete documentation.
 
 ---
 
@@ -386,6 +465,18 @@ async def protected_endpoint(
 | `COGNITO_USER_POOL_ID` | Cognito user pool | - |
 | `COGNITO_CLIENT_ID` | Cognito client ID | - |
 | `CORS_ORIGINS` | Allowed origins | - |
+
+### Onboarding-Specific Variables (NEW)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `S3_REFERRAL_BUCKET` | S3 bucket for fax documents | oncolife-referrals |
+| `SES_SENDER_EMAIL` | Email sender address | noreply@oncolife.com |
+| `SES_SENDER_NAME` | Email sender display name | OncoLife Care |
+| `SNS_ENABLED` | Enable SMS notifications | true |
+| `FAX_WEBHOOK_SECRET` | HMAC secret for webhook validation | - |
+| `TERMS_VERSION` | Current terms version | 1.0 |
+| `PRIVACY_VERSION` | Current privacy policy version | 1.0 |
 
 ---
 

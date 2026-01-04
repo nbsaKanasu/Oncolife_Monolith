@@ -253,3 +253,5 @@ def get_settings() -> Settings:
 # Global settings instance for easy import
 settings = get_settings()
 
+
+

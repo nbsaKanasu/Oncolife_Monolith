@@ -233,3 +233,5 @@ async def get_entries_for_doctor(
     
     return [DiaryEntrySchema(**e) for e in entries]
 
+
+

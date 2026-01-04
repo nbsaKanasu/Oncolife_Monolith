@@ -109,3 +109,5 @@ class SoftDeleteMixin:
         """Check if the record is active (not deleted)."""
         return self.is_deleted is None
 
+
+

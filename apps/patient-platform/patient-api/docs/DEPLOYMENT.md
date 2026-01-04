@@ -13,29 +13,49 @@ This guide provides step-by-step instructions for deploying the OncoLife Patient
 3. **Docker** installed
 4. **PostgreSQL** database (AWS RDS recommended)
 5. **AWS Cognito** User Pool configured
+6. **AWS S3** bucket for referral documents (onboarding)
+7. **AWS SES** verified sender email (onboarding)
+8. **AWS SNS** for SMS (onboarding)
+9. **Fax Provider** (Sinch/Twilio) with webhook configured
 
 ---
 
 ## Architecture on AWS
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          AWS Infrastructure                           │
-│                                                                       │
-│  ┌─────────────┐      ┌─────────────┐      ┌─────────────────────┐   │
-│  │   Route53   │ ───► │     ALB     │ ───► │   ECS / Fargate     │   │
-│  │   (DNS)     │      │ (Load Bal.) │      │ (patient-api:8000)  │   │
-│  └─────────────┘      └─────────────┘      └──────────┬──────────┘   │
-│                                                       │              │
-│                                                       ▼              │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │                        Private Subnet                            │ │
-│  │  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐            │ │
-│  │  │    RDS      │   │   Cognito   │   │    S3       │            │ │
-│  │  │ PostgreSQL  │   │ User Pool   │   │  (logs)     │            │ │
-│  │  └─────────────┘   └─────────────┘   └─────────────┘            │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          AWS Infrastructure                               │
+│                                                                           │
+│  ┌─────────────┐      ┌─────────────┐      ┌─────────────────────┐       │
+│  │   Route53   │ ───► │     ALB     │ ───► │   ECS / Fargate     │       │
+│  │   (DNS)     │      │ (Load Bal.) │      │ (patient-api:8000)  │       │
+│  └─────────────┘      └─────────────┘      └──────────┬──────────┘       │
+│                                                       │                   │
+│  ┌────────────────────────────────────────────────────┼─────────────────┐│
+│  │                     ONBOARDING FLOW                │                  ││
+│  │  ┌───────────┐    ┌───────────┐    ┌───────────────▼───────────────┐ ││
+│  │  │ Fax       │───►│ Webhook   │───►│      S3 (Referrals)           │ ││
+│  │  │ (Sinch)   │    │ /fax/sinch│    │ s3://oncolife-referrals/      │ ││
+│  │  └───────────┘    └───────────┘    │ (KMS Encrypted)               │ ││
+│  │                                    └───────────────┬───────────────┘ ││
+│  │                                                    │                  ││
+│  │  ┌───────────┐    ┌───────────┐    ┌───────────────▼───────────────┐ ││
+│  │  │  SES      │◄───│ Cognito   │◄───│      Textract (OCR)           │ ││
+│  │  │ (Email)   │    │ (Account) │    │ Extract: Name, DOB, Cancer... │ ││
+│  │  └───────────┘    └───────────┘    └───────────────────────────────┘ ││
+│  │  ┌───────────┐                                                        ││
+│  │  │  SNS      │ (SMS notifications)                                    ││
+│  │  └───────────┘                                                        ││
+│  └───────────────────────────────────────────────────────────────────────┘│
+│                                                                           │
+│  ┌───────────────────────────────────────────────────────────────────────┐│
+│  │                        Private Subnet                                  ││
+│  │  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐                  ││
+│  │  │    RDS      │   │   Cognito   │   │    S3       │                  ││
+│  │  │ PostgreSQL  │   │ User Pool   │   │  (logs)     │                  ││
+│  │  └─────────────┘   └─────────────┘   └─────────────┘                  ││
+│  └───────────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -412,6 +432,228 @@ alembic upgrade head
 
 ---
 
+## Patient Onboarding AWS Setup (NEW)
+
+### Step 1: Create S3 Bucket for Referrals
+
+```bash
+#!/bin/bash
+# scripts/create-referral-bucket.sh
+
+BUCKET_NAME="oncolife-referrals"
+AWS_REGION=${AWS_REGION:-"us-west-2"}
+
+# Create bucket with encryption
+aws s3api create-bucket \
+    --bucket $BUCKET_NAME \
+    --region $AWS_REGION \
+    --create-bucket-configuration LocationConstraint=$AWS_REGION
+
+# Enable versioning (required for HIPAA)
+aws s3api put-bucket-versioning \
+    --bucket $BUCKET_NAME \
+    --versioning-configuration Status=Enabled
+
+# Enable server-side encryption with KMS
+aws s3api put-bucket-encryption \
+    --bucket $BUCKET_NAME \
+    --server-side-encryption-configuration '{
+        "Rules": [
+            {
+                "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "aws:kms",
+                    "KMSMasterKeyID": "alias/oncolife-referrals-key"
+                }
+            }
+        ]
+    }'
+
+# Block public access
+aws s3api put-public-access-block \
+    --bucket $BUCKET_NAME \
+    --public-access-block-configuration \
+        BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+
+echo "S3 bucket created: $BUCKET_NAME"
+```
+
+### Step 2: Configure SES for Welcome Emails
+
+```bash
+#!/bin/bash
+# scripts/setup-ses.sh
+
+SENDER_EMAIL="noreply@oncolife.com"
+AWS_REGION=${AWS_REGION:-"us-west-2"}
+
+# Verify email identity (or domain)
+aws ses verify-email-identity \
+    --email-address $SENDER_EMAIL \
+    --region $AWS_REGION
+
+# Create email template for welcome message
+aws ses create-template \
+    --template '{
+        "TemplateName": "oncolife-welcome",
+        "SubjectPart": "Welcome to OncoLife - Your Personal Health Companion",
+        "HtmlPart": "<html>...</html>",
+        "TextPart": "Welcome to OncoLife..."
+    }' \
+    --region $AWS_REGION
+
+echo "SES configured for: $SENDER_EMAIL"
+```
+
+### Step 3: Configure SNS for SMS
+
+```bash
+#!/bin/bash
+# scripts/setup-sns.sh
+
+AWS_REGION=${AWS_REGION:-"us-west-2"}
+
+# Set default SMS attributes
+aws sns set-sms-attributes \
+    --attributes '{
+        "DefaultSMSType": "Transactional",
+        "DefaultSenderID": "OncoLife"
+    }' \
+    --region $AWS_REGION
+
+echo "SNS SMS configured"
+```
+
+### Step 4: Create IAM Role for Onboarding
+
+```bash
+#!/bin/bash
+# scripts/create-onboarding-role.sh
+
+ROLE_NAME="OncolifeOnboardingRole"
+
+# Create role
+aws iam create-role \
+    --role-name $ROLE_NAME \
+    --assume-role-policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "ecs-tasks.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole"
+            }
+        ]
+    }'
+
+# Attach policy for S3
+aws iam put-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-name "S3ReferralAccess" \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:PutObject", "s3:GetObject"],
+                "Resource": "arn:aws:s3:::oncolife-referrals/*"
+            }
+        ]
+    }'
+
+# Attach policy for Textract
+aws iam put-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-name "TextractAccess" \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "textract:AnalyzeDocument",
+                    "textract:StartDocumentAnalysis",
+                    "textract:GetDocumentAnalysis"
+                ],
+                "Resource": "*"
+            }
+        ]
+    }'
+
+# Attach policy for SES
+aws iam put-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-name "SESAccess" \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["ses:SendEmail", "ses:SendRawEmail"],
+                "Resource": "*"
+            }
+        ]
+    }'
+
+# Attach policy for SNS
+aws iam put-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-name "SNSAccess" \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["sns:Publish"],
+                "Resource": "*"
+            }
+        ]
+    }'
+
+# Attach policy for Cognito (admin user creation)
+aws iam put-role-policy \
+    --role-name $ROLE_NAME \
+    --policy-name "CognitoAdminAccess" \
+    --policy-document '{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "cognito-idp:AdminCreateUser",
+                    "cognito-idp:AdminDeleteUser",
+                    "cognito-idp:AdminInitiateAuth",
+                    "cognito-idp:AdminRespondToAuthChallenge"
+                ],
+                "Resource": "arn:aws:cognito-idp:*:*:userpool/*"
+            }
+        ]
+    }'
+
+echo "IAM role created: $ROLE_NAME"
+```
+
+### Step 5: Configure Fax Provider Webhook
+
+For **Sinch**:
+1. Log into Sinch Dashboard
+2. Navigate to Fax → Numbers
+3. Select your dedicated fax number
+4. Configure webhook:
+   - URL: `https://api.oncolife.com/api/v1/onboarding/webhook/fax/sinch`
+   - Events: `fax.received`
+   - Secret: Same as `FAX_WEBHOOK_SECRET` in your `.env`
+
+For **Twilio**:
+1. Log into Twilio Console
+2. Navigate to Fax → Manage → Fax Numbers
+3. Configure incoming webhook:
+   - URL: `https://api.oncolife.com/api/v1/onboarding/webhook/fax/twilio`
+   - Method: POST
+
+---
+
 ## AWS Cognito Setup
 
 ### Create User Pool
@@ -468,6 +710,15 @@ aws secretsmanager create-secret \
         "user_pool_id": "us-west-2_xxx",
         "client_id": "xxx",
         "client_secret": "xxx"
+    }'
+
+# Onboarding secrets (NEW)
+aws secretsmanager create-secret \
+    --name oncolife/onboarding \
+    --secret-string '{
+        "fax_webhook_secret": "your_webhook_secret",
+        "ses_sender_email": "noreply@oncolife.com",
+        "s3_referral_bucket": "oncolife-referrals"
     }'
 ```
 
@@ -676,6 +927,7 @@ aws ecs update-service \
 
 ## Security Checklist
 
+### General
 - [ ] Enable VPC Flow Logs
 - [ ] Configure Security Groups (least privilege)
 - [ ] Enable RDS encryption at rest
@@ -684,6 +936,17 @@ aws ecs update-service \
 - [ ] Configure WAF on ALB
 - [ ] Enable GuardDuty for threat detection
 - [ ] Set up IAM roles with least privilege
+
+### Patient Onboarding (HIPAA)
+- [ ] S3 bucket has versioning enabled
+- [ ] S3 bucket has KMS encryption
+- [ ] S3 bucket blocks all public access
+- [ ] Fax webhook uses HTTPS only
+- [ ] Fax webhook signature validation enabled
+- [ ] SES sender email verified
+- [ ] Cognito password policy meets requirements
+- [ ] Onboarding notification logs retained
+- [ ] PHI data encrypted in transit and at rest
 
 ---
 

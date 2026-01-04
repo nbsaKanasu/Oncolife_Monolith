@@ -215,3 +215,5 @@ async def delete_clinic(
     
     return MessageResponse(message="Clinic deleted successfully")
 
+
+

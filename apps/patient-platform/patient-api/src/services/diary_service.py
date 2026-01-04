@@ -302,3 +302,5 @@ class DiaryService:
             logger.info(f"Diary entry already deleted: entry_uuid={entry_uuid}")
             return {"success": True, "message": "Diary entry was already deleted"}
 
+
+

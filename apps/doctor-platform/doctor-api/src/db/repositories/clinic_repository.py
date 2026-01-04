@@ -185,3 +185,5 @@ class ClinicRepository(BaseRepository[Clinic]):
         """
         return self.exists(clinic_name=clinic_name)
 
+
+

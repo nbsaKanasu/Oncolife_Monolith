@@ -300,3 +300,5 @@ export const SymptomMessageBubble: React.FC<SymptomMessageBubbleProps> = ({
   );
 };
 
+
+

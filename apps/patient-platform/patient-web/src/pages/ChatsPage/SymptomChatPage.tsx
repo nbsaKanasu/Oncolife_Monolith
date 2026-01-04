@@ -302,3 +302,5 @@ const SymptomChatPage: React.FC = () => {
 
 export default SymptomChatPage;
 
+
+

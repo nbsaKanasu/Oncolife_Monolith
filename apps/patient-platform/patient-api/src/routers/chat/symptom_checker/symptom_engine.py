@@ -482,3 +482,5 @@ class SymptomCheckerEngine:
         """Get list of available symptoms for selection."""
         return get_visible_symptoms()
 
+
+

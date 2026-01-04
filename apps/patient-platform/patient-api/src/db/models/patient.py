@@ -148,3 +148,5 @@ class Patient(Base, TimestampMixin):
     def __repr__(self) -> str:
         return f"<Patient(uuid={self.uuid}, name='{self.full_name}', mrn='{self.mrn}')>"
 
+
+

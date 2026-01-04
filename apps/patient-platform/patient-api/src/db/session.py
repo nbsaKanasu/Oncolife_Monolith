@@ -260,3 +260,5 @@ def check_doctor_db_health() -> bool:
         logger.error(f"Doctor database health check failed: {e}")
         return False
 
+
+

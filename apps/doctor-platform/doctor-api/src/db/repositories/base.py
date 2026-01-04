@@ -400,3 +400,5 @@ class BaseRepository(Generic[ModelType]):
         """Refresh an instance from the database."""
         self.db.refresh(instance)
 
+
+

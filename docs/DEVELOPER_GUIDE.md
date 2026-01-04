@@ -12,10 +12,11 @@ This guide will help you get started as a developer on the OncoLife platform. Wh
 2. [Development Environment](#development-environment)
 3. [Backend Development](#backend-development)
 4. [Frontend Development](#frontend-development)
-5. [Code Patterns](#code-patterns)
-6. [Testing](#testing)
-7. [Git Workflow](#git-workflow)
-8. [Troubleshooting](#troubleshooting)
+5. [Patient Onboarding](#patient-onboarding) 🆕
+6. [Code Patterns](#code-patterns)
+7. [Testing](#testing)
+8. [Git Workflow](#git-workflow)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -125,14 +126,18 @@ npm run dev
 Create a `.env` file in each API directory:
 
 ```env
-# Application
+# =============================================================================
+# APPLICATION
+# =============================================================================
 ENVIRONMENT=development
 DEBUG=true
 LOG_LEVEL=DEBUG
 APP_NAME=OncoLife Patient API
 APP_VERSION=1.0.0
 
-# Database
+# =============================================================================
+# DATABASE
+# =============================================================================
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=oncolife_admin
@@ -140,15 +145,53 @@ POSTGRES_PASSWORD=your_password
 POSTGRES_PATIENT_DB=oncolife_patient
 POSTGRES_DOCTOR_DB=oncolife_doctor
 
-# AWS Cognito (get from AWS console)
+# =============================================================================
+# AWS CORE
+# =============================================================================
 AWS_REGION=us-west-2
 AWS_ACCESS_KEY_ID=your_key
 AWS_SECRET_ACCESS_KEY=your_secret
+
+# =============================================================================
+# AWS COGNITO (Authentication)
+# =============================================================================
 COGNITO_USER_POOL_ID=us-west-2_xxxxx
 COGNITO_CLIENT_ID=xxxxx
 COGNITO_CLIENT_SECRET=xxxxx
 
+# =============================================================================
+# AWS S3 (Document Storage for Onboarding)
+# =============================================================================
+S3_REFERRAL_BUCKET=oncolife-referrals
+
+# =============================================================================
+# AWS SES (Email Notifications)
+# =============================================================================
+SES_SENDER_EMAIL=noreply@oncolife.com
+SES_SENDER_NAME=OncoLife Care
+
+# =============================================================================
+# AWS SNS (SMS Notifications)
+# =============================================================================
+SNS_ENABLED=true
+
+# =============================================================================
+# FAX WEBHOOK (Sinch/Twilio)
+# =============================================================================
+FAX_WEBHOOK_SECRET=your_webhook_secret
+FAX_INBOUND_NUMBER=+18001234567
+
+# =============================================================================
+# ONBOARDING SETTINGS
+# =============================================================================
+TERMS_VERSION=1.0
+PRIVACY_VERSION=1.0
+HIPAA_VERSION=1.0
+ONBOARDING_TEMP_PASSWORD_LENGTH=12
+
+# =============================================================================
 # CORS
+# =============================================================================
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 ```
 
@@ -385,6 +428,195 @@ const App = () => (
     </Router>
   </ErrorBoundary>
 );
+```
+
+---
+
+## Patient Onboarding
+
+### Overview
+
+The Patient Onboarding system is a zero-friction registration flow where:
+1. **Clinic sends fax** → Patient doesn't do anything
+2. **System creates account** → Automatic via Cognito
+3. **Patient receives email** → Login credentials sent
+4. **First login wizard** → Password, acknowledgement, terms, reminders
+
+### Architecture
+
+```
+Clinic Fax → Sinch → Webhook → S3 → Textract → DB → Cognito → SES/SNS
+```
+
+### Key Services
+
+| Service | File | Purpose |
+|---------|------|---------|
+| `FaxService` | `services/fax_service.py` | Receive webhook, upload to S3 |
+| `OCRService` | `services/ocr_service.py` | AWS Textract processing |
+| `NotificationService` | `services/notification_service.py` | Email/SMS via SES/SNS |
+| `OnboardingService` | `services/onboarding_service.py` | Main orchestration |
+
+### Testing Onboarding Locally
+
+#### 1. Create a Manual Referral (No Fax Needed)
+
+```bash
+# First, get an auth token
+TOKEN=$(curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@oncolife.com", "password": "password"}' \
+  | jq -r '.tokens.access_token')
+
+# Create a manual referral
+curl -X POST http://localhost:8000/api/v1/onboarding/referral/manual \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john.doe@example.com",
+    "phone": "+15031234567",
+    "dob": "1960-05-15",
+    "cancer_type": "Breast Cancer",
+    "physician_name": "Dr. Smith",
+    "send_welcome": false
+  }'
+```
+
+#### 2. Simulate a Fax Webhook (Sinch Format)
+
+```bash
+curl -X POST http://localhost:8000/api/v1/onboarding/webhook/fax/sinch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "faxId": "test-123",
+    "fromNumber": "+15551234567",
+    "toNumber": "+18001234567",
+    "documentUrl": "https://example.com/test.pdf",
+    "pages": 3
+  }'
+```
+
+#### 3. Check Onboarding Status
+
+```bash
+curl http://localhost:8000/api/v1/onboarding/status \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Configuring Fax Provider (Sinch)
+
+1. Log into Sinch Dashboard
+2. Create a new fax number
+3. Configure webhook URL:
+   ```
+   https://api.oncolife.com/api/v1/onboarding/webhook/fax/sinch
+   ```
+4. Set webhook secret (same as `FAX_WEBHOOK_SECRET` in `.env`)
+5. Enable "fax.received" event
+
+### Required AWS Permissions
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::oncolife-referrals/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "textract:AnalyzeDocument",
+        "textract:StartDocumentAnalysis",
+        "textract:GetDocumentAnalysis"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ses:SendEmail",
+        "ses:SendRawEmail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sns:Publish"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:AdminCreateUser",
+        "cognito-idp:AdminDeleteUser"
+      ],
+      "Resource": "arn:aws:cognito-idp:*:*:userpool/*"
+    }
+  ]
+}
+```
+
+### Frontend Onboarding Wizard
+
+The frontend has a multi-step wizard at `/onboarding`:
+
+```typescript
+// pages/OnboardingPage/OnboardingWizard.tsx
+
+// Step 1: Password Reset (handled by Cognito challenge)
+// Step 2: Acknowledgement - Medical disclaimer
+// Step 3: Terms & Privacy - Legal acceptance  
+// Step 4: Reminder Setup - Email/SMS preferences
+```
+
+To use the onboarding API:
+
+```typescript
+import { onboardingApi } from '@/api/services';
+
+// Check status
+const status = await onboardingApi.getOnboardingStatus();
+
+// Complete acknowledgement
+await onboardingApi.completeAcknowledgementStep({
+  acknowledged: true,
+  acknowledgement_text: "I understand..."
+});
+
+// Complete terms
+await onboardingApi.completeTermsStep({
+  terms_accepted: true,
+  privacy_accepted: true,
+  hipaa_acknowledged: true
+});
+
+// Complete reminders
+await onboardingApi.completeReminderStep({
+  channel: 'email',
+  reminder_time: '09:00'
+});
+```
+
+### Database Migrations
+
+Run the onboarding tables migration:
+
+```sql
+-- See apps/patient-platform/patient-api/docs/ONBOARDING.md for full SQL
+CREATE TABLE patient_referrals (...);
+CREATE TABLE patient_onboarding_status (...);
+CREATE TABLE referral_documents (...);
+CREATE TABLE onboarding_notification_log (...);
 ```
 
 ---

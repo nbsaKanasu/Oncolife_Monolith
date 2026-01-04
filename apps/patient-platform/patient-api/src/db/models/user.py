@@ -265,3 +265,5 @@ class StaffProfile(Base, TimestampMixin):
     def __repr__(self) -> str:
         return f"<StaffProfile(uuid={self.uuid}, name='{self.full_name}', role='{self.role}')>"
 
+
+
