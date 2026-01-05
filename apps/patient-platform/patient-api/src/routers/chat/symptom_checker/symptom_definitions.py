@@ -414,6 +414,8 @@ def _eval_nausea(answers: Dict[str, Any]) -> LogicResult:
     intake = answers.get('intake')
     days = answers.get('days')
     trend = answers.get('trend')
+    severity = answers.get('severity_post_meds')  # Check post-med severity
+    severity_no_meds = answers.get('severity_no_meds')  # Check if not taking meds
     
     # Alert: Oral intake "barely" or "none"
     intake_bad = intake in ['none', 'barely']
@@ -421,11 +423,21 @@ def _eval_nausea(answers: Dict[str, Any]) -> LogicResult:
     # Alert: Duration ≥ 3 days AND (Worsening or Same)
     chronic_worsening = days == '>3d' and trend == 'bad'
     
-    if intake_bad or chronic_worsening:
+    # Alert: SEVERE nausea (post-meds or not taking meds)
+    severe_nausea = severity == 'sev' or severity_no_meds == 'sev'
+    
+    if intake_bad or chronic_worsening or severe_nausea:
+        reasons = []
+        if intake_bad:
+            reasons.append(f'Oral intake: {intake}')
+        if chronic_worsening:
+            reasons.append('Duration ≥3 days and worsening/same')
+        if severe_nausea:
+            reasons.append('Severe nausea')
         return LogicResult(
             action='continue',
             triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message='Oral intake barely/none OR Duration ≥3 days and worsening/same.'
+            triage_message=f"Nausea alert: {', '.join(reasons)}."
         )
     return LogicResult(action='continue')
 
@@ -497,6 +509,13 @@ SYMPTOMS['NAU-203'] = SymptomDef(
             input_type=InputType.CHOICE,
             options=opts_from_dicts(SEVERITY_OPTIONS),
             condition=lambda a: a.get('meds') and a.get('meds') != 'none'
+        ),
+        Question(
+            id='severity_no_meds',
+            text='Rate your nausea:',
+            input_type=InputType.CHOICE,
+            options=opts_from_dicts(SEVERITY_OPTIONS),
+            condition=lambda a: a.get('meds') == 'none'
         )
     ],
     evaluate_screening=_eval_nausea,
@@ -688,7 +707,8 @@ def _eval_diarrhea(answers: Dict[str, Any]) -> LogicResult:
     types = answers.get('stool_type', [])
     dehy = answers.get('dehydration_signs', [])
     days = answers.get('preface')
-    severity = answers.get('severity_post_med')
+    diarrhea_severity = answers.get('severity_post_med')  # Diarrhea severity post-meds
+    diarrhea_severity_no_meds = answers.get('severity_no_meds')  # Diarrhea severity without meds
     intake = answers.get('intake')
     abd_sev = answers.get('abd_pain_sev')
     trend = answers.get('trend')
@@ -700,6 +720,9 @@ def _eval_diarrhea(answers: Dict[str, Any]) -> LogicResult:
         stools_num = 0
         days_num = 0
     
+    # Combine diarrhea severity (post-meds or no meds)
+    effective_severity = diarrhea_severity or diarrhea_severity_no_meds
+    
     # Alert: >5 loose stools/day
     if stools_num > 5:
         return LogicResult(action='continue', triage_level=TriageLevel.NOTIFY_CARE_TEAM, triage_message='>5 loose stools/day reported.')
@@ -708,22 +731,22 @@ def _eval_diarrhea(answers: Dict[str, Any]) -> LogicResult:
     if any(t in ['black', 'blood', 'mucus'] for t in types):
         return LogicResult(action='continue', triage_level=TriageLevel.NOTIFY_CARE_TEAM, triage_message='Bloody/Black/Mucus Stool reported.')
     
-    # Alert: Moderate Pain ≥ 3 days AND (Worsening/Same)
-    if abd_sev == 'mod' and days_num >= 3 and trend == 'bad':
-        return LogicResult(action='continue', triage_level=TriageLevel.NOTIFY_CARE_TEAM, triage_message='Moderate abdominal pain for ≥3 days and worsening/same.')
+    # Alert: Moderate DIARRHEA ≥ 3 days AND (Worsening/Same) - per oncologist spec
+    if effective_severity == 'mod' and days_num >= 3 and trend == 'bad':
+        return LogicResult(action='continue', triage_level=TriageLevel.NOTIFY_CARE_TEAM, triage_message='Moderate diarrhea for ≥3 days and worsening/same.')
     
-    # Alert: Severe abdominal pain
-    if abd_sev == 'sev':
-        return LogicResult(action='continue', triage_level=TriageLevel.NOTIFY_CARE_TEAM, triage_message='Severe abdominal pain reported.')
+    # Alert: Moderate/Severe abdominal pain
+    if abd_sev in ['mod', 'sev']:
+        return LogicResult(action='continue', triage_level=TriageLevel.NOTIFY_CARE_TEAM, triage_message=f'{abd_sev.title()} abdominal pain with diarrhea.')
     
     # Alert: Dehydration signs or no intake
     dehy_actual = [d for d in dehy if d not in ['none', 'vitals_known']]
     if dehy_actual or intake == 'none':
         return LogicResult(action='continue', triage_level=TriageLevel.NOTIFY_CARE_TEAM, triage_message='Dehydration signs or No Intake.')
     
-    # Alert: Severe diarrhea despite meds
-    if severity == 'sev':
-        return LogicResult(action='continue', triage_level=TriageLevel.NOTIFY_CARE_TEAM, triage_message='Severe Diarrhea despite meds.')
+    # Alert: Severe diarrhea (with or without meds)
+    if effective_severity == 'sev':
+        return LogicResult(action='continue', triage_level=TriageLevel.NOTIFY_CARE_TEAM, triage_message='Severe Diarrhea reported.')
     
     return LogicResult(action='continue')
 
@@ -815,6 +838,13 @@ SYMPTOMS['DIA-205'] = SymptomDef(
             input_type=InputType.CHOICE,
             options=opts_from_dicts(SEVERITY_OPTIONS),
             condition=lambda a: a.get('meds') and a.get('meds') != 'none'
+        ),
+        Question(
+            id='severity_no_meds',
+            text='Rate your diarrhea:',
+            input_type=InputType.CHOICE,
+            options=opts_from_dicts(SEVERITY_OPTIONS),
+            condition=lambda a: a.get('meds') == 'none'
         ),
         Question(
             id='dehydration_signs',
@@ -1094,18 +1124,33 @@ SYMPTOMS['PAI-213'] = SymptomDef(
 # CON-210: Constipation
 def _eval_constipation(answers: Dict[str, Any]) -> LogicResult:
     days_bm = answers.get('days_bm')
+    passing_gas = answers.get('passing_gas')
     days_gas = answers.get('days_gas')
     discomfort = answers.get('discomfort')
     meds = answers.get('meds')
+    dehy_signs = answers.get('dehydration_signs', [])
+    abd_pain = answers.get('abd_pain')
+    abd_pain_sev = answers.get('abd_pain_sev')
     
     try:
         days_bm_num = float(days_bm) if days_bm else 0
-        days_gas_num = float(days_gas) if days_gas else 0
+        days_gas_num = float(days_gas) if days_gas and passing_gas is False else 0
     except (ValueError, TypeError):
         days_bm_num = 0
         days_gas_num = 0
     
-    if days_bm_num > 2 or days_gas_num > 2 or discomfort == 'sev':
+    # Check for dehydration signs
+    dehy_actual = [d for d in dehy_signs if d not in ['none', 'vitals_known']]
+    has_dehydration = len(dehy_actual) > 0
+    
+    # Check for moderate-severe abdominal pain
+    has_bad_abd_pain = abd_pain_sev in ['mod', 'sev']
+    
+    # Alert conditions per oncologist spec:
+    # >2 days since BM OR >2 days since gas OR Severe discomfort 
+    # OR signs of dehydration OR severe constipation OR moderate-severe abdominal pain
+    if (days_bm_num > 2 or days_gas_num > 2 or discomfort == 'sev' or 
+        has_dehydration or has_bad_abd_pain):
         reasons = []
         if days_bm_num > 2:
             reasons.append(f'No BM for {int(days_bm_num)} days')
@@ -1113,6 +1158,10 @@ def _eval_constipation(answers: Dict[str, Any]) -> LogicResult:
             reasons.append(f'No gas for {int(days_gas_num)} days')
         if discomfort == 'sev':
             reasons.append('Severe discomfort')
+        if has_dehydration:
+            reasons.append(f"Dehydration signs: {', '.join(dehy_actual)}")
+        if has_bad_abd_pain:
+            reasons.append(f'{abd_pain_sev.title()} abdominal pain')
         
         if meds and meds != 'none':
             meds_freq = answers.get('meds_freq', '')
@@ -1143,15 +1192,39 @@ SYMPTOMS['CON-210'] = SymptomDef(
             input_type=InputType.NUMBER
         ),
         Question(
+            id='passing_gas',
+            text='Are you passing gas?',
+            input_type=InputType.YES_NO
+        ),
+        Question(
             id='days_gas',
             text='How many days has it been since you passed gas?',
-            input_type=InputType.NUMBER
+            input_type=InputType.NUMBER,
+            condition=lambda a: a.get('passing_gas') is False
         ),
         Question(
             id='discomfort',
             text='Rate your discomfort:',
             input_type=InputType.CHOICE,
             options=opts_from_dicts(SEVERITY_OPTIONS)
+        ),
+        Question(
+            id='abd_pain',
+            text='Are you having abdominal pain?',
+            input_type=InputType.YES_NO
+        ),
+        Question(
+            id='abd_pain_sev',
+            text='Rate your abdominal pain:',
+            input_type=InputType.CHOICE,
+            options=opts_from_dicts(SEVERITY_OPTIONS),
+            condition=lambda a: a.get('abd_pain') is True
+        ),
+        Question(
+            id='dehydration_signs',
+            text='Any signs of dehydration?',
+            input_type=InputType.MULTISELECT,
+            options=opts_from_dicts(DEHYDRATION_SIGNS_OPTIONS)
         ),
         Question(
             id='meds',
@@ -1927,16 +2000,27 @@ def _eval_skin(answers: Dict[str, Any]) -> LogicResult:
     except (ValueError, TypeError):
         t = 0
     
-    infusion_issue = 'swelling' in infusion_sx or 'wound' in infusion_sx
+    # Infusion site issues: swelling, blistering, or open wound
+    infusion_issue = any(sx in infusion_sx for sx in ['swelling', 'blistering', 'wound'])
     adl_issue = adl is True
     fever_issue = t > 100.3
     coverage_issue = coverage is True
     
     if infusion_issue or adl_issue or fever_issue or coverage_issue:
+        reasons = []
+        if infusion_issue:
+            issues = [sx for sx in ['swelling', 'blistering', 'wound'] if sx in infusion_sx]
+            reasons.append(f"Infusion site: {', '.join(issues)}")
+        if adl_issue:
+            reasons.append('Affects daily activities')
+        if fever_issue:
+            reasons.append(f'Fever {t}°F')
+        if coverage_issue:
+            reasons.append('>30% body coverage')
         return LogicResult(
             action='continue',
             triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message='Infusion issue OR ADL impact OR Fever OR >30% Coverage.'
+            triage_message=f"Skin rash alert: {', '.join(reasons)}."
         )
     
     return LogicResult(action='continue')
@@ -1977,6 +2061,7 @@ SYMPTOMS['SKI-212'] = SymptomDef(
                 create_option('Chest', 'chest'),
                 create_option('Arms', 'arms'),
                 create_option('Legs', 'legs'),
+                create_option('Hands/Feet', 'hands_feet'),
                 create_option('Infusion Site', 'infusion'),
                 create_option('Other', 'other')
             ]
@@ -1993,6 +2078,7 @@ SYMPTOMS['SKI-212'] = SymptomDef(
             input_type=InputType.MULTISELECT,
             options=[
                 create_option('Swelling', 'swelling'),
+                create_option('Blistering', 'blistering'),
                 create_option('Redness', 'redness'),
                 create_option('Open Wound', 'wound'),
                 create_option('Other', 'other'),
