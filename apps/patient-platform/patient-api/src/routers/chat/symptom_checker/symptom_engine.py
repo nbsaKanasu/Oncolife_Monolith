@@ -1,15 +1,24 @@
 """
-Symptom Checker Engine.
+Symptom Checker Engine - Version 2.0
 Manages the rule-based conversation flow for symptom triage.
+
+Flow:
+1. DISCLAIMER - Medical disclaimer with "I Understand" button
+2. EMERGENCY_CHECK - Urgent safety check (5 emergency symptoms)
+3. SYMPTOM_SELECTION - Grouped symptom selection
+4. SCREENING - Per-symptom questions (Ruby chat)
+5. SUMMARY - Session summary with actions
 """
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
-from uuid import UUID
-import json
 import logging
 
-from .constants import TriageLevel, InputType, ConversationPhase
+from .constants import (
+    TriageLevel, InputType, ConversationPhase,
+    MEDICAL_DISCLAIMER, EMERGENCY_CHECK_MESSAGE, RUBY_GREETING,
+    EMERGENCY_SYMPTOMS, SYMPTOM_GROUPS, SUMMARY_ACTIONS
+)
 from .symptom_definitions import (
     SYMPTOMS, SymptomDef, Question, LogicResult,
     get_visible_symptoms, get_symptom_by_id
@@ -21,16 +30,19 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConversationState:
     """Tracks the current state of the symptom checker conversation."""
-    phase: ConversationPhase = ConversationPhase.GREETING
+    phase: ConversationPhase = ConversationPhase.DISCLAIMER
     current_symptom_id: Optional[str] = None
     current_question_index: int = 0
     is_follow_up: bool = False
     answers: Dict[str, Any] = field(default_factory=dict)
     selected_symptoms: List[str] = field(default_factory=list)
+    emergency_symptoms: List[str] = field(default_factory=list)
     completed_symptoms: List[str] = field(default_factory=list)
     triage_results: List[Dict[str, Any]] = field(default_factory=list)
-    branch_stack: List[str] = field(default_factory=list)  # Stack for branching
+    branch_stack: List[str] = field(default_factory=list)
     highest_triage_level: TriageLevel = TriageLevel.NONE
+    chat_history: List[Dict[str, Any]] = field(default_factory=list)
+    session_start: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize state to dictionary."""
@@ -41,26 +53,32 @@ class ConversationState:
             'is_follow_up': self.is_follow_up,
             'answers': self.answers,
             'selected_symptoms': self.selected_symptoms,
+            'emergency_symptoms': self.emergency_symptoms,
             'completed_symptoms': self.completed_symptoms,
             'triage_results': self.triage_results,
             'branch_stack': self.branch_stack,
-            'highest_triage_level': self.highest_triage_level.value
+            'highest_triage_level': self.highest_triage_level.value,
+            'chat_history': self.chat_history,
+            'session_start': self.session_start
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ConversationState':
         """Deserialize state from dictionary."""
         return cls(
-            phase=ConversationPhase(data.get('phase', 'greeting')),
+            phase=ConversationPhase(data.get('phase', 'disclaimer')),
             current_symptom_id=data.get('current_symptom_id'),
             current_question_index=data.get('current_question_index', 0),
             is_follow_up=data.get('is_follow_up', False),
             answers=data.get('answers', {}),
             selected_symptoms=data.get('selected_symptoms', []),
+            emergency_symptoms=data.get('emergency_symptoms', []),
             completed_symptoms=data.get('completed_symptoms', []),
             triage_results=data.get('triage_results', []),
             branch_stack=data.get('branch_stack', []),
-            highest_triage_level=TriageLevel(data.get('highest_triage_level', 'none'))
+            highest_triage_level=TriageLevel(data.get('highest_triage_level', 'none')),
+            chat_history=data.get('chat_history', []),
+            session_start=data.get('session_start')
         )
 
 
@@ -68,78 +86,56 @@ class ConversationState:
 class EngineResponse:
     """Response from the symptom checker engine."""
     message: str
-    message_type: str  # 'text', 'yes_no', 'choice', 'multiselect', 'number', 'symptom_select', 'triage_result'
+    message_type: str  # 'disclaimer', 'emergency_check', 'symptom_select', 'text', 'yes_no', 'choice', 'multiselect', 'number', 'summary'
     options: List[Dict[str, Any]] = field(default_factory=list)
     triage_level: Optional[TriageLevel] = None
     triage_message: Optional[str] = None
     is_complete: bool = False
     state: Optional[ConversationState] = None
+    # Chat-specific fields
+    sender: str = "ruby"  # 'ruby' or 'system'
+    avatar: Optional[str] = None
+    timestamp: Optional[str] = None
+    # Symptom groups for grouped selection
+    symptom_groups: Optional[Dict[str, Any]] = None
+    # Summary data
+    summary_data: Optional[Dict[str, Any]] = None
 
 
 class SymptomCheckerEngine:
     """
-    Rule-based symptom checker engine.
-    Manages the conversation flow and triage logic.
+    Rule-based symptom checker engine - Version 2.0
+    
+    Implements the improved UX flow:
+    1. Medical disclaimer (legal requirement)
+    2. Emergency safety check (rule out 911 situations first)
+    3. Grouped symptom selection (user-friendly categories)
+    4. Ruby chat (WhatsApp-style conversation)
+    5. Summary with actions (download, diary, report another)
     """
-
-    GREETING_MESSAGE = (
-        "Hi! I'm Ruby, your symptom checker assistant. 👋\n\n"
-        "I'm here to help you report any symptoms you're experiencing. "
-        "Your responses will help your care team understand how you're feeling.\n\n"
-        "Let's start by selecting the symptoms you'd like to discuss today."
-    )
 
     def __init__(self, state: Optional[ConversationState] = None):
         """Initialize the engine with optional existing state."""
         self.state = state or ConversationState()
 
     def start_conversation(self) -> EngineResponse:
-        """Start a new symptom checker conversation."""
-        self.state = ConversationState(phase=ConversationPhase.SYMPTOM_SELECTION)
+        """Start a new symptom checker conversation with the disclaimer."""
+        self.state = ConversationState(
+            phase=ConversationPhase.DISCLAIMER,
+            session_start=datetime.utcnow().isoformat()
+        )
         
-        symptoms = get_visible_symptoms()
-        
-        # Group by category
-        emergency = [s for s in symptoms if s['category'] == 'emergency']
-        common = [s for s in symptoms if s['category'] == 'common']
-        other = [s for s in symptoms if s['category'] == 'other']
-        
-        options = []
-        
-        # Add emergency symptoms first
-        for s in emergency:
-            options.append({
-                'label': f"🚨 {s['name']}",
-                'value': s['id'],
-                'category': 'emergency'
-            })
-        
-        # Add common symptoms
-        for s in common:
-            options.append({
-                'label': s['name'],
-                'value': s['id'],
-                'category': 'common'
-            })
-        
-        # Add other symptoms
-        for s in other:
-            options.append({
-                'label': s['name'],
-                'value': s['id'],
-                'category': 'other'
-            })
-        
-        options.append({
-            'label': "I'm feeling fine today",
-            'value': 'none',
-            'category': 'none'
-        })
-
         return EngineResponse(
-            message=self.GREETING_MESSAGE,
-            message_type='symptom_select',
-            options=options,
+            message=MEDICAL_DISCLAIMER,
+            message_type='disclaimer',
+            options=[
+                {
+                    'label': '✓ I Understand - Start Triage',
+                    'value': 'accept',
+                    'style': 'primary'
+                }
+            ],
+            sender='system',
             state=self.state
         )
 
@@ -148,14 +144,23 @@ class SymptomCheckerEngine:
         Process a user's response and return the next step.
         
         Args:
-            user_response: The user's answer (string, number, list, or bool)
+            user_response: The user's answer
         
         Returns:
-            EngineResponse with the next question or triage result
+            EngineResponse with the next screen or question
         """
         logger.info(f"Processing response: {user_response}, Phase: {self.state.phase}")
 
-        if self.state.phase == ConversationPhase.SYMPTOM_SELECTION:
+        # Add to chat history for WhatsApp-style display
+        self._add_to_chat_history('user', user_response)
+
+        if self.state.phase == ConversationPhase.DISCLAIMER:
+            return self._handle_disclaimer(user_response)
+        
+        elif self.state.phase == ConversationPhase.EMERGENCY_CHECK:
+            return self._handle_emergency_check(user_response)
+        
+        elif self.state.phase == ConversationPhase.SYMPTOM_SELECTION:
             return self._handle_symptom_selection(user_response)
         
         elif self.state.phase == ConversationPhase.SCREENING:
@@ -164,8 +169,8 @@ class SymptomCheckerEngine:
         elif self.state.phase == ConversationPhase.FOLLOW_UP:
             return self._handle_followup_response(user_response)
         
-        elif self.state.phase == ConversationPhase.COMPLETED:
-            return self._generate_summary()
+        elif self.state.phase == ConversationPhase.SUMMARY:
+            return self._handle_summary_action(user_response)
         
         elif self.state.phase == ConversationPhase.EMERGENCY:
             return self._generate_emergency_response()
@@ -173,53 +178,206 @@ class SymptomCheckerEngine:
         else:
             return self.start_conversation()
 
-    def _handle_symptom_selection(self, user_response: Any) -> EngineResponse:
-        """Handle symptom selection from the user."""
+    def _add_to_chat_history(self, sender: str, message: Any):
+        """Add a message to the chat history."""
+        self.state.chat_history.append({
+            'sender': sender,
+            'message': str(message) if not isinstance(message, (list, dict)) else message,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+
+    # =========================================================================
+    # PHASE 1: DISCLAIMER
+    # =========================================================================
+    def _handle_disclaimer(self, user_response: Any) -> EngineResponse:
+        """Handle the disclaimer acceptance."""
+        if user_response == 'accept':
+            self.state.phase = ConversationPhase.EMERGENCY_CHECK
+            return self._show_emergency_check()
+        else:
+            # User must accept to continue
+            return EngineResponse(
+                message="Please accept the medical disclaimer to continue.",
+                message_type='disclaimer',
+                options=[
+                    {
+                        'label': '✓ I Understand - Start Triage',
+                        'value': 'accept',
+                        'style': 'primary'
+                    }
+                ],
+                sender='system',
+                state=self.state
+            )
+
+    # =========================================================================
+    # PHASE 2: EMERGENCY CHECK
+    # =========================================================================
+    def _show_emergency_check(self) -> EngineResponse:
+        """Show the emergency safety check screen."""
+        emergency_options = []
+        
+        for symptom in EMERGENCY_SYMPTOMS:
+            emergency_options.append({
+                'label': f"{symptom['icon']} {symptom['name']}",
+                'value': symptom['id'],
+                'is_emergency': True
+            })
+        
+        emergency_options.append({
+            'label': '✓ None of these - I\'m not experiencing any emergency symptoms',
+            'value': 'none',
+            'style': 'secondary'
+        })
+
+        return EngineResponse(
+            message=EMERGENCY_CHECK_MESSAGE,
+            message_type='emergency_check',
+            options=emergency_options,
+            sender='system',
+            state=self.state
+        )
+
+    def _handle_emergency_check(self, user_response: Any) -> EngineResponse:
+        """Handle the emergency check response."""
         if isinstance(user_response, str):
             if user_response == 'none':
-                self.state.phase = ConversationPhase.COMPLETED
-                return EngineResponse(
-                    message="Great to hear you're feeling fine today! 😊\n\n"
-                            "Remember, you can always come back if you start experiencing any symptoms. "
-                            "Take care!",
-                    message_type='text',
-                    is_complete=True,
-                    state=self.state
-                )
+                # No emergencies, continue to symptom selection
+                self.state.phase = ConversationPhase.SYMPTOM_SELECTION
+                return self._show_symptom_selection()
             selected = [user_response]
         elif isinstance(user_response, list):
             selected = [s for s in user_response if s != 'none']
         else:
             selected = []
 
-        if not selected:
-            self.state.phase = ConversationPhase.COMPLETED
-            return EngineResponse(
-                message="Great to hear you're feeling fine today! Take care!",
-                message_type='text',
-                is_complete=True,
-                state=self.state
-            )
+        if not selected or selected == ['none']:
+            self.state.phase = ConversationPhase.SYMPTOM_SELECTION
+            return self._show_symptom_selection()
 
+        # Emergency symptoms selected - go to emergency path
+        self.state.emergency_symptoms = selected
         self.state.selected_symptoms = selected
         self.state.phase = ConversationPhase.SCREENING
         
-        return self._start_next_symptom()
+        # Start with the first emergency symptom
+        return self._start_ruby_chat()
 
-    def _start_next_symptom(self) -> EngineResponse:
+    # =========================================================================
+    # PHASE 3: SYMPTOM SELECTION (Grouped)
+    # =========================================================================
+    def _show_symptom_selection(self) -> EngineResponse:
+        """Show the grouped symptom selection screen."""
+        groups = {}
+        
+        for group_id, group_data in SYMPTOM_GROUPS.items():
+            groups[group_id] = {
+                'name': group_data['name'],
+                'icon': group_data['icon'],
+                'symptoms': []
+            }
+            
+            for symptom in group_data['symptoms']:
+                # Verify symptom exists in definitions
+                symptom_def = get_symptom_by_id(symptom['id'])
+                if symptom_def:
+                    groups[group_id]['symptoms'].append({
+                        'id': symptom['id'],
+                        'name': symptom['name'],
+                        'available': True
+                    })
+
+        return EngineResponse(
+            message="What symptoms are you experiencing today?\n\n*Select all that apply, then tap Continue.*",
+            message_type='symptom_select',
+            options=[
+                {
+                    'label': 'Continue',
+                    'value': 'continue',
+                    'style': 'primary',
+                    'disabled_until_selection': True
+                },
+                {
+                    'label': "I'm feeling fine today",
+                    'value': 'none',
+                    'style': 'secondary'
+                }
+            ],
+            symptom_groups=groups,
+            sender='system',
+            state=self.state
+        )
+
+    def _handle_symptom_selection(self, user_response: Any) -> EngineResponse:
+        """Handle symptom selection from the grouped view."""
+        if isinstance(user_response, str):
+            if user_response in ['none', 'continue']:
+                if user_response == 'none' or not self.state.selected_symptoms:
+                    return self._complete_feeling_fine()
+            else:
+                self.state.selected_symptoms.append(user_response)
+        elif isinstance(user_response, list):
+            self.state.selected_symptoms = [s for s in user_response if s not in ['none', 'continue']]
+        elif isinstance(user_response, dict) and 'symptoms' in user_response:
+            # Handle structured response from grouped selection
+            self.state.selected_symptoms = user_response['symptoms']
+
+        if not self.state.selected_symptoms:
+            return self._complete_feeling_fine()
+
+        # Start the Ruby chat for symptom assessment
+        self.state.phase = ConversationPhase.SCREENING
+        return self._start_ruby_chat()
+
+    def _complete_feeling_fine(self) -> EngineResponse:
+        """Complete the session when patient is feeling fine."""
+        self.state.phase = ConversationPhase.COMPLETED
+        
+        return EngineResponse(
+            message="Great to hear you're feeling fine today! 😊\n\n"
+                    "Remember, you can always come back if you start experiencing any symptoms.\n\n"
+                    "Take care!",
+            message_type='text',
+            options=SUMMARY_ACTIONS[2:],  # Report another, Done for today
+            is_complete=True,
+            sender='ruby',
+            avatar='👋',
+            state=self.state
+        )
+
+    # =========================================================================
+    # PHASE 4: RUBY CHAT (Per-Symptom Questions)
+    # =========================================================================
+    def _start_ruby_chat(self) -> EngineResponse:
+        """Start the Ruby chat interface with greeting."""
+        # Get symptom names for the greeting
+        selected_names = []
+        for symptom_id in self.state.selected_symptoms:
+            symptom = get_symptom_by_id(symptom_id)
+            if symptom:
+                selected_names.append(symptom.name)
+        
+        symptoms_text = ", ".join(selected_names)
+        
+        greeting = f"{RUBY_GREETING}\n\n📋 **You selected:** {symptoms_text}\n\nLet's start with your first symptom."
+        
+        self._add_to_chat_history('ruby', greeting)
+        
+        # Start first symptom
+        return self._start_next_symptom(greeting_message=greeting)
+
+    def _start_next_symptom(self, greeting_message: Optional[str] = None) -> EngineResponse:
         """Start processing the next symptom in the queue."""
         # Check if there are branched symptoms to process first
         if self.state.branch_stack:
             next_symptom_id = self.state.branch_stack.pop(0)
-        elif self.state.selected_symptoms:
+        else:
             # Get next unprocessed symptom
             remaining = [s for s in self.state.selected_symptoms 
                         if s not in self.state.completed_symptoms]
             if not remaining:
                 return self._generate_summary()
             next_symptom_id = remaining[0]
-        else:
-            return self._generate_summary()
 
         symptom = get_symptom_by_id(next_symptom_id)
         if not symptom:
@@ -233,9 +391,9 @@ class SymptomCheckerEngine:
         self.state.answers = {}
         self.state.phase = ConversationPhase.SCREENING
 
-        return self._get_next_question(symptom)
+        return self._get_next_question(symptom, greeting_message)
 
-    def _get_next_question(self, symptom: SymptomDef) -> EngineResponse:
+    def _get_next_question(self, symptom: SymptomDef, prefix_message: Optional[str] = None) -> EngineResponse:
         """Get the next applicable question for the current symptom."""
         questions = symptom.follow_up_questions if self.state.is_follow_up else symptom.screening_questions
         
@@ -244,7 +402,7 @@ class SymptomCheckerEngine:
             
             # Check if question condition is met
             if question.condition is None or question.condition(self.state.answers):
-                return self._format_question(question, symptom)
+                return self._format_question(question, symptom, prefix_message)
             
             # Skip this question if condition not met
             self.state.current_question_index += 1
@@ -252,23 +410,23 @@ class SymptomCheckerEngine:
         # No more questions in current phase
         return self._evaluate_current_phase(symptom)
 
-    def _format_question(self, question: Question, symptom: SymptomDef) -> EngineResponse:
-        """Format a question into an EngineResponse."""
+    def _format_question(self, question: Question, symptom: SymptomDef, prefix: Optional[str] = None) -> EngineResponse:
+        """Format a question into an EngineResponse with WhatsApp-style formatting."""
         options = []
         
         if question.input_type == InputType.YES_NO:
             options = [
-                {'label': 'Yes', 'value': True},
-                {'label': 'No', 'value': False}
+                {'label': 'Yes', 'value': True, 'style': 'choice'},
+                {'label': 'No', 'value': False, 'style': 'choice'}
             ]
             message_type = 'yes_no'
         
         elif question.input_type == InputType.CHOICE:
-            options = [{'label': o.label, 'value': o.value} for o in question.options]
+            options = [{'label': o.label, 'value': o.value, 'style': 'choice'} for o in question.options]
             message_type = 'choice'
         
         elif question.input_type == InputType.MULTISELECT:
-            options = [{'label': o.label, 'value': o.value} for o in question.options]
+            options = [{'label': o.label, 'value': o.value, 'style': 'choice'} for o in question.options]
             message_type = 'multiselect'
         
         elif question.input_type == InputType.NUMBER:
@@ -277,15 +435,28 @@ class SymptomCheckerEngine:
         else:  # TEXT
             message_type = 'text'
 
-        # Add symptom context to first question
-        prefix = ""
+        # Build the message with symptom context for first question
+        message_parts = []
+        
+        if prefix:
+            message_parts.append(prefix)
+        
         if self.state.current_question_index == 0 and not self.state.is_follow_up:
-            prefix = f"📋 **{symptom.name}**\n\n"
+            message_parts.append(f"\n\n---\n\n💊 **Assessing: {symptom.name}**\n")
+        
+        message_parts.append(question.text)
+        
+        full_message = "\n".join(message_parts)
+        
+        self._add_to_chat_history('ruby', question.text)
 
         return EngineResponse(
-            message=prefix + question.text,
+            message=full_message,
             message_type=message_type,
             options=options,
+            sender='ruby',
+            avatar='💬',
+            timestamp=datetime.utcnow().isoformat(),
             state=self.state
         )
 
@@ -359,6 +530,7 @@ class SymptomCheckerEngine:
             if not self.state.is_follow_up and symptom.follow_up_questions:
                 self.state.is_follow_up = True
                 self.state.current_question_index = 0
+                self.state.phase = ConversationPhase.FOLLOW_UP
                 return self._get_next_question(symptom)
             else:
                 return self._complete_symptom(symptom)
@@ -376,99 +548,223 @@ class SymptomCheckerEngine:
         })
         
         # Update highest triage level
-        levels = [TriageLevel.NONE, TriageLevel.NOTIFY_CARE_TEAM, TriageLevel.CALL_911]
-        if levels.index(result.triage_level) > levels.index(self.state.highest_triage_level):
-            self.state.highest_triage_level = result.triage_level
+        levels = [TriageLevel.NONE, TriageLevel.NOTIFY_CARE_TEAM, TriageLevel.URGENT, TriageLevel.CALL_911]
+        try:
+            if levels.index(result.triage_level) > levels.index(self.state.highest_triage_level):
+                self.state.highest_triage_level = result.triage_level
+        except ValueError:
+            pass
 
     def _complete_symptom(self, symptom: SymptomDef, message: Optional[str] = None) -> EngineResponse:
         """Complete processing of a symptom and move to the next."""
         self.state.completed_symptoms.append(symptom.id)
         
-        # Check if we should show a status message
+        # Count remaining
+        remaining = len([s for s in self.state.selected_symptoms 
+                        if s not in self.state.completed_symptoms])
+        
         if message:
             logger.info(f"Symptom {symptom.name} completed with message: {message}")
         
+        if remaining > 0:
+            # Show transition message
+            transition = f"✅ Got it! I've recorded your **{symptom.name}** responses.\n\n"
+            if remaining == 1:
+                transition += "One more symptom to go..."
+            else:
+                transition += f"{remaining} more symptoms to go..."
+            
+            return self._start_next_symptom(greeting_message=transition)
+        
         return self._start_next_symptom()
 
+    # =========================================================================
+    # PHASE 5: EMERGENCY RESPONSE
+    # =========================================================================
     def _generate_emergency_response(self, message: Optional[str] = None) -> EngineResponse:
         """Generate emergency response for 911 situations."""
         emergency_text = (
             "🚨 **EMERGENCY - IMMEDIATE ACTION REQUIRED** 🚨\n\n"
             f"{message or 'Based on your responses, you need immediate medical attention.'}\n\n"
-            "**Please call 911 immediately or go to your nearest emergency room.**\n\n"
-            "If you cannot call yourself, please ask someone nearby to help you."
+            "---\n\n"
+            "**📞 Please call 911 immediately**\n"
+            "or go to your nearest emergency room.\n\n"
+            "If you cannot call yourself, please ask someone nearby to help you.\n\n"
+            "---\n\n"
+            "*Your care team has also been notified of this emergency.*"
         )
+        
+        self._add_to_chat_history('ruby', emergency_text)
         
         return EngineResponse(
             message=emergency_text,
-            message_type='triage_result',
+            message_type='emergency',
             triage_level=TriageLevel.CALL_911,
             triage_message=message,
+            options=[
+                {'label': '📞 Call 911', 'value': 'call_911', 'style': 'emergency', 'action': 'tel:911'},
+                {'label': 'I understand', 'value': 'acknowledge', 'style': 'secondary'}
+            ],
             is_complete=True,
+            sender='ruby',
             state=self.state
         )
 
+    # =========================================================================
+    # PHASE 6: SUMMARY
+    # =========================================================================
     def _generate_summary(self) -> EngineResponse:
         """Generate the final summary of the symptom check."""
-        self.state.phase = ConversationPhase.COMPLETED
+        self.state.phase = ConversationPhase.SUMMARY
         
-        if not self.state.triage_results:
-            summary = (
-                "✅ **Summary**\n\n"
-                "Thank you for checking in! Based on your responses, no urgent concerns were identified.\n\n"
-                "Continue to monitor your symptoms and reach out if anything changes. "
-                "Your care team will review this information."
-            )
-            return EngineResponse(
-                message=summary,
-                message_type='triage_result',
-                triage_level=TriageLevel.NONE,
-                is_complete=True,
-                state=self.state
-            )
+        # Build summary data
+        summary_data = {
+            'session_start': self.state.session_start,
+            'session_end': datetime.utcnow().isoformat(),
+            'symptoms_assessed': [],
+            'triage_results': self.state.triage_results,
+            'highest_level': self.state.highest_triage_level.value,
+            'chat_history': self.state.chat_history
+        }
+        
+        # Get symptom details
+        for symptom_id in self.state.completed_symptoms:
+            symptom = get_symptom_by_id(symptom_id)
+            if symptom:
+                summary_data['symptoms_assessed'].append({
+                    'id': symptom_id,
+                    'name': symptom.name
+                })
 
-        # Generate summary based on highest triage level
+        # Build summary message based on triage level
         if self.state.highest_triage_level == TriageLevel.CALL_911:
             return self._generate_emergency_response()
         
-        elif self.state.highest_triage_level == TriageLevel.NOTIFY_CARE_TEAM:
-            alerts = [r for r in self.state.triage_results if r['level'] == 'notify_care_team']
-            alert_text = "\n".join([f"• **{r['symptom_name']}**: {r['message']}" for r in alerts])
+        elif self.state.highest_triage_level in [TriageLevel.NOTIFY_CARE_TEAM, TriageLevel.URGENT]:
+            alerts = [r for r in self.state.triage_results 
+                     if r['level'] in ['notify_care_team', 'urgent']]
+            alert_items = [f"• **{r['symptom_name']}**: {r['message']}" for r in alerts]
+            alert_text = "\n".join(alert_items)
             
-            summary = (
-                "⚠️ **Summary - Care Team Notification**\n\n"
-                "Based on your responses, the following concerns have been identified:\n\n"
+            summary_message = (
+                "---\n\n"
+                "📋 **Assessment Complete**\n\n"
+                "⚠️ **Concerns Identified:**\n"
                 f"{alert_text}\n\n"
-                "**Your care team has been notified and will follow up with you.**\n\n"
+                "---\n\n"
+                "**Your care team has been notified** and will follow up with you.\n\n"
                 "If your symptoms worsen or you develop new concerning symptoms, "
-                "please call your care team or seek emergency care."
+                "please call your care team or seek emergency care.\n\n"
+                "---\n\n"
+                "What would you like to do?"
             )
+            triage_level = TriageLevel.NOTIFY_CARE_TEAM
+        
+        else:
+            symptoms_list = ", ".join([s['name'] for s in summary_data['symptoms_assessed']])
             
+            summary_message = (
+                "---\n\n"
+                "📋 **Assessment Complete**\n\n"
+                f"**Symptoms Assessed:** {symptoms_list}\n\n"
+                "✅ **Good news!** Based on your responses, no urgent concerns were identified.\n\n"
+                "Your responses have been recorded and your care team will review them.\n\n"
+                "Continue to monitor your symptoms and reach out if anything changes.\n\n"
+                "---\n\n"
+                "What would you like to do?"
+            )
+            triage_level = TriageLevel.NONE
+
+        self._add_to_chat_history('ruby', summary_message)
+
+        return EngineResponse(
+            message=summary_message,
+            message_type='summary',
+            options=SUMMARY_ACTIONS,
+            triage_level=triage_level,
+            summary_data=summary_data,
+            sender='ruby',
+            avatar='📋',
+            state=self.state
+        )
+
+    def _handle_summary_action(self, user_response: Any) -> EngineResponse:
+        """Handle user's action selection on the summary screen."""
+        if user_response == 'download':
+            # Return summary data for download
             return EngineResponse(
-                message=summary,
-                message_type='triage_result',
-                triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-                triage_message=alert_text,
-                is_complete=True,
+                message="📥 Your summary is ready for download.",
+                message_type='download',
+                summary_data=self._get_download_summary(),
                 state=self.state
             )
         
-        else:
-            summary = (
-                "✅ **Summary**\n\n"
-                "Thank you for checking in! Based on your responses, your symptoms appear manageable.\n\n"
-                "Continue to monitor your symptoms and reach out if anything changes. "
-                "Your care team will review this information at your next appointment."
-            )
-            
+        elif user_response == 'save_diary':
+            # Indicate diary save
             return EngineResponse(
-                message=summary,
-                message_type='triage_result',
-                triage_level=TriageLevel.NONE,
+                message="📔 Your symptom check has been saved to your diary.\n\n"
+                        "You can view it anytime in the **My Diary** section.",
+                message_type='text',
+                options=[
+                    {'label': '📔 Go to Diary', 'value': 'go_diary', 'action': 'navigate:diary'},
+                    {'label': '🔄 Report Another Symptom', 'value': 'report_another'},
+                    {'label': '✅ Done', 'value': 'done'}
+                ],
                 is_complete=True,
+                sender='ruby',
                 state=self.state
             )
+        
+        elif user_response == 'report_another':
+            # Reset and start again from emergency check
+            self.state.selected_symptoms = []
+            self.state.completed_symptoms = []
+            self.state.triage_results = []
+            self.state.answers = {}
+            self.state.highest_triage_level = TriageLevel.NONE
+            self.state.phase = ConversationPhase.EMERGENCY_CHECK
+            return self._show_emergency_check()
+        
+        elif user_response == 'done':
+            self.state.phase = ConversationPhase.COMPLETED
+            return EngineResponse(
+                message="Thank you for checking in! Take care. 💙",
+                message_type='text',
+                is_complete=True,
+                sender='ruby',
+                state=self.state
+            )
+        
+        # Default: show summary again
+        return self._generate_summary()
 
+    def _get_download_summary(self) -> Dict[str, Any]:
+        """Generate summary data for PDF/download."""
+        symptoms_assessed = []
+        for symptom_id in self.state.completed_symptoms:
+            symptom = get_symptom_by_id(symptom_id)
+            if symptom:
+                symptoms_assessed.append({
+                    'name': symptom.name,
+                    'id': symptom_id
+                })
+        
+        return {
+            'title': 'Symptom Check Summary',
+            'date': datetime.utcnow().strftime('%B %d, %Y at %I:%M %p'),
+            'session_id': self.state.session_start,
+            'symptoms': symptoms_assessed,
+            'triage_level': self.state.highest_triage_level.value,
+            'triage_results': self.state.triage_results,
+            'disclaimer': (
+                "This symptom check was conducted using Oncolife's automated triage system. "
+                "It does not replace professional medical advice. Always follow your care team's instructions."
+            )
+        }
+
+    # =========================================================================
+    # UTILITY METHODS
+    # =========================================================================
     def get_state(self) -> ConversationState:
         """Get the current conversation state."""
         return self.state
@@ -477,10 +773,19 @@ class SymptomCheckerEngine:
         """Set the conversation state."""
         self.state = state
 
+    def get_chat_history(self) -> List[Dict[str, Any]]:
+        """Get the chat history for WhatsApp-style display."""
+        return self.state.chat_history
+
     @staticmethod
-    def get_available_symptoms() -> List[Dict[str, Any]]:
-        """Get list of available symptoms for selection."""
-        return get_visible_symptoms()
+    def get_available_symptoms() -> Dict[str, Any]:
+        """Get grouped symptoms for selection."""
+        return {
+            'emergency': EMERGENCY_SYMPTOMS,
+            'groups': SYMPTOM_GROUPS
+        }
 
-
-
+    @staticmethod
+    def get_symptom_groups() -> Dict[str, Any]:
+        """Get symptom groups with full details."""
+        return SYMPTOM_GROUPS

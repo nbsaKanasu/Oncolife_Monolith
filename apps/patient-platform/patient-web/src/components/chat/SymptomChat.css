@@ -735,6 +735,615 @@
 }
 
 /* =============================================================================
+   DISCLAIMER SCREEN
+   ============================================================================= */
+
+.disclaimer-screen {
+  background: white;
+  border-radius: 24px;
+  padding: 32px;
+  max-width: 500px;
+  margin: auto;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.disclaimer-icon {
+  font-size: 56px;
+  margin-bottom: 16px;
+}
+
+.disclaimer-content h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.disclaimer-text {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  text-align: left;
+  padding: 16px;
+  background: #F8FAFC;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.disclaimer-text strong {
+  color: var(--triage-emergency);
+}
+
+.disclaimer-accept-btn {
+  padding: 16px 36px;
+  background: linear-gradient(135deg, var(--ruby-primary) 0%, #00695C 100%);
+  color: white;
+  border: none;
+  border-radius: 28px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-md);
+}
+
+.disclaimer-accept-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* =============================================================================
+   EMERGENCY CHECK SCREEN
+   ============================================================================= */
+
+.emergency-check-screen {
+  background: white;
+  border-radius: 24px;
+  padding: 28px;
+  max-width: 540px;
+  margin: auto;
+  box-shadow: var(--shadow-lg);
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.emergency-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.emergency-icon {
+  font-size: 36px;
+  animation: emergencyPulse 1.5s infinite;
+}
+
+@keyframes emergencyPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.emergency-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--triage-emergency);
+  margin: 0;
+}
+
+.emergency-subtitle {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.emergency-instruction {
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.emergency-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.emergency-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: #FEF2F2;
+  border: 2px solid #FECACA;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.emergency-option:hover {
+  border-color: var(--triage-emergency);
+  background: #FEE2E2;
+}
+
+.emergency-option.selected {
+  border-color: var(--triage-emergency);
+  background: var(--triage-emergency);
+  color: white;
+}
+
+.emergency-checkbox {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #FECACA;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: white;
+}
+
+.emergency-option.selected .emergency-checkbox {
+  background: white;
+  border-color: white;
+}
+
+.emergency-checkbox svg {
+  width: 16px;
+  height: 16px;
+  color: var(--triage-emergency);
+  opacity: 0;
+}
+
+.emergency-option.selected .emergency-checkbox svg {
+  opacity: 1;
+}
+
+.emergency-label {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.emergency-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.emergency-continue-btn {
+  padding: 16px 32px;
+  border: none;
+  border-radius: 28px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-md);
+}
+
+.emergency-continue-btn.emergency {
+  background: var(--triage-emergency);
+  color: white;
+}
+
+.emergency-continue-btn.safe {
+  background: linear-gradient(135deg, var(--ruby-primary) 0%, #00695C 100%);
+  color: white;
+}
+
+.emergency-continue-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* =============================================================================
+   GROUPED SYMPTOM SELECTOR
+   ============================================================================= */
+
+.grouped-symptom-selector {
+  padding: 20px;
+  max-width: 600px;
+  margin: auto;
+}
+
+.symptom-instruction {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.symptom-instruction p {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.instruction-hint {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.symptom-group {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.group-icon {
+  font-size: 20px;
+}
+
+.group-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.symptom-group .symptom-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.symptom-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: #F8FAFC;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.symptom-chip:hover:not(:disabled) {
+  background: var(--ruby-bg);
+  border-color: var(--ruby-light);
+}
+
+.symptom-chip.selected {
+  background: var(--ruby-primary);
+  border-color: var(--ruby-primary);
+  color: white;
+}
+
+.symptom-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chip-checkbox {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-light);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.symptom-chip.selected .chip-checkbox {
+  background: white;
+  border-color: white;
+}
+
+.chip-checkbox svg {
+  width: 12px;
+  height: 12px;
+  color: var(--ruby-primary);
+  opacity: 0;
+}
+
+.symptom-chip.selected .chip-checkbox svg {
+  opacity: 1;
+}
+
+.chip-label {
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.symptom-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.symptom-continue-btn {
+  padding: 16px 32px;
+  border: none;
+  border-radius: 28px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-md);
+}
+
+.symptom-continue-btn.primary {
+  background: linear-gradient(135deg, var(--ruby-primary) 0%, #00695C 100%);
+  color: white;
+}
+
+.symptom-continue-btn.primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.symptom-continue-btn.primary:disabled {
+  background: #CBD5E1;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.symptom-continue-btn.secondary {
+  background: white;
+  border: 2px solid var(--border-light);
+  color: var(--text-secondary);
+}
+
+.symptom-continue-btn.secondary:hover {
+  background: #F8FAFC;
+  border-color: var(--ruby-light);
+}
+
+/* =============================================================================
+   SUMMARY SCREEN
+   ============================================================================= */
+
+.summary-screen {
+  background: white;
+  border-radius: 24px;
+  padding: 28px;
+  max-width: 520px;
+  margin: auto;
+  box-shadow: var(--shadow-lg);
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.summary-screen.ok {
+  border-top: 4px solid var(--triage-ok);
+}
+
+.summary-screen.alert {
+  border-top: 4px solid var(--triage-alert);
+}
+
+.summary-screen.emergency {
+  border-top: 4px solid var(--triage-emergency);
+}
+
+.summary-content {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  margin-bottom: 24px;
+}
+
+.summary-content hr.chat-divider {
+  border: none;
+  border-top: 1px solid var(--border-light);
+  margin: 16px 0;
+}
+
+.summary-content strong {
+  font-weight: 600;
+}
+
+.summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.summary-action-btn {
+  padding: 14px 24px;
+  border-radius: 24px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.summary-action-btn.primary,
+.summary-action-btn:first-child {
+  background: linear-gradient(135deg, var(--ruby-primary) 0%, #00695C 100%);
+  color: white;
+  box-shadow: var(--shadow-md);
+}
+
+.summary-action-btn.primary:hover,
+.summary-action-btn:first-child:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.summary-action-btn.default,
+.summary-action-btn:not(:first-child) {
+  background: white;
+  border-color: var(--border-light);
+  color: var(--text-secondary);
+}
+
+.summary-action-btn.default:hover,
+.summary-action-btn:not(:first-child):hover {
+  background: #F8FAFC;
+  border-color: var(--ruby-light);
+}
+
+/* =============================================================================
+   EMERGENCY RESULT SCREEN
+   ============================================================================= */
+
+.emergency-result {
+  background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+  border: 3px solid var(--triage-emergency);
+  border-radius: 24px;
+  padding: 32px;
+  max-width: 500px;
+  margin: auto;
+  text-align: center;
+  animation: emergencyShake 0.5s ease-out;
+}
+
+@keyframes emergencyShake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.emergency-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.emergency-pulse {
+  font-size: 40px;
+  animation: emergencyPulse 0.8s infinite;
+}
+
+.emergency-result-header h2 {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--triage-emergency);
+  margin: 0;
+  letter-spacing: 2px;
+}
+
+.emergency-result-content {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  margin-bottom: 28px;
+  text-align: left;
+}
+
+.emergency-result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.call-911-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px 36px;
+  background: var(--triage-emergency);
+  color: white;
+  border: none;
+  border-radius: 28px;
+  font-size: 20px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
+}
+
+.call-911-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(220, 38, 38, 0.5);
+}
+
+.acknowledge-btn {
+  padding: 14px 28px;
+  background: white;
+  border: 2px solid var(--border-light);
+  border-radius: 24px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.acknowledge-btn:hover {
+  background: #F8FAFC;
+}
+
+/* =============================================================================
+   SYSTEM AVATAR
+   ============================================================================= */
+
+.system-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #60A5FA 0%, #3B82F6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+/* =============================================================================
+   USER MESSAGE CONTAINER
+   ============================================================================= */
+
+.user-message-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.user-bubble {
+  background: var(--patient-bubble) !important;
+  color: var(--patient-text) !important;
+}
+
+/* =============================================================================
+   MESSAGE CONTAINER
+   ============================================================================= */
+
+.message-container {
+  display: flex;
+  flex-direction: column;
+}
+
+/* =============================================================================
    RESPONSIVE DESIGN
    ============================================================================= */
 
@@ -762,6 +1371,36 @@
   
   .new-chat-btn span {
     display: none;
+  }
+  
+  /* Responsive screens */
+  .disclaimer-screen,
+  .emergency-check-screen,
+  .summary-screen,
+  .emergency-result {
+    margin: 10px;
+    padding: 20px;
+  }
+  
+  .grouped-symptom-selector {
+    padding: 10px;
+  }
+  
+  .symptom-group {
+    padding: 16px;
+  }
+  
+  .symptom-group .symptom-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .emergency-option {
+    padding: 14px 16px;
+  }
+  
+  .disclaimer-icon,
+  .emergency-icon {
+    font-size: 40px;
   }
 }
 

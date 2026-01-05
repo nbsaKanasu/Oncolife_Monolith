@@ -194,6 +194,7 @@ class SymptomCheckerService:
 
         # Store engine state in chat metadata
         new_chat.engine_state = response.state.to_dict() if response.state else {}
+        new_chat.conversation_state = "disclaimer"  # New initial phase
         self.db.commit()
 
         initial_message = {
@@ -201,7 +202,10 @@ class SymptomCheckerService:
             "type": self._map_message_type(response.message_type),
             "frontend_type": response.message_type,
             "options": [opt['label'] for opt in response.options] if response.options else [],
-            "options_data": response.options
+            "options_data": response.options,
+            "symptom_groups": response.symptom_groups,  # For grouped selection
+            "summary_data": response.summary_data,  # For summary screen
+            "sender": response.sender,  # ruby or system
         }
 
         return new_chat, initial_message
@@ -355,7 +359,13 @@ class SymptomCheckerService:
                 "options_data": engine_response.options,
                 "frontend_type": engine_response.message_type,
                 "triage_level": engine_response.triage_level.value if engine_response.triage_level else None,
-                "is_complete": engine_response.is_complete
+                "is_complete": engine_response.is_complete,
+                # New fields for updated UX
+                "symptom_groups": engine_response.symptom_groups,
+                "summary_data": engine_response.summary_data,
+                "sender": engine_response.sender,
+                "avatar": engine_response.avatar,
+                "timestamp": engine_response.timestamp,
             }
         )
         self.db.add(assistant_msg)
@@ -412,6 +422,35 @@ class SymptomCheckerService:
         content = message.content
         msg_type = message.message_type
 
+        # Handle disclaimer acceptance
+        if msg_type == 'disclaimer_response':
+            return 'accept' if content.lower() in ['accept', 'i understand', 'ok'] else content
+
+        # Handle summary action buttons
+        if msg_type == 'summary_action':
+            return content  # download, save_diary, report_another, done
+
+        # Handle emergency check response
+        if msg_type == 'emergency_check_response':
+            if message.structured_data and 'selected_values' in message.structured_data:
+                return message.structured_data['selected_values']
+            if content.lower() in ['none', 'no emergency']:
+                return 'none'
+            return content
+
+        # Handle grouped symptom selection
+        if msg_type == 'symptom_select_response':
+            if message.structured_data:
+                if 'selected_symptoms' in message.structured_data:
+                    return {'symptoms': message.structured_data['selected_symptoms']}
+                if 'selected_values' in message.structured_data:
+                    return {'symptoms': message.structured_data['selected_values']}
+            # Handle comma-separated symptom IDs
+            if content:
+                symptoms = [s.strip() for s in content.split(',') if s.strip()]
+                return {'symptoms': symptoms}
+            return 'none'
+
         # Handle yes/no responses
         if msg_type == 'button_response':
             if content.lower() in ['yes', 'true']:
@@ -448,7 +487,13 @@ class SymptomCheckerService:
             'multiselect': 'multi_select',
             'number': 'text',
             'symptom_select': 'multi_select',
-            'triage_result': 'text'
+            'triage_result': 'text',
+            # New message types for updated UX flow
+            'disclaimer': 'text',
+            'emergency_check': 'multi_select',
+            'summary': 'text',
+            'emergency': 'text',
+            'download': 'text',
         }
         return mapping.get(engine_type, 'text')
 
@@ -461,7 +506,13 @@ class SymptomCheckerService:
             'multiselect': 'multi-select',
             'number': 'text',
             'symptom_select': 'symptom-select',
-            'triage_result': 'text'
+            'triage_result': 'text',
+            # New message types for updated UX flow
+            'disclaimer': 'disclaimer',
+            'emergency_check': 'emergency-check',
+            'summary': 'summary',
+            'emergency': 'emergency',
+            'download': 'download',
         }
         return mapping.get(engine_type, 'text')
 

@@ -1,6 +1,6 @@
 """
 Constants for the Symptom Checker module.
-Defines triage levels, input types, and symptom categories.
+Defines triage levels, input types, symptom categories, and groupings.
 """
 from enum import Enum
 
@@ -8,6 +8,7 @@ from enum import Enum
 class TriageLevel(str, Enum):
     """Triage action levels from most to least urgent."""
     CALL_911 = "call_911"           # Emergency - Call 911 immediately
+    URGENT = "urgent"               # Urgent - Contact care team immediately
     NOTIFY_CARE_TEAM = "notify_care_team"  # Alert - Care team will be notified
     NONE = "none"                   # Monitor - Follow up at next appointment
 
@@ -19,27 +20,130 @@ class InputType(str, Enum):
     NUMBER = "number"
     CHOICE = "choice"           # Single select
     MULTISELECT = "multiselect" # Multiple select
+    BUTTON = "button"           # Single action button
+    CONFIRM = "confirm"         # Confirmation with checkbox
 
 
 class SymptomCategory(str, Enum):
     """Categories of symptoms."""
     EMERGENCY = "emergency"
-    COMMON = "common"
+    DIGESTIVE = "digestive"
+    PAIN_NERVE = "pain_nerve"
+    SYSTEMIC = "systemic"
+    SKIN_EXTERNAL = "skin_external"
     OTHER = "other"
 
 
 class ConversationPhase(str, Enum):
     """Phases of the symptom checker conversation."""
-    GREETING = "greeting"
-    SYMPTOM_SELECTION = "symptom_selection"
-    SCREENING = "screening"
-    FOLLOW_UP = "follow_up"
-    COMPLETED = "completed"
-    EMERGENCY = "emergency"
-    BRANCHED = "branched"
+    DISCLAIMER = "disclaimer"                    # NEW: Medical disclaimer
+    EMERGENCY_CHECK = "emergency_check"          # NEW: Urgent safety check
+    SYMPTOM_SELECTION = "symptom_selection"      # Grouped symptom selection
+    SCREENING = "screening"                      # Per-symptom questions
+    FOLLOW_UP = "follow_up"                      # Follow-up questions
+    SUMMARY = "summary"                          # NEW: Session summary
+    COMPLETED = "completed"                      # Final state
+    EMERGENCY = "emergency"                      # Emergency path
+    BRANCHED = "branched"                        # Branched to another symptom
 
 
-# Standard Options
+# =============================================================================
+# SYMPTOM GROUPINGS (User-Friendly Categories)
+# =============================================================================
+
+# Emergency symptoms shown in Urgent Safety Check screen
+EMERGENCY_SYMPTOMS = [
+    {"id": "URG-101", "name": "Trouble Breathing", "icon": "🫁"},
+    {"id": "URG-102", "name": "Chest Pain", "icon": "💔"},
+    {"id": "URG-103", "name": "Bleeding / Bruising", "icon": "🩸"},
+    {"id": "URG-107", "name": "Fainting / Syncope", "icon": "😵"},
+    {"id": "URG-108", "name": "Confusion / Altered Mental Status", "icon": "🧠"},
+]
+
+# Grouped symptoms for main symptom selection screen
+# IDs must match symptom_definitions.py
+SYMPTOM_GROUPS = {
+    "digestive": {
+        "name": "Digestive Health",
+        "icon": "🍽️",
+        "symptoms": [
+            {"id": "NAU-203", "name": "Nausea"},
+            {"id": "VOM-204", "name": "Vomiting"},
+            {"id": "DIA-205", "name": "Diarrhea"},
+            {"id": "CON-210", "name": "Constipation"},
+            {"id": "APP-209", "name": "No Appetite"},
+            {"id": "MSO-208", "name": "Mouth Sores"},
+            {"id": "DEH-201", "name": "Dehydration"},
+        ]
+    },
+    "pain_nerve": {
+        "name": "Pain & Nerve",
+        "icon": "⚡",
+        "symptoms": [
+            {"id": "PAI-213", "name": "Pain / General Aches"},
+            {"id": "NEU-216", "name": "Neuropathy (Numbness/Tingling)"},
+            {"id": "HEA-210", "name": "Headache"},
+            {"id": "ABD-211", "name": "Abdominal Pain"},
+            {"id": "JMP-212", "name": "Joint / Muscle Pain"},
+            {"id": "LEG-208", "name": "Leg / Calf Pain"},
+            {"id": "URG-114", "name": "Port Site Pain"},
+        ]
+    },
+    "systemic": {
+        "name": "Systemic & Infection",
+        "icon": "🌡️",
+        "symptoms": [
+            {"id": "FEV-202", "name": "Fever"},
+            {"id": "FAT-206", "name": "Fatigue / Weakness"},
+            {"id": "COU-215", "name": "Cough"},
+            {"id": "URI-211", "name": "Urinary Problems"},
+        ]
+    },
+    "skin_external": {
+        "name": "Skin & External",
+        "icon": "🩹",
+        "symptoms": [
+            {"id": "SKI-212", "name": "Skin Rash / Redness"},
+            {"id": "SWE-214", "name": "Swelling"},
+            {"id": "EYE-207", "name": "Eye Complaints"},
+        ]
+    }
+}
+
+
+# =============================================================================
+# MEDICAL DISCLAIMER
+# =============================================================================
+
+MEDICAL_DISCLAIMER = """⚠️ IMPORTANT MEDICAL DISCLAIMER
+
+This system is an automated symptom checker. It is NOT a substitute for professional medical advice, diagnosis, or treatment.
+
+• This tool helps you report symptoms to your care team
+• It does not provide medical diagnoses
+• Always follow your doctor's instructions
+
+**If you believe you are having a medical emergency, call 911 immediately.**"""
+
+
+EMERGENCY_CHECK_MESSAGE = """🚨 Urgent Safety Check
+
+Before we assess your symptoms, we need to rule out immediate emergencies.
+
+Please select any of the following that you are **currently experiencing**:"""
+
+
+RUBY_GREETING = """Hello! I am **Ruby**, your automated triage assistant. 👋
+
+I'm here to help assess your symptoms and share the information with your care team.
+
+I'll ask you a few questions about each symptom you selected. Take your time - there's no rush."""
+
+
+# =============================================================================
+# STANDARD OPTIONS
+# =============================================================================
+
 ORAL_INTAKE_OPTIONS = [
     {"label": "I have a reduced appetite but can still eat and drink", "value": "reduced"},
     {"label": "I have had difficulty keeping food or fluids down", "value": "difficulty"},
@@ -77,6 +181,13 @@ DURATION_OPTIONS_SHORT = [
     {"label": "3-7 days", "value": "3-7d"},
     {"label": "More than a week", "value": ">1w"},
     {"label": "More than 3 weeks", "value": ">3w"}
+]
+
+DURATION_OPTIONS_NAUSEA = [
+    {"label": "Less than 24 hours", "value": "<24h"},
+    {"label": "24 hours", "value": "24h"},
+    {"label": "2-3 days", "value": "2-3d"},
+    {"label": "More than 3 days", "value": ">3d"}
 ]
 
 # Medication Options
@@ -121,4 +232,13 @@ MEDS_COUGH = [
 ]
 
 
+# =============================================================================
+# SUMMARY OPTIONS
+# =============================================================================
 
+SUMMARY_ACTIONS = [
+    {"label": "📥 Download Summary", "value": "download", "icon": "download"},
+    {"label": "📔 Save to My Diary", "value": "save_diary", "icon": "diary"},
+    {"label": "🔄 Report Another Symptom", "value": "report_another", "icon": "repeat"},
+    {"label": "✅ Done for Today", "value": "done", "icon": "check"},
+]
