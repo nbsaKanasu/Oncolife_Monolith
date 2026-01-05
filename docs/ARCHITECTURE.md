@@ -6,7 +6,429 @@ OncoLife is a healthcare platform built with a modular monorepo architecture. Th
 
 ---
 
-## System Architecture
+## Table of Contents
+
+1. [Solution Architecture](#solution-architecture)
+2. [AWS Deployment Architecture](#aws-deployment-architecture)
+3. [Security Architecture](#security-architecture)
+4. [Data Flow Diagrams](#data-flow-diagrams)
+5. [Backend Architecture](#backend-architecture-patient-api)
+6. [Frontend Architecture](#frontend-architecture-patient-web)
+7. [Patient Onboarding Architecture](#patient-onboarding-architecture-new)
+8. [Symptom Checker Architecture](#symptom-checker-architecture)
+9. [Doctor Dashboard Architecture](#doctor-dashboard-architecture)
+10. [API Design Patterns](#api-design-patterns)
+11. [Database Design](#database-design)
+12. [Security](#security)
+13. [Configuration](#configuration)
+
+---
+
+## Solution Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                              ONCOLIFE PLATFORM ARCHITECTURE                          │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+                                    ┌─────────────────┐
+                                    │   CLINIC EHR    │
+                                    │  (Epic, etc.)   │
+                                    └────────┬────────┘
+                                             │ Fax Referral
+                                             ▼
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                                    FAX INTAKE LAYER                                   │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐   │
+│  │ Sinch/Twilio│───▶│ Webhook     │───▶│ Fax Service │───▶│ S3 (KMS Encrypted)  │   │
+│  │ Fax Provider│    │ Endpoint    │    │ HMAC Valid  │    │ Referral Documents  │   │
+│  └─────────────┘    └─────────────┘    └──────┬──────┘    └─────────────────────┘   │
+└──────────────────────────────────────────────│───────────────────────────────────────┘
+                                               ▼
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                                    OCR & ONBOARDING LAYER                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐   │
+│  │ AWS Textract│───▶│ OCR Service │───▶│ Confidence  │───▶│ OnboardingService   │   │
+│  │ Forms/Tables│    │ Field Parse │    │ Thresholds  │    │ Patient Creation    │   │
+│  └─────────────┘    └─────────────┘    └──────┬──────┘    └──────────┬──────────┘   │
+│                                               │                       │              │
+│                            ┌──────────────────┴───────────────────────┘              │
+│                            ▼                                                         │
+│                     ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐   │
+│                     │Manual Review│    │AWS Cognito  │    │ AWS SES/SNS         │   │
+│                     │(if < thresh)│    │Patient Pool │    │ Welcome Email/SMS   │   │
+│                     └─────────────┘    └─────────────┘    └─────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────┐              ┌────────────────────────────────┐
+│        PATIENT PLATFORM        │              │        DOCTOR PLATFORM         │
+│                                │              │                                │
+│  ┌──────────────────────────┐  │              │  ┌──────────────────────────┐  │
+│  │    Patient Web App       │  │              │  │    Doctor Web App        │  │
+│  │    (React + Vite + MUI)  │  │              │  │    (React + Vite + MUI)  │  │
+│  │  ┌────────────────────┐  │  │              │  │  ┌────────────────────┐  │  │
+│  │  │ Login/Onboarding   │  │  │              │  │  │ Login (MFA)        │  │  │
+│  │  │ Symptom Checker    │  │  │              │  │  │ Dashboard          │  │  │
+│  │  │ My Diary           │  │  │              │  │  │ Patient Timeline   │  │  │
+│  │  │ Questions          │  │  │              │  │  │ Weekly Reports     │  │  │
+│  │  │ Education          │  │  │              │  │  │ Staff Management   │  │  │
+│  │  │ Profile            │  │  │              │  │  │ Alerts             │  │  │
+│  │  └────────────────────┘  │  │              │  │  └────────────────────┘  │  │
+│  └────────────┬─────────────┘  │              │  └────────────┬─────────────┘  │
+│               │                │              │               │                │
+│               ▼                │              │               ▼                │
+│  ┌──────────────────────────┐  │              │  ┌──────────────────────────┐  │
+│  │    Patient API           │  │              │  │    Doctor API            │  │
+│  │    (FastAPI)             │  │              │  │    (FastAPI)             │  │
+│  │  ┌────────────────────┐  │  │              │  │  ┌────────────────────┐  │  │
+│  │  │ API Layer (v1)     │  │  │              │  │  │ API Layer (v1)     │  │  │
+│  │  │  - auth.py         │  │  │              │  │  │  - auth.py         │  │  │
+│  │  │  - chat.py         │  │  │              │  │  │  - dashboard.py    │  │  │
+│  │  │  - diary.py        │  │  │              │  │  │  - patients.py     │  │  │
+│  │  │  - questions.py    │  │  │              │  │  │  - registration.py │  │  │
+│  │  │  - education.py    │  │  │              │  │  │  - staff.py        │  │  │
+│  │  │  - onboarding.py   │  │  │              │  │  └────────────────────┘  │  │
+│  │  └────────────────────┘  │  │              │  │  ┌────────────────────┐  │  │
+│  │  ┌────────────────────┐  │  │              │  │  │ Service Layer      │  │  │
+│  │  │ Service Layer      │  │  │              │  │  │  - DashboardSvc    │  │  │
+│  │  │  - AuthService     │  │  │◄────────────►│  │  │  - RegistrationSvc │  │  │
+│  │  │  - DiaryService    │  │  │   Cross-DB   │  │  │  - AuditService    │  │  │
+│  │  │  - EducationSvc    │  │  │   Queries    │  │  │  - PatientService  │  │  │
+│  │  │  - OnboardingSvc   │  │  │              │  │  └────────────────────┘  │  │
+│  │  │  - SymptomEngine   │  │  │              │  │  ┌────────────────────┐  │  │
+│  │  └────────────────────┘  │  │              │  │  │ Repository Layer   │  │  │
+│  │  ┌────────────────────┐  │  │              │  │  │  - StaffRepo       │  │  │
+│  │  │ Repository Layer   │  │  │              │  │  │  - ClinicRepo      │  │  │
+│  │  │  - DiaryRepo       │  │  │              │  │  └────────────────────┘  │  │
+│  │  │  - SummaryRepo     │  │  │              │  └──────────────────────────┘  │
+│  │  │  - ConversationRepo│  │  │              │                                │
+│  │  └────────────────────┘  │  │              └────────────────────────────────┘
+│  └──────────────────────────┘  │
+│                                │
+└────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                                    DATA LAYER                                         │
+│                                                                                       │
+│  ┌─────────────────────────────────────────┐  ┌─────────────────────────────────┐   │
+│  │         PATIENT DATABASE (RDS)          │  │     DOCTOR DATABASE (RDS)       │   │
+│  │                                         │  │                                 │   │
+│  │  ┌─────────────┐  ┌─────────────────┐  │  │  ┌─────────────┐  ┌───────────┐ │   │
+│  │  │patient_info │  │conversations    │  │  │  │staff_profiles│ │audit_logs │ │   │
+│  │  │providers    │  │messages         │  │  │  │staff_assoc  │  │clinics    │ │   │
+│  │  │oncology_prof│  │diary_entries    │  │  │  │physician_rep│  │           │ │   │
+│  │  │medications  │  │patient_questions│  │  │  └─────────────┘  └───────────┘ │   │
+│  │  │referrals    │  │education_docs   │  │  │                                 │   │
+│  │  │fax_logs     │  │disclaimers      │  │  │  Queries patient_db for:        │   │
+│  │  │ocr_confid   │  │chemo_dates      │  │  │  - Symptom data                 │   │
+│  │  └─────────────┘  └─────────────────┘  │  │  - Timeline charts              │   │
+│  │                                         │  │  - Weekly reports               │   │
+│  └─────────────────────────────────────────┘  └─────────────────────────────────┘   │
+│                                                                                       │
+│  ┌─────────────────────────────────────────┐  ┌─────────────────────────────────┐   │
+│  │         AWS S3 BUCKETS                  │  │     AWS COGNITO                 │   │
+│  │                                         │  │                                 │   │
+│  │  oncolife-referrals/                    │  │  Patient User Pool              │   │
+│  │    └── faxes/{year}/{month}/{id}.pdf   │  │   - Email/Phone login           │   │
+│  │                                         │  │   - Temp password flow          │   │
+│  │  oncolife-education/                    │  │                                 │   │
+│  │    └── symptoms/{code}/{file}.pdf      │  │  Physician User Pool            │   │
+│  │    └── handouts/care_team_v1.pdf       │  │   - Admin-created accounts      │   │
+│  │                                         │  │   - MFA enabled                 │   │
+│  │  (All KMS Encrypted)                    │  │   - Role attributes             │   │
+│  └─────────────────────────────────────────┘  └─────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                              SYMPTOM CHECKER ENGINE                                   │
+│                                                                                       │
+│  ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐ │
+│  │ DISCLAIMER │──▶│ EMERGENCY  │──▶│  SYMPTOM   │──▶│   RUBY     │──▶│  SUMMARY   │ │
+│  │   Phase    │   │   CHECK    │   │ SELECTION  │   │   CHAT     │   │   PHASE    │ │
+│  └────────────┘   └────────────┘   └────────────┘   └────────────┘   └────────────┘ │
+│                                                            │                         │
+│                                                            ▼                         │
+│                        ┌──────────────────────────────────────────────────────────┐ │
+│                        │              27 SYMPTOM MODULES                          │ │
+│                        │  FEV-202  NAU-203  DIA-205  CON-210  SKI-212  ...        │ │
+│                        │  Each has: questions[], evaluate_screening(), alerts     │ │
+│                        └──────────────────────────────────────────────────────────┘ │
+│                                                            │                         │
+│                                                            ▼                         │
+│  ┌────────────────┐   ┌────────────────┐   ┌────────────────┐   ┌────────────────┐ │
+│  │ Triage Result  │   │ Education      │   │ Diary Entry    │   │ Patient        │ │
+│  │ (Color Badge)  │   │ Delivery       │   │ Auto-populate  │   │ Summary        │ │
+│  └────────────────┘   └────────────────┘   └────────────────┘   └────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## AWS Deployment Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                           AWS DEPLOYMENT ARCHITECTURE                                 │
+│                                  (us-east-1)                                         │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+                                 ┌─────────────┐
+                                 │   Route 53  │
+                                 │   DNS       │
+                                 └──────┬──────┘
+                                        │
+                    ┌───────────────────┴───────────────────┐
+                    │                                       │
+                    ▼                                       ▼
+           ┌───────────────┐                       ┌───────────────┐
+           │ app.oncolife  │                       │doctor.oncolife│
+           │    .com       │                       │    .com       │
+           └───────┬───────┘                       └───────┬───────┘
+                   │                                       │
+                   ▼                                       ▼
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                              VPC (10.0.0.0/16)                                        │
+│                                                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                         PUBLIC SUBNETS (10.0.1.0/24, 10.0.2.0/24)               │ │
+│  │                                                                                  │ │
+│  │  ┌────────────────────────────────┐    ┌────────────────────────────────────┐  │ │
+│  │  │     Application Load Balancer  │    │     Application Load Balancer      │  │ │
+│  │  │         (Patient ALB)          │    │         (Doctor ALB)               │  │ │
+│  │  │                                │    │                                    │  │ │
+│  │  │  Listeners:                    │    │  Listeners:                        │  │ │
+│  │  │   - HTTPS:443 → Patient TG     │    │   - HTTPS:443 → Doctor TG          │  │ │
+│  │  │   - HTTP:80 → Redirect 443     │    │   - HTTP:80 → Redirect 443         │  │ │
+│  │  │                                │    │                                    │  │ │
+│  │  │  Health Check: /health         │    │  Health Check: /health             │  │ │
+│  │  └────────────────────────────────┘    └────────────────────────────────────┘  │ │
+│  └─────────────────────────────────────────────────────────────────────────────────┘ │
+│                   │                                       │                          │
+│                   ▼                                       ▼                          │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                        PRIVATE SUBNETS (10.0.3.0/24, 10.0.4.0/24)              │ │
+│  │                                                                                  │ │
+│  │  ┌──────────────────────────────────────────────────────────────────────────┐  │ │
+│  │  │                         ECS CLUSTER (Fargate)                            │  │ │
+│  │  │                                                                          │  │ │
+│  │  │  ┌────────────────────────┐        ┌────────────────────────┐           │  │ │
+│  │  │  │   Patient API Service  │        │   Doctor API Service   │           │  │ │
+│  │  │  │                        │        │                        │           │  │ │
+│  │  │  │  Tasks: 2 (min)        │        │  Tasks: 2 (min)        │           │  │ │
+│  │  │  │  CPU: 512              │        │  CPU: 512              │           │  │ │
+│  │  │  │  Memory: 1024MB        │        │  Memory: 1024MB        │           │  │ │
+│  │  │  │  Port: 8000            │        │  Port: 8001            │           │  │ │
+│  │  │  │                        │        │                        │           │  │ │
+│  │  │  │  Image: ECR/patient-api│        │  Image: ECR/doctor-api │           │  │ │
+│  │  │  └────────────────────────┘        └────────────────────────┘           │  │ │
+│  │  │                                                                          │  │ │
+│  │  │  ┌────────────────────────┐        ┌────────────────────────┐           │  │ │
+│  │  │  │  Patient Web Service   │        │   Doctor Web Service   │           │  │ │
+│  │  │  │  (Static via S3/CF)    │        │  (Static via S3/CF)    │           │  │ │
+│  │  │  └────────────────────────┘        └────────────────────────┘           │  │ │
+│  │  └──────────────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                                  │ │
+│  │                   │                              │                               │ │
+│  │                   ▼                              ▼                               │ │
+│  │  ┌──────────────────────────────────────────────────────────────────────────┐  │ │
+│  │  │                              RDS (PostgreSQL)                             │  │ │
+│  │  │                                                                          │  │ │
+│  │  │  ┌────────────────────────┐        ┌────────────────────────┐           │  │ │
+│  │  │  │   oncolife-patient-db  │        │   oncolife-doctor-db   │           │  │ │
+│  │  │  │                        │        │                        │           │  │ │
+│  │  │  │  Instance: db.t3.medium│        │  Instance: db.t3.medium│           │  │ │
+│  │  │  │  Storage: 100GB GP3    │        │  Storage: 50GB GP3     │           │  │ │
+│  │  │  │  Multi-AZ: Yes         │        │  Multi-AZ: Yes         │           │  │ │
+│  │  │  │  Encrypted: KMS        │        │  Encrypted: KMS        │           │  │ │
+│  │  │  │                        │        │                        │           │  │ │
+│  │  │  │  Port: 5432            │        │  Port: 5432            │           │  │ │
+│  │  │  └────────────────────────┘        └────────────────────────┘           │  │ │
+│  │  └──────────────────────────────────────────────────────────────────────────┘  │ │
+│  └─────────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                       │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                              AWS SERVICES (Outside VPC)                               │
+│                                                                                       │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────────┐ │
+│  │  AWS Cognito   │  │    AWS S3      │  │  AWS Textract  │  │  Secrets Manager   │ │
+│  │                │  │                │  │                │  │                    │ │
+│  │ Patient Pool   │  │ oncolife-      │  │ OCR Processing │  │ Database creds     │ │
+│  │ Doctor Pool    │  │  referrals/    │  │ Forms + Tables │  │ Cognito secrets    │ │
+│  │                │  │ oncolife-      │  │                │  │ API keys           │ │
+│  │ JWT Tokens     │  │  education/    │  │                │  │                    │ │
+│  └────────────────┘  └────────────────┘  └────────────────┘  └────────────────────┘ │
+│                                                                                       │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────────┐ │
+│  │    AWS SES     │  │    AWS SNS     │  │  CloudWatch    │  │    CloudTrail      │ │
+│  │                │  │                │  │                │  │                    │ │
+│  │ Welcome emails │  │ SMS notifs     │  │ Logs           │  │ Audit trail        │ │
+│  │ Invites        │  │ Reminders      │  │ Metrics        │  │ API logging        │ │
+│  │ Reminders      │  │                │  │ Alarms         │  │ (No PHI)           │ │
+│  └────────────────┘  └────────────────┘  └────────────────┘  └────────────────────┘ │
+│                                                                                       │
+│  ┌────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                                  ECR                                            │ │
+│  │                                                                                 │ │
+│  │  ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐    │ │
+│  │  │ oncolife-patient-api│  │ oncolife-doctor-api │  │ (future: web images)│    │ │
+│  │  │ :latest, :v1.0.0    │  │ :latest, :v1.0.0    │  │                     │    │ │
+│  │  └─────────────────────┘  └─────────────────────┘  └─────────────────────┘    │ │
+│  └────────────────────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Security Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                              SECURITY ARCHITECTURE                                    │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+                              INTERNET
+                                  │
+                                  ▼
+                         ┌───────────────┐
+                         │   WAF Rules   │  ← Rate limiting, SQL injection protection
+                         └───────┬───────┘
+                                 │
+                                 ▼
+                         ┌───────────────┐
+                         │  CloudFront   │  ← DDoS protection, SSL/TLS termination
+                         └───────┬───────┘
+                                 │
+          ┌──────────────────────┴──────────────────────┐
+          │                                              │
+          ▼                                              ▼
+┌─────────────────────┐                      ┌─────────────────────┐
+│   Patient ALB       │                      │   Doctor ALB        │
+│   (HTTPS only)      │                      │   (HTTPS only)      │
+│                     │                      │                     │
+│   Security Group:   │                      │   Security Group:   │
+│   - Inbound: 443    │                      │   - Inbound: 443    │
+│   - Outbound: 8000  │                      │   - Outbound: 8001  │
+└──────────┬──────────┘                      └──────────┬──────────┘
+           │                                            │
+           ▼                                            ▼
+┌─────────────────────┐                      ┌─────────────────────┐
+│   ECS Tasks         │                      │   ECS Tasks         │
+│                     │                      │                     │
+│   Security Group:   │                      │   Security Group:   │
+│   - Inbound: 8000   │                      │   - Inbound: 8001   │
+│     from ALB SG     │                      │     from ALB SG     │
+│   - Outbound: 5432  │                      │   - Outbound: 5432  │
+│     to RDS SG       │                      │     to RDS SG       │
+└──────────┬──────────┘                      └──────────┬──────────┘
+           │                                            │
+           └──────────────────┬─────────────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────────┐
+                    │   RDS PostgreSQL    │
+                    │                     │
+                    │   Security Group:   │
+                    │   - Inbound: 5432   │
+                    │     from ECS SG     │
+                    │   - No public access│
+                    │                     │
+                    │   Encryption:       │
+                    │   - At rest: KMS    │
+                    │   - In transit: SSL │
+                    └─────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                              DATA PROTECTION                                          │
+│                                                                                       │
+│  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐                    │
+│  │  At Rest        │   │  In Transit     │   │  Access Control │                    │
+│  │                 │   │                 │   │                 │                    │
+│  │  - RDS: KMS     │   │  - HTTPS/TLS 1.2│   │  - Cognito JWT  │                    │
+│  │  - S3: KMS      │   │  - RDS: SSL     │   │  - IAM Roles    │                    │
+│  │  - EBS: KMS     │   │  - Internal VPC │   │  - SG Rules     │                    │
+│  └─────────────────┘   └─────────────────┘   └─────────────────┘                    │
+│                                                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                           HIPAA COMPLIANCE                                       │ │
+│  │                                                                                  │ │
+│  │  ✓ PHI encrypted at rest and in transit                                        │ │
+│  │  ✓ No PHI in CloudWatch logs (configured)                                      │ │
+│  │  ✓ Audit trail via CloudTrail                                                  │ │
+│  │  ✓ Access logging for S3 buckets                                               │ │
+│  │  ✓ Database-level access control (physician scoping)                           │ │
+│  │  ✓ MFA for administrative access                                               │ │
+│  │  ✓ BAA signed with AWS                                                         │ │
+│  └─────────────────────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Data Flow Diagrams
+
+### Patient Onboarding Flow
+
+```
+Clinic EHR → Fax → Sinch → Webhook → S3 → Textract → OCR Service
+                                                          │
+                    ┌─────────────────────────────────────┘
+                    ▼
+            ┌───────────────┐     ┌───────────────┐     ┌───────────────┐
+            │ Confidence    │────▶│ Patient       │────▶│ Cognito       │
+            │ Check         │     │ Record        │     │ Account       │
+            │ (≥ thresholds)│     │ Creation      │     │ Creation      │
+            └───────────────┘     └───────────────┘     └───────────────┘
+                    │                                           │
+                    ▼                                           ▼
+            ┌───────────────┐                           ┌───────────────┐
+            │ Manual Review │                           │ Welcome Email │
+            │ (if < thresh) │                           │ + SMS via SES │
+            └───────────────┘                           └───────────────┘
+```
+
+### Daily Symptom Check-In Flow
+
+```
+Patient App → WebSocket → Symptom Engine → Questions → Triage Logic
+                                                            │
+                    ┌───────────────────────────────────────┘
+                    │
+                    ├──▶ Conversation Record (patient_db)
+                    │
+                    ├──▶ Diary Auto-Populate
+                    │
+                    ├──▶ Education Delivery
+                    │
+                    └──▶ Summary Generation
+```
+
+### Doctor Dashboard Flow
+
+```
+Doctor Login → Cognito Auth → JWT Token
+                                  │
+                                  ▼
+                    ┌───────────────────────────────────────┐
+                    │         DashboardService              │
+                    │                                       │
+                    │  1. Get physician's patient list      │
+                    │  2. Query symptom data (patient_db)   │
+                    │  3. Calculate severity rankings       │
+                    │  4. Return sorted patient list        │
+                    └───────────────────────────────────────┘
+                                  │
+                                  ▼
+                    ┌───────────────────────────────────────┐
+                    │         Audit Logging                 │
+                    │  (Every access logged to audit_logs)  │
+                    └───────────────────────────────────────┘
+```
+
+---
+
+## System Overview (Simple View)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -35,7 +457,7 @@ OncoLife is a healthcare platform built with a modular monorepo architecture. Th
 │  │   - patient_info        │ only    │   - staff_profiles      │           │
 │  │   - conversations       │         │   - all_clinics         │           │
 │  │   - diary_entries       │         │   - staff_associations  │           │
-│  │   - chemo_dates         │         │                         │           │
+│  │   - chemo_dates         │         │   - audit_logs          │           │
 │  └─────────────────────────┘         └─────────────────────────┘           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                         EXTERNAL SERVICES                                    │
@@ -339,6 +761,198 @@ Triage Levels:
 
 ---
 
+## Doctor Dashboard Architecture
+
+### Analytics-Driven Clinical Monitoring
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                              DOCTOR DASHBOARD ARCHITECTURE                            │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+                         ┌────────────────────────────────────┐
+                         │         Doctor Web App              │
+                         │                                     │
+                         │  ┌─────────────────────────────┐   │
+                         │  │    Dashboard Landing View    │   │
+                         │  │    (Severity-Ranked List)    │   │
+                         │  └─────────────────────────────┘   │
+                         │  ┌─────────────────────────────┐   │
+                         │  │    Patient Detail View       │   │
+                         │  │    (Symptom Timeline)        │   │
+                         │  └─────────────────────────────┘   │
+                         │  ┌─────────────────────────────┐   │
+                         │  │    Weekly Reports            │   │
+                         │  │    Staff Management          │   │
+                         │  └─────────────────────────────┘   │
+                         └───────────────┬────────────────────┘
+                                         │
+                                         ▼
+                         ┌────────────────────────────────────┐
+                         │         Doctor API (FastAPI)        │
+                         │                                     │
+                         │  ┌─────────────────────────────┐   │
+                         │  │     DashboardService         │   │
+                         │  │                              │   │
+                         │  │  get_ranked_patient_list()  │   │
+                         │  │  get_patient_timeline()      │   │
+                         │  │  get_shared_questions()      │   │
+                         │  │  get_weekly_report()         │   │
+                         │  └─────────────────────────────┘   │
+                         │  ┌─────────────────────────────┐   │
+                         │  │     RegistrationService      │   │
+                         │  │     AuditService             │   │
+                         │  └─────────────────────────────┘   │
+                         └───────────────┬────────────────────┘
+                                         │
+                    ┌────────────────────┴────────────────────┐
+                    │                                         │
+                    ▼                                         ▼
+         ┌─────────────────────┐               ┌─────────────────────┐
+         │   Doctor Database    │               │   Patient Database   │
+         │                      │               │   (Read-Only Access) │
+         │  - staff_profiles    │               │                      │
+         │  - audit_logs        │               │  - conversations     │
+         │  - staff_associations│               │  - severity_list     │
+         │  - clinics           │               │  - patient_questions │
+         └─────────────────────┘               │  - diary_entries     │
+                                               └─────────────────────┘
+```
+
+### Patient Ranking Algorithm
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           SEVERITY RANKING ALGORITHM                                 │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+Input: All patients assigned to physician
+Period: Last 7 days (configurable)
+
+SORT ORDER:
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                    │
+│  Priority 1: has_escalation = TRUE         → TOP OF LIST                          │
+│              (conversation_state = 'EMERGENCY')                                    │
+│                                                                                    │
+│  Priority 2: max_severity (highest wins)                                          │
+│              urgent (4) > severe (3) > moderate (2) > mild (1)                    │
+│                                                                                    │
+│  Priority 3: last_checkin (most recent wins)                                      │
+│              If equal severity, sort by activity                                   │
+│                                                                                    │
+└───────────────────────────────────────────────────────────────────────────────────┘
+
+OUTPUT:
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│  🔴 Smith, John      │ Fever 103°F + Confusion   │ 2 hrs ago  │ ← has_escalation   │
+│  🟠 Johnson, Mary    │ Severe nausea             │ 5 hrs ago  │ ← max_severity=3   │
+│  🟠 Williams, Bob    │ Pain 8/10                 │ 1 day ago  │ ← max_severity=3   │
+│  🟡 Davis, Linda     │ Moderate fatigue          │ 1 day ago  │ ← max_severity=2   │
+│  🟢 Brown, Mike      │ Mild headache             │ 3 days ago │ ← max_severity=1   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+Color Mapping:
+  🔴 Red    = urgent (4)   = Emergency symptoms
+  🟠 Orange = severe (3)   = Needs same-day review
+  🟡 Yellow = moderate (2) = Monitor closely
+  🟢 Green  = mild (1)     = Stable
+```
+
+### Symptom Timeline Data Structure
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           TIMELINE DATA FOR CHARTING                                 │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+API Response: GET /api/v1/dashboard/patient/{uuid}
+
+{
+  "patient_uuid": "abc-123",
+  "period_days": 30,
+  
+  "symptom_series": {
+    "nausea": [
+      {"date": "2026-01-01", "severity": "moderate", "severity_numeric": 2},
+      {"date": "2026-01-03", "severity": "mild",     "severity_numeric": 1},
+      {"date": "2026-01-05", "severity": "severe",   "severity_numeric": 3}
+    ],
+    "fatigue": [
+      {"date": "2026-01-02", "severity": "severe",   "severity_numeric": 3},
+      {"date": "2026-01-04", "severity": "moderate", "severity_numeric": 2}
+    ]
+  },
+  
+  "treatment_events": [
+    {"event_type": "chemo_date", "event_date": "2026-01-01", "metadata": {}},
+    {"event_type": "chemo_date", "event_date": "2026-01-15", "metadata": {}}
+  ]
+}
+
+CHART VISUALIZATION:
+
+Severity
+   4 │        ●───●                    ← Urgent
+     │       /     \
+   3 │      ●       ●                  ← Severe  (nausea peak)
+     │     /         \    ○
+   2 │    ●           ●──○──○          ← Moderate (fatigue)
+     │   /                   \
+   1 │──●─────────────────────●─       ← Mild
+     └──┼────┼────┼────┼────┼────┼──
+        1    5    10   15   20   25
+                    Days
+
+     ● Nausea   ○ Fatigue   ┃ Chemo Date (vertical marker)
+```
+
+### Access Control Model
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           PHYSICIAN-SCOPED ACCESS CONTROL                            │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+ROLES:
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│  ADMIN           │ Create physicians, Manage clinics          │ System-wide        │
+│  PHYSICIAN       │ View own patients, Create staff, Reports   │ Own patients only  │
+│  STAFF (Nurse/MA)│ View dashboard, Flag concerns              │ Physician's patients│
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+ENFORCEMENT:
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                      │
+│  Doctor A logs in                                                                    │
+│       │                                                                              │
+│       ▼                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│  │  1. Extract physician_id from JWT token                                      │   │
+│  │  2. Query: SELECT patient_uuid FROM associations WHERE physician = :id       │   │
+│  │  3. Only return data for those patients                                      │   │
+│  │                                                                               │   │
+│  │  RESULT: Doctor A sees ONLY Doctor A's patients                              │   │
+│  │          No cross-physician data access possible                              │   │
+│  └─────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                      │
+│  Staff of Doctor A logs in                                                           │
+│       │                                                                              │
+│       ▼                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│  │  1. Extract staff_id from JWT, lookup physician_uuid                         │   │
+│  │  2. Query: Uses physician's patient list                                     │   │
+│  │  3. Staff inherits physician's patient scope                                 │   │
+│  │                                                                               │   │
+│  │  RESULT: Staff sees same patients as their physician                         │   │
+│  │          Cannot create staff, modify records, or reassign                     │   │
+│  └─────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## API Design Patterns
 
 ### Endpoint Naming Convention
@@ -488,5 +1102,18 @@ async def protected_endpoint(
 
 ---
 
+## Architecture Diagrams Summary
+
+| Diagram | Description |
+|---------|-------------|
+| **Solution Architecture** | Complete platform overview with all components |
+| **AWS Deployment Architecture** | Infrastructure diagram with VPC, ECS, RDS, etc. |
+| **Security Architecture** | Network security, encryption, HIPAA compliance |
+| **Data Flow Diagrams** | How data moves through onboarding, symptom checker, and dashboard |
+| **Doctor Dashboard Architecture** | Analytics engine, ranking algorithm, access control |
+
+---
+
 *Last Updated: January 2026*
+*Version: 2.0 - Added comprehensive architecture diagrams*
 
