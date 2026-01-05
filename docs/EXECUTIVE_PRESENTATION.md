@@ -47,10 +47,23 @@ A comprehensive digital health platform that enables oncology clinics to remotel
 
 ## 2. Feature List Overview
 
+### Current Technology Stack
+
+| Layer | Technology | Version |
+|-------|------------|---------|
+| **Frontend** | React + TypeScript + Vite | React 19.1, Vite 7.0 |
+| **UI Framework** | Material UI (MUI) | 7.2 |
+| **State Management** | TanStack React Query | 5.83 |
+| **Backend** | FastAPI + Python | Python 3.11+ |
+| **Database** | PostgreSQL (AWS RDS) | 15+ |
+| **Auth** | AWS Cognito | JWT tokens |
+| **Infrastructure** | AWS (ECS, S3, SES, Textract) | - |
+
 ### Patient Platform Features
 
 | Feature | Description | Status |
 |---------|-------------|--------|
+| **React Web Application** | Modern SPA with TypeScript, Vite, MUI components | ✅ Complete |
 | **Zero-Friction Onboarding** | Clinic fax → OCR → Auto-account creation → Welcome email | ✅ Complete |
 | **Guided First Login** | Password reset → Acknowledgement → Terms → Reminders | ✅ Complete |
 | **Daily Symptom Check-In** | 27 symptom modules with branching questions | ✅ Complete |
@@ -66,6 +79,7 @@ A comprehensive digital health platform that enables oncology clinics to remotel
 
 | Feature | Description | Status |
 |---------|-------------|--------|
+| **React Web Application** | Modern SPA with TypeScript, Vite, MUI components | ✅ Complete |
 | **Analytics Dashboard** | Severity-ranked patient list | ✅ Complete |
 | **Symptom Timeline** | Multi-line chart with treatment overlays | ✅ Complete |
 | **Patient Questions View** | See shared questions (privacy-controlled) | ✅ Complete |
@@ -489,12 +503,12 @@ OncoLife_Monolith/
 
 | Feature | Priority | Effort | Description |
 |---------|----------|--------|-------------|
-| **Frontend React Apps** | High | Medium | Patient & Doctor web interfaces |
-| **Mobile App** | High | High | Native iOS/Android apps |
+| **Mobile App** | High | High | Native iOS/Android apps (React Native) |
+| **Admin Dashboard** | High | Medium | Clinic management portal |
 | **Redis Caching** | Medium | Low | Performance optimization |
-| **Admin Dashboard** | Medium | Medium | Clinic management portal |
 | **PDF Report Generation** | Medium | Medium | Weekly reports as PDFs |
 | **SMS Reminders** | Medium | Low | Daily check-in reminders |
+| **Push Notifications** | Medium | Medium | Mobile app notifications |
 
 ### Technical Debt
 
