@@ -1,83 +1,170 @@
 # OncoLife Developer Guide
 
-## Welcome! 👋
-
-This guide will help you get started as a developer on the OncoLife platform. Whether you're working on the backend APIs or the frontend applications, this document covers everything you need to know.
+**Version 2.0 | Updated January 2026**
 
 ---
 
 ## Table of Contents
 
-1. [Getting Started](#getting-started)
-2. [Development Environment](#development-environment)
-3. [Backend Development](#backend-development)
-4. [Frontend Development](#frontend-development)
-5. [Patient Onboarding](#patient-onboarding) 🆕
-6. [Code Patterns](#code-patterns)
-7. [Testing](#testing)
-8. [Git Workflow](#git-workflow)
-9. [Troubleshooting](#troubleshooting)
+1. [Quick Start (5 Minutes)](#1-quick-start-5-minutes)
+2. [Project Structure](#2-project-structure)
+3. [Development Environment](#3-development-environment)
+4. [Backend Development](#4-backend-development)
+5. [Frontend Development](#5-frontend-development)
+6. [Database Operations](#6-database-operations)
+7. [Testing](#7-testing)
+8. [Code Patterns](#8-code-patterns)
+9. [Troubleshooting](#9-troubleshooting)
 
 ---
 
-## Getting Started
+## 1. Quick Start (5 Minutes)
 
 ### Prerequisites
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Python | 3.11+ | Backend APIs |
-| Node.js | 18+ | Frontend apps |
-| PostgreSQL | 15+ | Database |
-| Docker | Latest | Local services |
-| Git | Latest | Version control |
+| Tool | Version | Verify | Install |
+|------|---------|--------|---------|
+| Docker Desktop | Latest | `docker --version` | [docker.com](https://docker.com) |
+| Node.js | 18+ | `node --version` | [nodejs.org](https://nodejs.org) |
+| Python | 3.11+ | `python --version` | [python.org](https://python.org) |
+| Git | Latest | `git --version` | [git-scm.com](https://git-scm.com) |
 
-### Quick Setup (5 minutes)
+### Clone and Start
 
 ```bash
-# 1. Clone the repository
+# 1. Clone repository
 git clone https://github.com/nbsaKanasu/Oncolife_Monolith.git
 cd Oncolife_Monolith
 
 # 2. Start all services with Docker
 docker-compose up -d
 
-# 3. Verify services are running
-curl http://localhost:8000/health  # Patient API
-curl http://localhost:8001/health  # Doctor API
+# 3. Wait for services to be ready (30 seconds)
+sleep 30
+
+# 4. Verify everything is running
+curl http://localhost:8000/health   # Patient API
+curl http://localhost:8001/health   # Doctor API
+```
+
+### Access Points
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Patient API | http://localhost:8000 | Backend for patient app |
+| Patient API Docs | http://localhost:8000/docs | Swagger UI |
+| Doctor API | http://localhost:8001 | Backend for doctor app |
+| Doctor API Docs | http://localhost:8001/docs | Swagger UI |
+| Patient Web | http://localhost:5173 | React frontend |
+| Doctor Web | http://localhost:5174 | React frontend |
+| PostgreSQL | localhost:5432 | Database |
+
+---
+
+## 2. Project Structure
+
+```
+OncoLife_Monolith/
+├── apps/
+│   ├── patient-platform/
+│   │   ├── patient-api/              # FastAPI Backend
+│   │   │   ├── src/
+│   │   │   │   ├── api/v1/endpoints/ # REST endpoints
+│   │   │   │   ├── services/         # Business logic
+│   │   │   │   ├── db/
+│   │   │   │   │   ├── models/       # SQLAlchemy models
+│   │   │   │   │   └── repositories/ # Data access
+│   │   │   │   ├── routers/chat/     # WebSocket + symptom rules
+│   │   │   │   └── core/             # Config, logging, exceptions
+│   │   │   ├── scripts/              # Seed scripts
+│   │   │   ├── Dockerfile
+│   │   │   └── requirements.txt
+│   │   │
+│   │   └── patient-web/              # React Frontend
+│   │       ├── src/
+│   │       │   ├── components/       # Reusable components
+│   │       │   ├── pages/            # Page components
+│   │       │   ├── services/         # API client
+│   │       │   ├── hooks/            # Custom hooks
+│   │       │   └── contexts/         # React contexts
+│   │       └── package.json
+│   │
+│   └── doctor-platform/
+│       ├── doctor-api/               # Same structure as patient-api
+│       └── doctor-web/               # Same structure as patient-web
+│
+├── packages/
+│   └── ui-components/                # Shared React components
+│       ├── src/
+│       │   ├── components/           # ErrorBoundary, DarkModeToggle, etc.
+│       │   ├── contexts/             # ThemeContext
+│       │   └── styles/               # Theme definitions
+│       └── package.json
+│
+├── docs/                             # Documentation
+├── scripts/
+│   ├── aws/                          # Deployment scripts
+│   └── db/                           # Database scripts
+└── docker-compose.yml                # Local development
 ```
 
 ---
 
-## Development Environment
+## 3. Development Environment
 
-### Option 1: Docker Compose (Recommended)
+### Option A: Docker Compose (Recommended)
 
 ```bash
 # Start all services
 docker-compose up -d
 
-# View logs
+# View logs for a specific service
 docker-compose logs -f patient-api
+
+# Rebuild after code changes
+docker-compose up -d --build patient-api
 
 # Stop all services
 docker-compose down
+
+# Stop and remove volumes (reset database)
+docker-compose down -v
 ```
 
-### Option 2: Manual Setup
+### Option B: Manual Setup
 
-#### Patient API
+#### Backend (Patient API)
 
-```bash
+**Windows (PowerShell):**
+```powershell
 cd apps/patient-platform/patient-api
 
 # Create virtual environment
 python -m venv venv
 
-# Activate (Windows)
-venv\Scripts\activate
+# Activate
+.\venv\Scripts\Activate.ps1
 
-# Activate (Mac/Linux)
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env file
+Copy-Item .env.example .env
+# Edit .env with your settings
+
+# Run the API
+cd src
+uvicorn main:app --reload --port 8000
+```
+
+**Mac/Linux:**
+```bash
+cd apps/patient-platform/patient-api
+
+# Create virtual environment
+python3 -m venv venv
+
+# Activate
 source venv/bin/activate
 
 # Install dependencies
@@ -92,16 +179,7 @@ cd src
 uvicorn main:app --reload --port 8000
 ```
 
-#### Doctor API
-
-```bash
-cd apps/doctor-platform/doctor-api
-
-# Same steps as Patient API...
-uvicorn main:app --reload --port 8001
-```
-
-#### Patient Web
+#### Frontend (Patient Web)
 
 ```bash
 cd apps/patient-platform/patient-web
@@ -109,21 +187,16 @@ cd apps/patient-platform/patient-web
 # Install dependencies
 npm install
 
-# Run development server
+# Start development server
 npm run dev
-```
 
-#### Doctor Web
-
-```bash
-cd apps/doctor-platform/doctor-web
-npm install
-npm run dev
+# Build for production
+npm run build
 ```
 
 ### Environment Variables
 
-Create a `.env` file in each API directory:
+Create `.env` file in each API directory:
 
 ```env
 # =============================================================================
@@ -136,510 +209,434 @@ APP_NAME=OncoLife Patient API
 APP_VERSION=1.0.0
 
 # =============================================================================
-# DATABASE
+# DATABASE (for Docker Compose)
 # =============================================================================
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=oncolife_admin
-POSTGRES_PASSWORD=your_password
-POSTGRES_PATIENT_DB=oncolife_patient
-POSTGRES_DOCTOR_DB=oncolife_doctor
+PATIENT_DB_HOST=localhost
+PATIENT_DB_PORT=5432
+PATIENT_DB_NAME=oncolife_patient
+PATIENT_DB_USER=oncolife_admin
+PATIENT_DB_PASSWORD=oncolife_password
 
 # =============================================================================
-# AWS CORE
+# AWS (for local development - use fake values or localstack)
 # =============================================================================
 AWS_REGION=us-west-2
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
 
-# =============================================================================
-# AWS COGNITO (Authentication)
-# =============================================================================
-COGNITO_USER_POOL_ID=us-west-2_xxxxx
-COGNITO_CLIENT_ID=xxxxx
-COGNITO_CLIENT_SECRET=xxxxx
-
-# =============================================================================
-# AWS S3 (Document Storage for Onboarding)
-# =============================================================================
-S3_REFERRAL_BUCKET=oncolife-referrals
-
-# =============================================================================
-# AWS SES (Email Notifications)
-# =============================================================================
-SES_SENDER_EMAIL=noreply@oncolife.com
-SES_SENDER_NAME=OncoLife Care
-
-# =============================================================================
-# AWS SNS (SMS Notifications)
-# =============================================================================
-SNS_ENABLED=true
-
-# =============================================================================
-# FAX WEBHOOK (Sinch/Twilio)
-# =============================================================================
-FAX_WEBHOOK_SECRET=your_webhook_secret
-FAX_INBOUND_NUMBER=+18001234567
-
-# =============================================================================
-# ONBOARDING SETTINGS
-# =============================================================================
-TERMS_VERSION=1.0
-PRIVACY_VERSION=1.0
-HIPAA_VERSION=1.0
-ONBOARDING_TEMP_PASSWORD_LENGTH=12
+# For Cognito - leave empty for local mock auth
+COGNITO_USER_POOL_ID=
+COGNITO_CLIENT_ID=
+COGNITO_CLIENT_SECRET=
 
 # =============================================================================
 # CORS
 # =============================================================================
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:5174
 ```
 
 ---
 
-## Backend Development
+## 4. Backend Development
 
-### Adding a New Endpoint
+### Adding a New API Endpoint
 
-1. **Create the service** (if needed):
+**Step 1: Create Pydantic Models**
 
 ```python
-# services/my_service.py
-from .base import BaseService
+# api/v1/endpoints/schemas/my_resource.py
+from pydantic import BaseModel
+from uuid import UUID
+from datetime import datetime
+from typing import Optional
+
+class MyResourceCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class MyResourceResponse(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+```
+
+**Step 2: Create Service**
+
+```python
+# services/my_resource_service.py
+from sqlalchemy.orm import Session
+from uuid import UUID
+from typing import List, Optional
+
+from db.models.my_resource import MyResource
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-class MyService(BaseService):
+class MyResourceService:
     def __init__(self, db: Session):
-        super().__init__(db)
-    
-    def my_operation(self, data: dict) -> dict:
-        logger.info("Performing operation...")
-        # Business logic here
-        return result
+        self.db = db
+
+    def create(self, name: str, description: Optional[str] = None) -> MyResource:
+        logger.info(f"Creating resource: {name}")
+        resource = MyResource(name=name, description=description)
+        self.db.add(resource)
+        self.db.commit()
+        self.db.refresh(resource)
+        return resource
+
+    def get_by_id(self, resource_id: UUID) -> Optional[MyResource]:
+        return self.db.query(MyResource).filter(
+            MyResource.id == resource_id,
+            MyResource.is_deleted == False
+        ).first()
+
+    def list_all(self, limit: int = 100) -> List[MyResource]:
+        return self.db.query(MyResource).filter(
+            MyResource.is_deleted == False
+        ).limit(limit).all()
 ```
 
-2. **Create the endpoint**:
+**Step 3: Create Endpoint**
 
 ```python
-# api/v1/endpoints/my_endpoint.py
+# api/v1/endpoints/my_resource.py
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import List
+from uuid import UUID
 
 from api.deps import get_patient_db, get_current_user
-from services import MyService
+from services.my_resource_service import MyResourceService
+from .schemas.my_resource import MyResourceCreate, MyResourceResponse
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()
 
-class MyRequest(BaseModel):
-    field1: str
-    field2: int
-
-class MyResponse(BaseModel):
-    result: str
-
-@router.post("/my-endpoint", response_model=MyResponse)
-async def my_endpoint(
-    request: MyRequest,
+@router.post("/", response_model=MyResourceResponse, status_code=status.HTTP_201_CREATED)
+async def create_resource(
+    data: MyResourceCreate,
     db: Session = Depends(get_patient_db),
     current_user = Depends(get_current_user)
 ):
-    """
-    My endpoint description.
-    """
-    service = MyService(db)
-    result = service.my_operation(request.dict())
-    return MyResponse(result=result)
+    """Create a new resource."""
+    service = MyResourceService(db)
+    resource = service.create(data.name, data.description)
+    return resource
+
+@router.get("/", response_model=List[MyResourceResponse])
+async def list_resources(
+    limit: int = 100,
+    db: Session = Depends(get_patient_db),
+    current_user = Depends(get_current_user)
+):
+    """List all resources."""
+    service = MyResourceService(db)
+    return service.list_all(limit)
+
+@router.get("/{resource_id}", response_model=MyResourceResponse)
+async def get_resource(
+    resource_id: UUID,
+    db: Session = Depends(get_patient_db),
+    current_user = Depends(get_current_user)
+):
+    """Get a specific resource."""
+    service = MyResourceService(db)
+    resource = service.get_by_id(resource_id)
+    if not resource:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Resource {resource_id} not found"
+        )
+    return resource
 ```
 
-3. **Register the router**:
+**Step 4: Register Router**
 
 ```python
 # api/v1/router.py
-from .endpoints import my_endpoint
+from .endpoints import my_resource
 
 router.include_router(
-    my_endpoint.router,
-    prefix="/my-resource",
-    tags=["My Resource"]
+    my_resource.router,
+    prefix="/my-resources",
+    tags=["My Resources"]
 )
 ```
 
-### Adding a Repository
+### Adding a Database Model
 
 ```python
-# db/repositories/my_repository.py
-from typing import List, Optional
-from uuid import UUID
-from sqlalchemy.orm import Session
+# db/models/my_resource.py
+from sqlalchemy import Column, String, Text, DateTime, Boolean
+from sqlalchemy.dialects.postgresql import UUID
+from datetime import datetime
+import uuid
 
-from .base import BaseRepository
-from db.models.my_model import MyModel
-from core.exceptions import NotFoundError
+from db.base import Base
 
-class MyRepository(BaseRepository[MyModel]):
-    def __init__(self, db: Session):
-        super().__init__(db, MyModel)
-    
-    def find_by_status(self, status: str) -> List[MyModel]:
-        return self.db.query(MyModel).filter(
-            MyModel.status == status
-        ).all()
+class MyResource(Base):
+    __tablename__ = "my_resources"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    is_deleted = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<MyResource(id={self.id}, name={self.name})>"
 ```
 
 ### Error Handling
 
+Use the built-in exceptions:
+
 ```python
 from core.exceptions import NotFoundError, ValidationError, AuthorizationError
 
-# Raise exceptions - middleware handles the response
+# These are automatically converted to proper HTTP responses
 if not resource:
     raise NotFoundError(f"Resource {uuid} not found")
 
-if not valid:
-    raise ValidationError("Invalid data provided")
+if not valid_data:
+    raise ValidationError("Data validation failed")
 
 if not authorized:
-    raise AuthorizationError("Not authorized to access this resource")
+    raise AuthorizationError("Access denied")
 ```
 
 ---
 
-## Frontend Development
+## 5. Frontend Development
 
-### Making API Calls
-
-Use the type-safe API client:
+### Using the API Client
 
 ```typescript
-// Import the service
-import { diaryApi } from '@/api/services';
+// services/api/myResourceApi.ts
+import { apiClient } from './client';
 
-// In a component
-const MyComponent = () => {
-  const [entries, setEntries] = useState<DiaryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+export interface MyResource {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+}
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const data = await diaryApi.getAll();
-        setEntries(data);
-      } catch (error) {
-        console.error('Failed to load entries:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, []);
+export const myResourceApi = {
+  list: () => apiClient.get<MyResource[]>('/my-resources'),
+  
+  get: (id: string) => apiClient.get<MyResource>(`/my-resources/${id}`),
+  
+  create: (data: { name: string; description?: string }) => 
+    apiClient.post<MyResource>('/my-resources', data),
+};
+```
 
-  // ...
+### Using React Query
+
+```tsx
+// pages/MyResourcePage.tsx
+import React from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { myResourceApi } from '@/services/api/myResourceApi';
+
+const MyResourcePage: React.FC = () => {
+  const queryClient = useQueryClient();
+  
+  // Fetch resources
+  const { data: resources, isLoading, error } = useQuery({
+    queryKey: ['my-resources'],
+    queryFn: myResourceApi.list,
+  });
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: myResourceApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-resources'] });
+    },
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error loading resources</div>;
+
+  return (
+    <div>
+      <h1>My Resources</h1>
+      <ul>
+        {resources?.map((r) => (
+          <li key={r.id}>{r.name}</li>
+        ))}
+      </ul>
+      <button onClick={() => createMutation.mutate({ name: 'New Resource' })}>
+        Add Resource
+      </button>
+    </div>
+  );
 };
 ```
 
 ### Using Custom Hooks
 
 ```typescript
-// useApi hook for simple cases
-import { useApi } from '@/hooks';
-import { diaryApi } from '@/api/services';
+// hooks/useAuth.ts
+import { useAuthContext } from '@/contexts/AuthContext';
 
-const MyComponent = () => {
-  const { data, isLoading, error, execute } = useApi(
-    () => diaryApi.getAll(),
-    { immediate: true }
-  );
-
-  if (isLoading) return <Loading />;
-  if (error) return <Error message={error.message} />;
+export const useAuth = () => {
+  const context = useAuthContext();
   
-  return <DiaryList entries={data} />;
-};
-```
-
-```typescript
-// useChat hook for symptom checker
-import { useChat } from '@/hooks';
-
-const ChatComponent = () => {
-  const { 
-    messages, 
-    isConnected, 
-    sendMessage,
-    isSending 
-  } = useChat({
-    patientUuid: 'xxx-xxx-xxx',
-    autoConnect: true
-  });
-
-  const handleSend = (content: string) => {
-    sendMessage(content, 'text');
+  return {
+    isAuthenticated: context.isAuthenticated,
+    user: context.user,
+    login: context.login,
+    logout: context.logout,
+    isLoading: context.isLoading,
   };
-
-  // ...
 };
 ```
 
-### Authentication
-
-```typescript
-// Use the auth context
-import { useAuthContext } from '@/context';
-
-const MyComponent = () => {
-  const { 
-    isAuthenticated, 
-    user, 
-    login, 
-    logout,
-    isLoading 
-  } = useAuthContext();
-
-  const handleLogin = async (email: string, password: string) => {
-    const success = await login({ email, password });
-    if (success) {
-      navigate('/dashboard');
-    }
-  };
-
-  // ...
-};
-```
-
-### Error Boundaries
-
-Wrap components with error boundaries:
+### Using the Theme
 
 ```tsx
-import { ErrorBoundary } from '@/components/common';
+import { useThemeMode, DarkModeToggle } from '@oncolife/ui-components';
 
-const App = () => (
-  <ErrorBoundary
-    onError={(error, info) => console.error(error, info)}
-    showDetails={process.env.NODE_ENV === 'development'}
-  >
-    <Router>
-      {/* Your app */}
-    </Router>
-  </ErrorBoundary>
-);
+const MyComponent = () => {
+  const { isDark, toggleTheme } = useThemeMode();
+
+  return (
+    <div style={{ background: isDark ? '#1E293B' : '#F5F7FA' }}>
+      <h1>Current mode: {isDark ? 'Dark' : 'Light'}</h1>
+      <DarkModeToggle variant="pill" />
+    </div>
+  );
+};
 ```
 
 ---
 
-## Patient Onboarding
+## 6. Database Operations
 
-### Overview
-
-The Patient Onboarding system is a zero-friction registration flow where:
-1. **Clinic sends fax** → Patient doesn't do anything
-2. **System creates account** → Automatic via Cognito
-3. **Patient receives email** → Login credentials sent
-4. **First login wizard** → Password, acknowledgement, terms, reminders
-
-### Architecture
-
-```
-Clinic Fax → Sinch → Webhook → S3 → Textract → DB → Cognito → SES/SNS
-```
-
-### Key Services
-
-| Service | File | Purpose |
-|---------|------|---------|
-| `FaxService` | `services/fax_service.py` | Receive webhook, upload to S3 |
-| `OCRService` | `services/ocr_service.py` | AWS Textract processing |
-| `NotificationService` | `services/notification_service.py` | Email/SMS via SES/SNS |
-| `OnboardingService` | `services/onboarding_service.py` | Main orchestration |
-
-### Testing Onboarding Locally
-
-#### 1. Create a Manual Referral (No Fax Needed)
+### Running Migrations
 
 ```bash
-# First, get an auth token
-TOKEN=$(curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email": "admin@oncolife.com", "password": "password"}' \
-  | jq -r '.tokens.access_token')
+cd apps/patient-platform/patient-api/src
 
-# Create a manual referral
-curl -X POST http://localhost:8000/api/v1/onboarding/referral/manual \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "first_name": "John",
-    "last_name": "Doe",
-    "email": "john.doe@example.com",
-    "phone": "+15031234567",
-    "dob": "1960-05-15",
-    "cancer_type": "Breast Cancer",
-    "physician_name": "Dr. Smith",
-    "send_welcome": false
-  }'
+# Create a new migration
+alembic revision --autogenerate -m "Add my_resources table"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback one migration
+alembic downgrade -1
 ```
 
-#### 2. Simulate a Fax Webhook (Sinch Format)
+### Direct Table Creation (Development)
+
+```python
+# Quick table creation for development
+from db.base import Base
+from db.session import engine
+from db.models import *  # Import all models
+
+Base.metadata.create_all(bind=engine)
+print("Tables created!")
+```
+
+### Database Console
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/onboarding/webhook/fax/sinch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "faxId": "test-123",
-    "fromNumber": "+15551234567",
-    "toNumber": "+18001234567",
-    "documentUrl": "https://example.com/test.pdf",
-    "pages": 3
-  }'
-```
+# Connect to local PostgreSQL
+docker exec -it oncolife-postgres psql -U oncolife_admin -d oncolife_patient
 
-#### 3. Check Onboarding Status
-
-```bash
-curl http://localhost:8000/api/v1/onboarding/status \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Configuring Fax Provider (Sinch)
-
-1. Log into Sinch Dashboard
-2. Create a new fax number
-3. Configure webhook URL:
-   ```
-   https://api.oncolife.com/api/v1/onboarding/webhook/fax/sinch
-   ```
-4. Set webhook secret (same as `FAX_WEBHOOK_SECRET` in `.env`)
-5. Enable "fax.received" event
-
-### Required AWS Permissions
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject"
-      ],
-      "Resource": "arn:aws:s3:::oncolife-referrals/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "textract:AnalyzeDocument",
-        "textract:StartDocumentAnalysis",
-        "textract:GetDocumentAnalysis"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ses:SendEmail",
-        "ses:SendRawEmail"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sns:Publish"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "cognito-idp:AdminCreateUser",
-        "cognito-idp:AdminDeleteUser"
-      ],
-      "Resource": "arn:aws:cognito-idp:*:*:userpool/*"
-    }
-  ]
-}
-```
-
-### Frontend Onboarding Wizard
-
-The frontend has a multi-step wizard at `/onboarding`:
-
-```typescript
-// pages/OnboardingPage/OnboardingWizard.tsx
-
-// Step 1: Password Reset (handled by Cognito challenge)
-// Step 2: Acknowledgement - Medical disclaimer
-// Step 3: Terms & Privacy - Legal acceptance  
-// Step 4: Reminder Setup - Email/SMS preferences
-```
-
-To use the onboarding API:
-
-```typescript
-import { onboardingApi } from '@/api/services';
-
-// Check status
-const status = await onboardingApi.getOnboardingStatus();
-
-// Complete acknowledgement
-await onboardingApi.completeAcknowledgementStep({
-  acknowledged: true,
-  acknowledgement_text: "I understand..."
-});
-
-// Complete terms
-await onboardingApi.completeTermsStep({
-  terms_accepted: true,
-  privacy_accepted: true,
-  hipaa_acknowledged: true
-});
-
-// Complete reminders
-await onboardingApi.completeReminderStep({
-  channel: 'email',
-  reminder_time: '09:00'
-});
-```
-
-### Database Migrations
-
-Run the onboarding tables migration:
-
-```sql
--- See apps/patient-platform/patient-api/docs/ONBOARDING.md for full SQL
-CREATE TABLE patient_referrals (...);
-CREATE TABLE patient_onboarding_status (...);
-CREATE TABLE referral_documents (...);
-CREATE TABLE onboarding_notification_log (...);
+# Common commands:
+\dt                    # List tables
+\d table_name          # Describe table
+SELECT * FROM users;   # Query
+\q                     # Quit
 ```
 
 ---
 
-## Code Patterns
+## 7. Testing
+
+### Backend Tests
+
+```bash
+cd apps/patient-platform/patient-api
+
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=src --cov-report=html
+
+# Run specific test file
+pytest tests/test_auth.py -v
+
+# Run tests matching a pattern
+pytest -k "test_login" -v
+```
+
+### Frontend Tests
+
+```bash
+cd apps/patient-platform/patient-web
+
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Run in watch mode
+npm run test:watch
+```
+
+### API Testing with cURL
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Login (if using mock auth)
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "password": "password123"}'
+
+# Authenticated request
+curl http://localhost:8000/api/v1/profile \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## 8. Code Patterns
 
 ### Backend Patterns
 
-| Pattern | Usage |
-|---------|-------|
-| **Repository** | Abstract database operations |
-| **Service** | Business logic and orchestration |
-| **Dependency Injection** | FastAPI Depends() for DB, auth |
-| **Pydantic Models** | Request/response validation |
+| Pattern | Location | Purpose |
+|---------|----------|---------|
+| Repository | `db/repositories/` | Abstract database queries |
+| Service | `services/` | Business logic |
+| Dependency Injection | FastAPI `Depends()` | Testable dependencies |
+| Pydantic Models | `api/v1/endpoints/schemas/` | Request/response validation |
 
 ### Frontend Patterns
 
-| Pattern | Usage |
-|---------|-------|
-| **Custom Hooks** | Encapsulate stateful logic |
-| **Context API** | Global state (auth, theme) |
-| **Error Boundaries** | Graceful error handling |
-| **Type-safe API** | Typed API calls and responses |
+| Pattern | Location | Purpose |
+|---------|----------|---------|
+| Custom Hooks | `hooks/` | Reusable stateful logic |
+| Context API | `contexts/` | Global state (auth, theme) |
+| Error Boundaries | `@oncolife/ui-components` | Graceful error handling |
+| API Client | `services/` | Type-safe API calls |
 
 ### Naming Conventions
 
@@ -650,126 +647,89 @@ CREATE TABLE onboarding_notification_log (...);
 | Python functions | snake_case | `get_patient()` |
 | TypeScript files | camelCase | `authService.ts` |
 | React components | PascalCase | `ErrorBoundary.tsx` |
-| CSS files | Same as component | `ErrorBoundary.css` |
+| CSS/styled files | Same as component | `ErrorBoundary.styles.ts` |
 
 ---
 
-## Testing
-
-### Backend Tests
-
-```bash
-cd apps/patient-platform/patient-api
-pytest
-
-# With coverage
-pytest --cov=src --cov-report=html
-
-# Run specific tests
-pytest tests/test_auth.py -v
-```
-
-### Frontend Tests
-
-```bash
-cd apps/patient-platform/patient-web
-npm test
-
-# With coverage
-npm run test:coverage
-```
-
----
-
-## Git Workflow
-
-### Branch Naming
-
-```
-feature/add-symptom-module
-bugfix/fix-login-error
-hotfix/security-patch
-refactor/modernize-api-client
-```
-
-### Commit Messages
-
-```
-feat: Add mouth sores symptom module
-fix: Resolve authentication timeout issue
-refactor: Migrate to type-safe API client
-docs: Update developer guide
-test: Add unit tests for ChatService
-```
-
-### Pull Request Process
-
-1. Create feature branch from `main`
-2. Make changes and commit
-3. Push branch and create PR
-4. Request code review
-5. Address feedback
-6. Merge after approval
-
----
-
-## Troubleshooting
+## 9. Troubleshooting
 
 ### Common Issues
 
 #### "Module not found" in Python
 
 ```bash
-# Make sure virtual environment is activated
-source venv/bin/activate  # or venv\Scripts\activate
+# Ensure virtual environment is activated
+source venv/bin/activate  # Mac/Linux
+.\venv\Scripts\Activate.ps1  # Windows PowerShell
 
 # Reinstall dependencies
 pip install -r requirements.txt
 ```
 
-#### Database connection errors
+#### Database Connection Error
 
 ```bash
 # Check if PostgreSQL is running
 docker-compose ps
 
-# Check connection
-psql -h localhost -U oncolife_admin -d oncolife_patient
+# Restart database
+docker-compose restart postgres
+
+# Reset database (loses data!)
+docker-compose down -v
+docker-compose up -d
 ```
 
-#### CORS errors in browser
+#### CORS Errors in Browser
 
-Check that `CORS_ORIGINS` in `.env` includes your frontend URL:
+Check `.env` includes your frontend URL:
 ```env
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:5174
 ```
 
-#### Cognito authentication errors
-
-1. Verify AWS credentials in `.env`
-2. Check Cognito User Pool settings in AWS Console
-3. Ensure client secret is correct
-
-### Logs
+#### Port Already in Use
 
 ```bash
-# API logs
-docker-compose logs -f patient-api
+# Find process using port
+lsof -i :8000  # Mac/Linux
+netstat -ano | findstr :8000  # Windows
 
-# Or if running locally
+# Kill process
+kill -9 PID  # Mac/Linux
+taskkill /PID PID /F  # Windows
+```
+
+#### Frontend Build Errors
+
+```bash
+# Clear cache and reinstall
+rm -rf node_modules package-lock.json
+npm install
+
+# Clear Vite cache
+rm -rf node_modules/.vite
+npm run dev
+```
+
+### Viewing Logs
+
+```bash
+# Docker logs
+docker-compose logs -f patient-api
+docker-compose logs -f patient-web
+
+# API logs (manual run)
 tail -f logs/app.log
 ```
 
----
+### Getting Help
 
-## Need Help?
-
-- Check the [Architecture Guide](ARCHITECTURE.md)
-- Review the [Features Documentation](../apps/patient-platform/patient-api/docs/FEATURES.md)
-- Look at existing code for examples
-- Ask in the team Slack channel
+1. Check [Architecture Guide](ARCHITECTURE.md) for system overview
+2. Check [Deployment Guide](STEP_BY_STEP_DEPLOYMENT.md) for AWS setup
+3. Review existing code for patterns
+4. Check CloudWatch Logs (production)
 
 ---
 
+*Document Version: 2.0*
 *Last Updated: January 2026*
-

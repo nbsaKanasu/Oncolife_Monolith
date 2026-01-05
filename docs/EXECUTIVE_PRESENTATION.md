@@ -201,69 +201,199 @@ A comprehensive digital health platform that enables oncology clinics to remotel
 
 ## 5. Architecture - Old vs New
 
-### OLD Architecture (Before)
+### Overview: What Changed
+
+| Aspect | OLD (Before) | NEW (After) |
+|--------|--------------|-------------|
+| **Structure** | Single monolithic `main.py` | Layered modular architecture |
+| **Lines of Code** | 1,500+ in one file | Split across 50+ focused files |
+| **Testability** | Very difficult | Easy to unit test |
+| **Team Scaling** | Single developer bottleneck | Multiple devs work in parallel |
+| **Deployment** | Manual, error-prone | Dockerized, scripted |
+| **Configuration** | Hardcoded secrets | Environment-based, AWS Secrets Manager |
+| **Frontend** | Basic HTML/CSS | React + TypeScript + Material UI |
+
+---
+
+### OLD Architecture (Before) - Detailed View
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    MONOLITHIC STRUCTURE                      │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│   main.py (1500+ lines)                                     │
-│   ├── All routes mixed together                             │
-│   ├── Database queries in route handlers                    │
-│   ├── Business logic scattered                              │
-│   ├── Hardcoded configurations                              │
-│   └── Single database connection                            │
-│                                                             │
-│   Problems:                                                  │
-│   ❌ Hard to test individual features                        │
-│   ❌ One change could break unrelated features               │
-│   ❌ Difficult for multiple developers                       │
-│   ❌ No separation of concerns                               │
-│   ❌ Secrets in code                                         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        OLD MONOLITHIC STRUCTURE                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   📁 project/                                                           │
+│   │                                                                     │
+│   ├── main.py (1,500+ lines!) ─────────────────────────────────────────│
+│   │   │                                                                 │
+│   │   ├── @app.post("/login")         # Auth routes                    │
+│   │   │   └── db.query(User).filter() # DB query inside handler!       │
+│   │   │                                                                 │
+│   │   ├── @app.post("/chat")          # Chat routes                    │
+│   │   │   └── if symptom == "fever":  # Business logic inside!         │
+│   │   │       └── return {"triage": "urgent"}                          │
+│   │   │                                                                 │
+│   │   ├── @app.get("/diary")          # Diary routes                   │
+│   │   │   └── db.query(Diary)...      # More DB in handler!            │
+│   │   │                                                                 │
+│   │   └── DATABASE_URL = "postgres://user:pass@..."  # SECRETS IN CODE!│
+│   │                                                                     │
+│   ├── models.py (all models in one file)                               │
+│   │                                                                     │
+│   └── symptom_rules/ (inconsistent structure)                           │
+│       ├── fever.py      # Different format                             │
+│       ├── nausea.py     # Different format                             │
+│       └── ...           # No standard interface                        │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ❌ PROBLEMS                                                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│  1. main.py = "God file" - too much responsibility                      │
+│  2. Database queries in HTTP handlers - can't unit test                 │
+│  3. Business logic mixed with routing - no reusability                  │
+│  4. Secrets hardcoded - security risk                                   │
+│  5. No dependency injection - tight coupling                            │
+│  6. No service layer - business rules scattered                         │
+│  7. Inconsistent symptom modules - hard to maintain                     │
+│  8. No error handling strategy - unpredictable failures                 │
+│  9. No logging framework - debugging nightmare                          │
+│ 10. Frontend = basic HTML - poor user experience                        │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### NEW Architecture (After)
+---
+
+### NEW Architecture (After) - Detailed View
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                   LAYERED ARCHITECTURE                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │              API Layer (api/v1/endpoints/)          │   │
-│   │   auth.py │ chat.py │ diary.py │ education.py │ ... │   │
-│   │   • Request/Response handling                        │   │
-│   │   • Input validation                                 │   │
-│   │   • HTTP status codes                                │   │
-│   └─────────────────────────────────────────────────────┘   │
-│                          ↓                                   │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │              Service Layer (services/)               │   │
-│   │   AuthService │ DiaryService │ EducationService │ ...│   │
-│   │   • Business logic                                   │   │
-│   │   • Orchestration                                    │   │
-│   │   • External service integration                     │   │
-│   └─────────────────────────────────────────────────────┘   │
-│                          ↓                                   │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │           Repository Layer (db/repositories/)        │   │
-│   │   DiaryRepository │ SummaryRepository │ ...          │   │
-│   │   • Data access logic                                │   │
-│   │   • Query building                                   │   │
-│   │   • CRUD operations                                  │   │
-│   └─────────────────────────────────────────────────────┘   │
-│                          ↓                                   │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │              Model Layer (db/models/)                │   │
-│   │   • SQLAlchemy ORM models                            │   │
-│   │   • Schema definitions                               │   │
-│   └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         NEW LAYERED ARCHITECTURE                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   📁 apps/patient-platform/patient-api/src/                             │
+│   │                                                                     │
+│   ├── 🌐 API LAYER (api/v1/endpoints/)                                  │
+│   │   │   Purpose: HTTP handling ONLY                                   │
+│   │   │                                                                 │
+│   │   ├── auth.py         # /api/v1/auth/*                             │
+│   │   ├── chat.py         # /api/v1/chat/*                             │
+│   │   ├── diary.py        # /api/v1/diary/*                            │
+│   │   ├── education.py    # /api/v1/education/*                        │
+│   │   ├── onboarding.py   # /api/v1/onboarding/*                       │
+│   │   ├── profile.py      # /api/v1/profile/*                          │
+│   │   ├── questions.py    # /api/v1/questions/*                        │
+│   │   └── summaries.py    # /api/v1/summaries/*                        │
+│   │                       ↓                                             │
+│   ├── 🔧 SERVICE LAYER (services/)                                      │
+│   │   │   Purpose: Business logic & orchestration                       │
+│   │   │                                                                 │
+│   │   ├── auth_service.py        # Login, signup, token handling       │
+│   │   ├── chat_service.py        # Conversation management             │
+│   │   ├── diary_service.py       # Diary operations                    │
+│   │   ├── education_service.py   # Education delivery                  │
+│   │   ├── fax_service.py         # Fax webhook handling                │
+│   │   ├── notification_service.py # Email/SMS via SES/SNS             │
+│   │   ├── ocr_service.py         # AWS Textract processing             │
+│   │   ├── onboarding_service.py  # Patient onboarding flow             │
+│   │   └── summary_service.py     # Summary generation                  │
+│   │                       ↓                                             │
+│   ├── 💾 REPOSITORY LAYER (db/repositories/)                            │
+│   │   │   Purpose: Data access abstraction                              │
+│   │   │                                                                 │
+│   │   ├── base.py              # Generic CRUD operations               │
+│   │   ├── diary_repository.py  # Diary-specific queries                │
+│   │   ├── summary_repository.py # Summary queries                      │
+│   │   └── question_repository.py # Question queries                    │
+│   │                       ↓                                             │
+│   ├── 📊 MODEL LAYER (db/models/)                                       │
+│   │   │   Purpose: Database schema definitions                          │
+│   │   │                                                                 │
+│   │   ├── patient.py           # Patient model                         │
+│   │   ├── diary.py             # DiaryEntry model                      │
+│   │   ├── education.py         # Education models                      │
+│   │   ├── onboarding.py        # Onboarding models                     │
+│   │   └── symptom_time_series.py # Time series for analytics           │
+│   │                                                                     │
+│   ├── 🎯 SYMPTOM CHECKER (routers/chat/symptom_checker/)                │
+│   │   │   Purpose: Rule-based triage engine                             │
+│   │   │                                                                 │
+│   │   ├── symptom_engine.py    # Conversation state machine            │
+│   │   ├── rule_engine.py       # Triage rules processor                │
+│   │   ├── constants.py         # Triage levels, categories             │
+│   │   └── symptom_definitions.py # All 27 symptom modules              │
+│   │                                                                     │
+│   └── ⚙️ CORE (core/)                                                   │
+│       │   Purpose: Cross-cutting concerns                               │
+│       │                                                                 │
+│       ├── config.py            # Environment-based settings            │
+│       ├── logging.py           # Structured JSON logging               │
+│       ├── exceptions.py        # Custom exception types                │
+│       └── middleware.py        # Error handling, CORS, auth            │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│   📁 apps/patient-platform/patient-web/src/ (REACT FRONTEND)            │
+│   │                                                                     │
+│   ├── components/              # Reusable UI components                │
+│   │   ├── chat/               # SymptomChat, MessageBubble             │
+│   │   └── Layout.tsx          # Responsive sidebar/bottom nav          │
+│   ├── pages/                   # Page components                       │
+│   │   ├── LoginPage/          # Branded login                          │
+│   │   ├── ChatPage/           # Symptom checker                        │
+│   │   ├── DiaryPage/          # Patient diary                          │
+│   │   └── EducationPage/      # Education resources                    │
+│   ├── services/                # API client                            │
+│   ├── hooks/                   # Custom React hooks                    │
+│   └── contexts/                # Auth, Theme contexts                  │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ✅ BENEFITS                                                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│  1. Single Responsibility - each file has one job                       │
+│  2. Testable - mock dependencies, test in isolation                     │
+│  3. Scalable - add features without touching existing code              │
+│  4. Secure - secrets in AWS Secrets Manager                             │
+│  5. Maintainable - find code quickly, understand easily                 │
+│  6. Deployable - Docker containers, automated scripts                   │
+│  7. Observable - structured logging, CloudWatch integration             │
+│  8. Modern Frontend - React, TypeScript, Material UI, Dark Mode         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+### Side-by-Side Comparison
+
+#### Code Organization
+
+| Component | OLD | NEW |
+|-----------|-----|-----|
+| **Auth Login** | `main.py` lines 50-120 | `api/v1/endpoints/auth.py` + `services/auth_service.py` |
+| **Symptom Chat** | `main.py` lines 200-500 | `routers/chat/` + `services/chat_service.py` |
+| **Diary CRUD** | `main.py` lines 600-750 | `api/v1/endpoints/diary.py` + `repositories/diary_repository.py` |
+| **Education** | Not implemented | `api/v1/endpoints/education.py` + `services/education_service.py` |
+| **Onboarding** | Not implemented | Full fax-to-app flow with OCR |
+
+#### Configuration Management
+
+| Aspect | OLD | NEW |
+|--------|-----|-----|
+| **Database URL** | `DATABASE_URL = "postgres://user:pass@..."` in code | `PATIENT_DB_HOST`, `PATIENT_DB_PASSWORD` from env |
+| **AWS Keys** | Hardcoded or missing | AWS IAM roles + Secrets Manager |
+| **CORS Origins** | Hardcoded `["*"]` | `CORS_ORIGINS` environment variable |
+| **Cognito** | Not used | Full Cognito integration |
+
+#### Symptom Checker Evolution
+
+| Feature | OLD | NEW |
+|---------|-----|-----|
+| **Symptom Modules** | 27 files, different formats | 27 modules, standardized `SymptomModule` class |
+| **Triage Logic** | If/else in chat handler | `RuleEngine` with clear rules |
+| **Conversation State** | None/session-based | `ConversationState` dataclass |
+| **UX Flow** | Simple Q&A | Disclaimer → Emergency Check → Grouped Selection → Ruby Chat → Summary |
+| **Education** | None | Auto-triggered post-session with PDFs |
+| **Diary** | Manual entry only | Auto-populates from sessions |
+
+---
 
 ### What Changed in Symptom Checker
 
@@ -275,6 +405,8 @@ A comprehensive digital health platform that enables oncology clinics to remotel
 | **Triage Logic** | Scattered | Centralized in service |
 | **Education Delivery** | Not integrated | Auto-triggers post-session |
 | **Diary Integration** | Manual | Auto-populates from sessions |
+| **UX Flow** | All symptoms at once | 6-phase guided experience |
+| **Emergency Handling** | Mixed with regular | Dedicated emergency check screen |
 
 ---
 
