@@ -5,7 +5,9 @@
  * - CSS Reset
  * - Source Sans Pro font import
  * - Base typography
+ * - Animation keyframes
  * - Utility classes
+ * - Dark mode support
  * - Responsive helpers
  */
 
@@ -36,17 +38,17 @@ export const GlobalStyles = createGlobalStyle`
     --severity-moderate: ${sharedTokens.severity.moderate};
     --severity-mild: ${sharedTokens.severity.mild};
     
-    /* Gray Scale */
-    --gray-50: ${sharedTokens.gray[50]};
-    --gray-100: ${sharedTokens.gray[100]};
-    --gray-200: ${sharedTokens.gray[200]};
-    --gray-300: ${sharedTokens.gray[300]};
-    --gray-400: ${sharedTokens.gray[400]};
-    --gray-500: ${sharedTokens.gray[500]};
-    --gray-600: ${sharedTokens.gray[600]};
-    --gray-700: ${sharedTokens.gray[700]};
-    --gray-800: ${sharedTokens.gray[800]};
-    --gray-900: ${sharedTokens.gray[900]};
+    /* Light Mode Gray Scale */
+    --gray-50: ${sharedTokens.grayLight[50]};
+    --gray-100: ${sharedTokens.grayLight[100]};
+    --gray-200: ${sharedTokens.grayLight[200]};
+    --gray-300: ${sharedTokens.grayLight[300]};
+    --gray-400: ${sharedTokens.grayLight[400]};
+    --gray-500: ${sharedTokens.grayLight[500]};
+    --gray-600: ${sharedTokens.grayLight[600]};
+    --gray-700: ${sharedTokens.grayLight[700]};
+    --gray-800: ${sharedTokens.grayLight[800]};
+    --gray-900: ${sharedTokens.grayLight[900]};
     
     /* Shadows */
     --shadow-sm: ${sharedTokens.shadows.sm};
@@ -62,12 +64,217 @@ export const GlobalStyles = createGlobalStyle`
     --radius-xl: ${sharedTokens.borderRadius.xl}px;
     --radius-full: ${sharedTokens.borderRadius.full}px;
     
+    /* Transitions */
+    --transition-fast: ${sharedTokens.transitions.fast};
+    --transition-normal: ${sharedTokens.transitions.normal};
+    --transition-slow: ${sharedTokens.transitions.slow};
+    --transition-page-enter: ${sharedTokens.transitions.pageEnter};
+    --transition-page-exit: ${sharedTokens.transitions.pageExit};
+    
     /* Safe Areas (for mobile notch/home indicator) */
     --safe-area-inset-top: env(safe-area-inset-top, 0px);
     --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
     --safe-area-inset-left: env(safe-area-inset-left, 0px);
     --safe-area-inset-right: env(safe-area-inset-right, 0px);
   }
+
+  /* Dark Mode Variables */
+  [data-theme="dark"] {
+    --gray-50: ${sharedTokens.grayDark[50]};
+    --gray-100: ${sharedTokens.grayDark[100]};
+    --gray-200: ${sharedTokens.grayDark[200]};
+    --gray-300: ${sharedTokens.grayDark[300]};
+    --gray-400: ${sharedTokens.grayDark[400]};
+    --gray-500: ${sharedTokens.grayDark[500]};
+    --gray-600: ${sharedTokens.grayDark[600]};
+    --gray-700: ${sharedTokens.grayDark[700]};
+    --gray-800: ${sharedTokens.grayDark[800]};
+    --gray-900: ${sharedTokens.grayDark[900]};
+    
+    --shadow-sm: ${sharedTokens.shadowsDark.sm};
+    --shadow-md: ${sharedTokens.shadowsDark.md};
+    --shadow-lg: ${sharedTokens.shadowsDark.lg};
+    --shadow-xl: ${sharedTokens.shadowsDark.xl};
+  }
+
+  /* ==========================================================================
+     ANIMATION KEYFRAMES
+     ========================================================================== */
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInLeft {
+    from {
+      opacity: 0;
+      transform: translateX(-30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  /* ==========================================================================
+     ANIMATION UTILITY CLASSES
+     ========================================================================== */
+
+  .animate-fadeIn {
+    animation: fadeIn var(--transition-page-enter) forwards;
+  }
+
+  .animate-fadeInUp {
+    animation: fadeInUp var(--transition-page-enter) forwards;
+  }
+
+  .animate-fadeInDown {
+    animation: fadeInDown var(--transition-page-enter) forwards;
+  }
+
+  .animate-slideInLeft {
+    animation: slideInLeft var(--transition-page-enter) forwards;
+  }
+
+  .animate-slideInRight {
+    animation: slideInRight var(--transition-page-enter) forwards;
+  }
+
+  .animate-scaleIn {
+    animation: scaleIn var(--transition-page-enter) forwards;
+  }
+
+  .animate-slideUp {
+    animation: slideUp var(--transition-page-enter) forwards;
+  }
+
+  .animate-pulse {
+    animation: pulse 2s infinite;
+  }
+
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  .animate-bounce {
+    animation: bounce 1s infinite;
+  }
+
+  /* Staggered children animations */
+  .animate-stagger > * {
+    opacity: 0;
+    animation: fadeInUp var(--transition-page-enter) forwards;
+  }
+
+  .animate-stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .animate-stagger > *:nth-child(2) { animation-delay: 50ms; }
+  .animate-stagger > *:nth-child(3) { animation-delay: 100ms; }
+  .animate-stagger > *:nth-child(4) { animation-delay: 150ms; }
+  .animate-stagger > *:nth-child(5) { animation-delay: 200ms; }
+  .animate-stagger > *:nth-child(6) { animation-delay: 250ms; }
+  .animate-stagger > *:nth-child(7) { animation-delay: 300ms; }
+  .animate-stagger > *:nth-child(8) { animation-delay: 350ms; }
+
+  /* Page transition container */
+  .page-transition-enter {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  .page-transition-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity var(--transition-page-enter), transform var(--transition-page-enter);
+  }
+
+  .page-transition-exit {
+    opacity: 1;
+  }
+
+  .page-transition-exit-active {
+    opacity: 0;
+    transition: opacity var(--transition-page-exit);
+  }
+
+  /* ==========================================================================
+     BASE STYLES
+     ========================================================================== */
 
   html {
     font-size: 16px;
@@ -83,12 +290,13 @@ export const GlobalStyles = createGlobalStyle`
     font-size: 1rem;
     font-weight: 400;
     line-height: 1.6;
-    color: ${sharedTokens.gray[800]};
-    background-color: ${sharedTokens.gray[50]};
+    color: var(--gray-800);
+    background-color: var(--gray-50);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     height: 100%;
     overflow-x: hidden;
+    transition: background-color var(--transition-normal), color var(--transition-normal);
   }
 
   #root {
@@ -102,7 +310,8 @@ export const GlobalStyles = createGlobalStyle`
     font-weight: 600;
     line-height: 1.3;
     margin-bottom: 0.5em;
-    color: ${sharedTokens.gray[900]};
+    color: var(--gray-900);
+    transition: color var(--transition-normal);
   }
 
   h1 { font-size: 2rem; font-weight: 700; }
@@ -114,13 +323,14 @@ export const GlobalStyles = createGlobalStyle`
 
   p {
     margin-bottom: 1rem;
-    color: ${sharedTokens.gray[700]};
+    color: var(--gray-700);
+    transition: color var(--transition-normal);
   }
 
   a {
     color: inherit;
     text-decoration: none;
-    transition: color 0.2s ease;
+    transition: color var(--transition-fast);
   }
 
   /* Interactive Elements */
@@ -134,6 +344,7 @@ export const GlobalStyles = createGlobalStyle`
     border: none;
     outline: none;
     background: transparent;
+    transition: all var(--transition-fast);
   }
 
   /* Touch-friendly targets */
@@ -175,6 +386,10 @@ export const GlobalStyles = createGlobalStyle`
     color: inherit;
   }
 
+  [data-theme="dark"] ::selection {
+    background-color: rgba(77, 182, 172, 0.3);
+  }
+
   /* Scrollbar Styling */
   ::-webkit-scrollbar {
     width: 8px;
@@ -182,20 +397,23 @@ export const GlobalStyles = createGlobalStyle`
   }
 
   ::-webkit-scrollbar-track {
-    background: ${sharedTokens.gray[100]};
+    background: var(--gray-100);
     border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: ${sharedTokens.gray[300]};
+    background: var(--gray-300);
     border-radius: 4px;
     
     &:hover {
-      background: ${sharedTokens.gray[400]};
+      background: var(--gray-400);
     }
   }
 
-  /* Utility Classes */
+  /* ==========================================================================
+     UTILITY CLASSES
+     ========================================================================== */
+
   .visually-hidden {
     position: absolute;
     width: 1px;
@@ -250,6 +468,29 @@ export const GlobalStyles = createGlobalStyle`
       display: none !important;
     }
   }
+
+  /* Skeleton Loading */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--gray-200) 25%,
+      var(--gray-100) 50%,
+      var(--gray-200) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Reduced Motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 `;
 
 // =============================================================================
@@ -290,6 +531,7 @@ export const Container = styled.div`
   height: 100vh;
   min-height: 0;
   background-color: var(--gray-50);
+  transition: background-color var(--transition-normal);
 `;
 
 export const Header = styled.header`
@@ -300,6 +542,12 @@ export const Header = styled.header`
   background-color: #FFFFFF;
   border-bottom: 1px solid var(--gray-200);
   box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+  
+  [data-theme="dark"] & {
+    background-color: var(--gray-100);
+    border-color: var(--gray-200);
+  }
   
   @media (min-width: 900px) {
     padding: 1.25rem 2rem;
@@ -344,6 +592,7 @@ export const PageHeader = styled.div`
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 2px solid var(--gray-200);
+  animation: fadeInDown var(--transition-page-enter) forwards;
   
   @media (min-width: 600px) {
     flex-direction: row;
@@ -391,6 +640,12 @@ export const Card = styled.div<CardProps>`
   width: 100%;
   display: flex;
   flex-direction: column;
+  animation: scaleIn var(--transition-page-enter) forwards;
+  transition: all var(--transition-normal);
+  
+  [data-theme="dark"] & {
+    background: rgba(30, 41, 59, 0.95);
+  }
   
   @media (min-width: 600px) {
     padding: 1.5rem;
@@ -452,4 +707,28 @@ export const Stack = styled(Flex)`
 
 export const Row = styled(Flex)`
   flex-direction: row;
+`;
+
+// =============================================================================
+// ANIMATED PAGE WRAPPER
+// =============================================================================
+
+export const AnimatedPage = styled.div<{ delay?: number }>`
+  animation: fadeInUp var(--transition-page-enter) forwards;
+  animation-delay: ${props => props.delay || 0}ms;
+  opacity: 0;
+`;
+
+export const StaggeredList = styled.div`
+  & > * {
+    opacity: 0;
+    animation: fadeInUp var(--transition-page-enter) forwards;
+  }
+  
+  & > *:nth-child(1) { animation-delay: 0ms; }
+  & > *:nth-child(2) { animation-delay: 50ms; }
+  & > *:nth-child(3) { animation-delay: 100ms; }
+  & > *:nth-child(4) { animation-delay: 150ms; }
+  & > *:nth-child(5) { animation-delay: 200ms; }
+  & > *:nth-child(6) { animation-delay: 250ms; }
 `;

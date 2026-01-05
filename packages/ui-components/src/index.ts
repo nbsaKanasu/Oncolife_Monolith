@@ -5,16 +5,30 @@
 // =============================================================================
 export { 
   patientTheme, 
+  patientThemeDark,
   doctorTheme,
+  doctorThemeDark,
+  createPatientTheme,
+  createDoctorTheme,
   patientColors,
   doctorColors,
   sharedTokens,
   breakpoints,
   getSeverityColor,
   getSeverityLabel,
+  animations,
+  animationClasses,
   theme, // Legacy theme for backward compatibility
 } from './styles/theme';
 export type { Theme } from './styles/theme';
+
+// =============================================================================
+// THEME CONTEXT (Dark Mode Support)
+// =============================================================================
+export { 
+  OncolifeThemeProvider, 
+  useThemeMode,
+} from './contexts/ThemeContext';
 
 // =============================================================================
 // GLOBAL STYLES (Styled Components)
@@ -36,6 +50,8 @@ export {
   Flex,
   Stack,
   Row,
+  AnimatedPage,
+  StaggeredList,
 } from './styles/GlobalStyles';
 
 // =============================================================================
@@ -60,3 +76,6 @@ export { default as SessionTimeoutModal } from './components/SessionTimeout/Sess
 
 // Error Boundary
 export { default as ErrorBoundary } from './components/ErrorBoundary';
+
+// Dark Mode Toggle
+export { default as DarkModeToggle, DarkModeToggle as DarkModeToggleComponent } from './components/DarkModeToggle';

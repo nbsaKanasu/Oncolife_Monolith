@@ -2,15 +2,20 @@
  * OncoLife - Ruby Patient Application
  * "Compassionate Care, Intelligent Triage"
  * 
- * Entry point with MUI ThemeProvider for consistent theming
+ * Entry point with:
+ * - OncoLife Theme Provider (with dark mode support)
+ * - Global Styles with animations
+ * - React Query for server state
  */
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ThemeProvider } from '@mui/material/styles'
-import CssBaseline from '@mui/material/CssBaseline'
-import { patientTheme } from '@oncolife/ui-components'
+import { 
+  OncolifeThemeProvider, 
+  GlobalStyles,
+  ErrorBoundary,
+} from '@oncolife/ui-components'
 import App from './App.tsx'
 
 // Configure React Query
@@ -26,11 +31,16 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider theme={patientTheme}>
-      <CssBaseline />
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </ThemeProvider>
+    <OncolifeThemeProvider 
+      appType="patient" 
+      storageKey="oncolife-patient-theme"
+    >
+      <GlobalStyles />
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </OncolifeThemeProvider>
   </StrictMode>,
 )

@@ -4,6 +4,8 @@
  * Responsive layout with:
  * - Desktop: Sidebar navigation
  * - Mobile: Bottom tab navigation
+ * - Dark mode toggle
+ * - Page transition animations
  */
 
 import React, { useState } from 'react';
@@ -35,10 +37,10 @@ import {
   LogOut,
   X
 } from 'lucide-react';
+import { DarkModeToggle, useThemeMode } from '@oncolife/ui-components';
 
 // Sidebar width
 const DRAWER_WIDTH = 260;
-const DRAWER_WIDTH_COLLAPSED = 72;
 
 // Navigation items
 const navItems = [
@@ -53,6 +55,7 @@ const Layout: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isDark } = useThemeMode();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
@@ -77,6 +80,7 @@ const Layout: React.FC = () => {
       flexDirection: 'column', 
       height: '100%',
       bgcolor: 'background.paper',
+      transition: 'background-color 0.3s ease',
     }}>
       {/* Logo Header */}
       <Box sx={{ 
@@ -84,24 +88,25 @@ const Layout: React.FC = () => {
         display: 'flex', 
         alignItems: 'center', 
         gap: 1.5,
-        borderBottom: `1px solid ${theme.palette.grey[200]}`,
+        borderBottom: `1px solid ${theme.palette.divider}`,
       }}>
         <Box
           sx={{
             width: 40,
             height: 40,
             borderRadius: 2,
-            bgcolor: theme.palette.primary.main,
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: 'white',
             fontSize: '1.25rem',
+            boxShadow: `0 4px 12px ${theme.palette.primary.main}40`,
           }}
         >
           💎
         </Box>
-        <Box>
+        <Box sx={{ flex: 1 }}>
           <Typography 
             variant="subtitle1" 
             fontWeight={700} 
@@ -134,15 +139,16 @@ const Layout: React.FC = () => {
         display: 'flex', 
         alignItems: 'center', 
         gap: 1.5,
-        borderBottom: `1px solid ${theme.palette.grey[200]}`,
+        borderBottom: `1px solid ${theme.palette.divider}`,
         cursor: 'pointer',
-        '&:hover': { bgcolor: theme.palette.grey[50] },
+        transition: 'background-color 0.2s ease',
+        '&:hover': { bgcolor: theme.palette.action.hover },
       }}
       onClick={() => handleNavigation('/profile')}
       >
         <Avatar 
           sx={{ 
-            bgcolor: theme.palette.secondary.main,
+            background: `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${theme.palette.secondary.dark} 100%)`,
             width: 44,
             height: 44,
           }}
@@ -187,18 +193,19 @@ const Layout: React.FC = () => {
                   sx={{
                     mx: 1,
                     borderRadius: 2,
-                    bgcolor: isActive ? `${theme.palette.primary.main}10` : 'transparent',
+                    bgcolor: isActive ? `${theme.palette.primary.main}15` : 'transparent',
                     color: isActive ? theme.palette.primary.main : theme.palette.text.primary,
+                    transition: 'all 0.2s ease',
                     '&:hover': {
                       bgcolor: isActive 
-                        ? `${theme.palette.primary.main}15` 
-                        : theme.palette.grey[100],
+                        ? `${theme.palette.primary.main}20` 
+                        : theme.palette.action.hover,
                     },
                   }}
                 >
                   <ListItemIcon sx={{ 
                     minWidth: 40,
-                    color: isActive ? theme.palette.primary.main : theme.palette.grey[500],
+                    color: isActive ? theme.palette.primary.main : theme.palette.text.secondary,
                   }}>
                     <Icon size={22} />
                   </ListItemIcon>
@@ -215,14 +222,31 @@ const Layout: React.FC = () => {
         </List>
       </Box>
 
-      {/* Logout */}
+      {/* Theme Toggle & Logout */}
       <Divider />
-      <Box sx={{ p: 1 }}>
+      <Box sx={{ p: 1.5 }}>
+        {/* Dark Mode Toggle */}
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          px: 1.5,
+          py: 1,
+          mb: 1,
+        }}>
+          <Typography variant="body2" color="text.secondary">
+            {isDark ? 'Dark Mode' : 'Light Mode'}
+          </Typography>
+          <DarkModeToggle variant="pill" />
+        </Box>
+        
+        {/* Logout */}
         <ListItemButton
           onClick={handleLogout}
           sx={{
             borderRadius: 2,
             color: theme.palette.error.main,
+            transition: 'all 0.2s ease',
             '&:hover': {
               bgcolor: `${theme.palette.error.main}10`,
             },
@@ -249,7 +273,8 @@ const Layout: React.FC = () => {
             '& .MuiDrawer-paper': {
               width: DRAWER_WIDTH,
               boxSizing: 'border-box',
-              borderRight: `1px solid ${theme.palette.grey[200]}`,
+              borderRight: `1px solid ${theme.palette.divider}`,
+              transition: 'background-color 0.3s ease, border-color 0.3s ease',
             },
           }}
         >
@@ -282,7 +307,8 @@ const Layout: React.FC = () => {
           display: 'flex',
           flexDirection: 'column',
           minHeight: '100vh',
-          bgcolor: theme.palette.background.default,
+          bgcolor: 'background.default',
+          transition: 'background-color 0.3s ease',
           pb: isMobile ? '64px' : 0, // Space for bottom nav
         }}
       >
@@ -293,15 +319,16 @@ const Layout: React.FC = () => {
             color="inherit" 
             elevation={0}
             sx={{ 
-              borderBottom: `1px solid ${theme.palette.grey[200]}`,
+              borderBottom: `1px solid ${theme.palette.divider}`,
               bgcolor: 'background.paper',
+              transition: 'all 0.3s ease',
             }}
           >
             <Toolbar sx={{ minHeight: { xs: 56 } }}>
               <IconButton
                 edge="start"
                 onClick={() => setMobileDrawerOpen(true)}
-                sx={{ mr: 2 }}
+                sx={{ mr: 1 }}
               >
                 <MenuIcon />
               </IconButton>
@@ -311,7 +338,7 @@ const Layout: React.FC = () => {
                     width: 32,
                     height: 32,
                     borderRadius: 1.5,
-                    bgcolor: theme.palette.primary.main,
+                    background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -325,12 +352,13 @@ const Layout: React.FC = () => {
                 </Typography>
               </Box>
               <Box sx={{ flexGrow: 1 }} />
-              <IconButton onClick={() => handleNavigation('/profile')}>
+              <DarkModeToggle variant="icon" size="small" />
+              <IconButton onClick={() => handleNavigation('/profile')} sx={{ ml: 0.5 }}>
                 <Avatar 
                   sx={{ 
                     width: 32, 
                     height: 32,
-                    bgcolor: theme.palette.secondary.main,
+                    background: `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${theme.palette.secondary.dark} 100%)`,
                     fontSize: '0.875rem',
                   }}
                 >
@@ -341,8 +369,18 @@ const Layout: React.FC = () => {
           </AppBar>
         )}
 
-        {/* Page Content */}
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
+        {/* Page Content with animation */}
+        <Box 
+          sx={{ 
+            flex: 1, 
+            overflow: 'auto',
+            animation: 'fadeIn 0.3s ease-out',
+            '@keyframes fadeIn': {
+              '0%': { opacity: 0 },
+              '100%': { opacity: 1 },
+            },
+          }}
+        >
           <Outlet />
         </Box>
 
@@ -356,7 +394,9 @@ const Layout: React.FC = () => {
               left: 0, 
               right: 0,
               zIndex: theme.zIndex.appBar,
-              borderTop: `1px solid ${theme.palette.grey[200]}`,
+              borderTop: `1px solid ${theme.palette.divider}`,
+              bgcolor: 'background.paper',
+              transition: 'all 0.3s ease',
               // Safe area for iOS
               pb: 'env(safe-area-inset-bottom)',
             }}
@@ -368,7 +408,7 @@ const Layout: React.FC = () => {
                 if (item) handleNavigation(item.path);
               }}
               showLabels
-              sx={{ height: 64 }}
+              sx={{ height: 64, bgcolor: 'transparent' }}
             >
               {navItems.slice(0, 4).map((item) => {
                 const Icon = item.icon;
@@ -379,9 +419,11 @@ const Layout: React.FC = () => {
                     value={item.id}
                     icon={<Icon size={24} />}
                     sx={{
+                      minWidth: 60,
                       '&.Mui-selected': {
                         color: theme.palette.primary.main,
                       },
+                      transition: 'color 0.2s ease',
                     }}
                   />
                 );
