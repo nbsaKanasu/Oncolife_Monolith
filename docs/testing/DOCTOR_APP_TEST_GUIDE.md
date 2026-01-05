@@ -768,6 +768,58 @@ Staff (Physician 2): ma.bob@clinic.com / [password]
 
 ---
 
+---
+
+## UI/UX Tests
+
+### Dark Mode Testing (Doctor Portal)
+
+**Toggle Location:**
+- Desktop: Sidebar → Bottom section (pill toggle)
+- Mobile: Top header bar (moon/sun icon)
+
+**Dark Mode Activation:**
+1. Click dark mode toggle
+2. **Expected:**
+   - Background changes to deep navy (#0F172A)
+   - Sidebar adapts colors (no longer dark blue)
+   - Cards get dark backgrounds (#1E293B)
+   - Text becomes light (#F1F5F9)
+   - Primary becomes brighter blue (#3B82F6)
+   - Tables alternate row colors adjust
+   - Smooth 0.3s transition
+
+**Persistence Test:**
+1. Enable dark mode
+2. Log out and log back in
+3. **Expected:** Dark mode persists
+
+**Chart Readability:**
+- [ ] Timeline chart colors visible in dark mode
+- [ ] Severity badges still distinguishable
+- [ ] Axis labels readable
+
+### Responsive Design Testing
+
+**Mobile (< 600px):**
+- [ ] Hamburger menu in header
+- [ ] Drawer navigation slides in
+- [ ] Patient cards stack vertically
+- [ ] Tables become scrollable or cards
+- [ ] Touch-friendly row selection
+
+**Tablet (600px - 900px):**
+- [ ] Sidebar visible
+- [ ] Dashboard cards in 2-column grid
+- [ ] Timeline chart responsive
+
+**Desktop (> 900px):**
+- [ ] Full sidebar with all menu items
+- [ ] Multi-column dashboard
+- [ ] Full patient tables
+
+---
+
 ## Test Sign-Off
 
 | Test Area | Tester | Date | Pass/Fail |
@@ -784,6 +836,8 @@ Staff (Physician 2): ma.bob@clinic.com / [password]
 | Staff Restrictions | | | |
 | Security (Cross-Access) | | | |
 | Audit Logging | | | |
+| **Dark Mode** | | | |
+| **Mobile Responsiveness** | | | |
 
 ---
 
@@ -805,5 +859,5 @@ Staff (Physician 2): ma.bob@clinic.com / [password]
 ---
 
 *Last Updated: January 2026*
-*Version: 1.0*
+*Version: 2.0 - Updated with dark mode and responsive design tests*
 

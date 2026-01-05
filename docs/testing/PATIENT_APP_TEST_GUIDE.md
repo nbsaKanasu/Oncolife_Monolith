@@ -115,64 +115,95 @@ POST /api/v1/onboarding/complete/reminders
 
 ---
 
-### 2. Symptom Checker (Daily Check-In)
+### 2. Symptom Checker (Daily Check-In) - NEW 6-PHASE FLOW
 
 #### 2.1 Start New Session
 
-**Screen Flow:**
+**NEW Screen Flow (6 Phases):**
 ```
-Dashboard → "Start Check-In" → Symptom Selection → Symptom Questions → Triage Result → Education Content
+Dashboard → Medical Disclaimer → Emergency Check → Grouped Symptom Selection → Ruby Chat → Summary
 ```
 
 **What to Test:**
 
-**Step 1: Start Check-In**
-- Click "Start Daily Check-In" or "How are you feeling today?"
-- **Expected:** Chat interface opens with greeting message
+**Phase 1: Medical Disclaimer Screen**
+- Click "Start Daily Check-In"
+- **Expected:** Disclaimer screen displays:
+  ```
+  IMPORTANT MEDICAL DISCLAIMER:
+  This system is an automated symptom checker. It is NOT a substitute 
+  for professional medical advice, diagnosis, or treatment.
+  
+  If you believe you are having a medical emergency, call 911 immediately.
+  
+  [I Understand - Start Triage]
+  ```
+- Click "I Understand - Start Triage" button
+- **Expected:** Moves to Emergency Check screen
 
-**Step 2: Symptom Selection**
-- System displays: "What symptoms are you experiencing today?"
-- Shows list of 27 symptom categories:
-  - Fever/Chills
-  - Nausea/Vomiting
-  - Diarrhea
-  - Constipation
-  - Pain
-  - Fatigue
-  - Bleeding
-  - Mouth Sores
-  - Skin Changes
-  - Breathing Problems
-  - ...and more
-- Select one or more symptoms
+**Phase 2: Emergency Check Screen (Urgent Safety Check)**
+- System displays: "Before we assess your symptoms, we need to rule out immediate emergencies."
+- **Emergency symptoms shown** (multi-select):
+  - ⚠️ Trouble breathing or shortness of breath
+  - ⚠️ Chest pain
+  - ⚠️ Uncontrolled bleeding OR Blood in stool/urine
+  - ⚠️ Fainting or Syncope
+  - ⚠️ Confusion or Altered Mental Status
+- **Test Path A - Emergency selected:**
+  - Select any emergency symptom
+  - Click "Continue"
+  - **Expected:** Immediate emergency escalation path (Call 911 screen)
+- **Test Path B - No emergencies:**
+  - Click "None of these - Continue"
+  - **Expected:** Proceeds to Grouped Symptom Selection
+
+**Phase 3: Grouped Symptom Selection**
+- System displays symptom categories in groups:
+  - **Digestive Health:** Nausea, Vomiting, Diarrhea, Constipation, No Appetite, Mouth Sores
+  - **Pain & Nerve:** Pain, Neuropathy (Numbness/Tingling)
+  - **Systemic & Infection:** Fever, Bleeding or Bruising, Fatigue, Cough, Urinary Problems
+  - **Skin & External:** Skin Rash, Swelling, Eye Complaints
+- Select one or more symptoms (multi-select)
 - Click "Continue"
-- **Expected:** First symptom questions begin
+- **Expected:** Ruby Chat interface begins
 
-**Step 3: Symptom Assessment Questions**
-For each selected symptom, answer screening questions:
+**Phase 4: Ruby Chat (Per-Symptom Questions)**
+- **Expected:** Ruby introduces herself:
+  ```
+  "Hello! I am Ruby, your automated triage assistant. 
+  I'm here to help assess your symptoms."
+  ```
+- For each selected symptom, answer screening questions in WhatsApp-like chat style:
 
 **Example: Fever**
-- "Do you have a fever?" (Yes/No)
-- "What is your temperature?" (Number input)
-- "How long have you had the fever?" (Options)
-- "Any other symptoms with the fever?" (Multi-select)
+- Ruby: "Do you have a fever?" → Select (Yes/No)
+- Ruby: "What is your temperature?" → Enter number or select range
+- Ruby: "How long have you had the fever?" → Select option
+- Ruby: "Any other symptoms with the fever?" → Multi-select
 
 **Expected Behavior:**
+- WhatsApp-style chat bubbles (Ruby on left, Patient on right)
 - Questions appear one at a time
-- Options are clearly displayed
-- Can go back to previous question
-- Progress indicator shows completion
+- Selected options clearly shown as patient's response
+- Ruby avatar visible on her messages
+- Smooth scrolling to new messages
+- Progress through all selected symptoms
 
-**Step 4: Triage Result**
+**Phase 5: Triage Result**
 After all questions answered:
 - **Green (Mild):** "Your symptoms are mild. Continue monitoring."
 - **Yellow (Moderate):** "Monitor closely. Contact care team if worsening."
 - **Orange (Severe):** "Contact your care team today."
 - **Red (Urgent/Emergency):** "Seek immediate medical attention. Call 911."
 
-**Step 5: Education Content Delivered**
-- Relevant education content appears
-- Shows:
+**Phase 6: Summary Screen**
+- System displays complete summary of session
+- **Action Buttons available:**
+  - 📥 **Download Summary** - Save as PDF
+  - 📓 **Save to Diary** - Creates diary entry
+  - 🔄 **Report Another Symptom** - Return to symptom selection
+  - ✅ **Done** - Complete session
+- Education content appears below summary:
   - Symptom-specific tips (4-6 bullets)
   - "Read More" links to PDFs
   - Care Team Handout link
@@ -525,13 +556,83 @@ GET /api/v1/summaries/2026/1
 
 ---
 
+## UI/UX Tests
+
+### Dark Mode Testing
+
+**What to Test:**
+
+**Toggle Location:**
+- Desktop/Tablet: Sidebar → Bottom (pill toggle with "Light Mode/Dark Mode" label)
+- Mobile: Top header bar (moon/sun icon)
+
+**Dark Mode Activation:**
+1. Click dark mode toggle
+2. **Expected:**
+   - Background changes to deep navy (#0F172A)
+   - Text becomes light gray (#F1F5F9)
+   - Primary color shifts to lighter teal (#4DB6AC)
+   - Cards/Paper backgrounds become slate (#1E293B)
+   - Smooth 0.3s transition animation
+
+**Persistence Test:**
+1. Toggle to dark mode
+2. Close browser tab
+3. Reopen app
+4. **Expected:** Dark mode persists (stored in localStorage)
+
+**System Preference Test:**
+1. Set OS to dark mode
+2. Open OncoLife (first time or clear localStorage)
+3. **Expected:** App automatically uses dark mode
+
+### Responsive Design Testing
+
+**Mobile (< 600px):**
+- [ ] Bottom navigation bar visible (4 icons)
+- [ ] Hamburger menu in header
+- [ ] Profile accessible via header avatar
+- [ ] Full-width buttons
+- [ ] Chat bubbles properly sized
+- [ ] No horizontal scroll
+
+**Tablet (600px - 900px):**
+- [ ] Sidebar navigation visible
+- [ ] Content area adjusts width
+- [ ] Cards stack appropriately
+
+**Desktop (> 900px):**
+- [ ] Full sidebar with labels
+- [ ] Spacious content area
+- [ ] Hover states work properly
+
+### Symptom Chat UX Testing
+
+**WhatsApp-Style Chat:**
+- [ ] Ruby's messages appear on left with avatar
+- [ ] Patient's messages appear on right (purple bubble)
+- [ ] Smooth scroll to new messages
+- [ ] Interactive options are touch-friendly (48px minimum)
+- [ ] Selected options show confirmation
+- [ ] Emergency symptoms highlighted in red
+
+**Summary Screen:**
+- [ ] Triage result color matches severity
+- [ ] Action buttons all functional
+- [ ] Education content displays correctly
+- [ ] Disclaimer always visible
+
+---
+
 ## Accessibility Tests
 
 - [ ] Screen reader announces all buttons
 - [ ] Text size can be increased
-- [ ] Color contrast meets WCAG 2.1 AA
-- [ ] Touch targets are 44x44px minimum
+- [ ] Color contrast meets WCAG 2.1 AA (light AND dark mode)
+- [ ] Touch targets are 44x44px minimum (48px on mobile)
 - [ ] Form labels are associated with inputs
+- [ ] Focus states visible for keyboard navigation
+- [ ] Reduced motion preference respected
 
 ---
 
@@ -597,5 +698,5 @@ Patient 2 (Active): activepatient@test.com / TestPass123!
 ---
 
 *Last Updated: January 2026*
-*Version: 1.0*
+*Version: 2.0 - Updated for new 6-phase symptom checker UX, dark mode, and responsive design*
 

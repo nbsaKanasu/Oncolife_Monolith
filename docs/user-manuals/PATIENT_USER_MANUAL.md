@@ -134,46 +134,105 @@ When you open OncoLife, you'll see your home screen with these main sections:
 ### Starting Your Check-In
 
 1. From the home screen, tap **"Start Daily Check-In"**
-2. OncoLife will greet you and ask how you're feeling
+2. You'll begin the guided 6-step symptom assessment
 
-### Selecting Your Symptoms
+### Step 1: Medical Disclaimer
 
-**"What symptoms are you experiencing today?"**
+First, you'll see an important disclaimer:
 
-You'll see a list of common symptoms. **Tap all that apply:**
+```
+📋 IMPORTANT MEDICAL DISCLAIMER
 
-| Category | Examples |
-|----------|----------|
-| 🤒 Fever/Chills | Temperature, shaking, feeling cold |
-| 🤢 Nausea/Vomiting | Upset stomach, throwing up |
-| 🚽 Digestive | Diarrhea, constipation, stomach pain |
-| 😴 Fatigue | Tiredness, weakness, low energy |
-| 🩸 Bleeding | Unusual bleeding, bruising |
-| 😣 Pain | Body aches, headaches |
-| 👄 Mouth | Sores, difficulty eating |
-| 🫁 Breathing | Shortness of breath, cough |
-| 🧠 Mental | Confusion, memory issues |
-| 💧 Other | Skin changes, swelling |
+This system is an automated symptom checker. It is NOT 
+a substitute for professional medical advice, diagnosis, 
+or treatment.
 
-**If you feel fine:** Tap "I feel okay today" to complete a quick check-in.
+If you believe you are having a medical emergency, 
+call 911 immediately.
+```
 
-### Answering Questions
+✅ Tap **"I Understand - Start Triage"** to continue.
 
-For each symptom you selected, OncoLife will ask specific questions:
+### Step 2: Emergency Safety Check
 
-**Example - Fever:**
-- "Do you currently have a fever?" → **Yes** or **No**
-- "What is your temperature?" → Enter number (e.g., 100.4)
-- "How long have you had the fever?" → Select option
+**This is a quick safety check for urgent symptoms.**
 
-**Tips:**
+You'll see a list of emergency symptoms:
+- ⚠️ Trouble breathing
+- ⚠️ Chest pain
+- ⚠️ Uncontrolled bleeding / Blood in stool or urine
+- ⚠️ Fainting
+- ⚠️ Confusion
+
+**If you have ANY of these:** Select them and get immediate guidance.
+
+**If you don't have any:** Tap **"None of these - Continue"**
+
+### Step 3: Select Your Symptoms
+
+Symptoms are organized into helpful groups:
+
+| **Digestive Health** | **Pain & Nerve** |
+|---------------------|------------------|
+| 🤢 Nausea | 😣 Pain |
+| 🤮 Vomiting | 🦶 Numbness/Tingling |
+| 🚽 Diarrhea | |
+| 😣 Constipation | |
+| 🍽️ No Appetite | |
+| 👄 Mouth Sores | |
+
+| **Systemic & Infection** | **Skin & External** |
+|-------------------------|-------------------|
+| 🤒 Fever | 🔴 Skin Rash |
+| 🩸 Bleeding/Bruising | 💧 Swelling |
+| 😴 Fatigue | 👁️ Eye Complaints |
+| 🫁 Cough | |
+| 🚽 Urinary Problems | |
+
+**Tap all symptoms that apply**, then tap **"Continue"**
+
+**If you feel fine:** Tap "I feel okay today" for a quick check-in.
+
+### Step 4: Chat with Ruby 💎
+
+Ruby is your friendly health assistant! She'll ask you questions about each symptom you selected.
+
+```
+💎 Ruby: "Hello! I am Ruby, your automated triage assistant.
+         I'm here to help assess your symptoms."
+
+💎 Ruby: "Do you currently have a fever?"
+
+         [Yes]  [No]
+
+    You: "Yes"
+
+💎 Ruby: "What is your temperature?"
+
+         [Less than 100°F]  [100-101°F]  
+         [101-103°F]  [Over 103°F]
+```
+
+**Tips for Answering:**
 - Answer honestly for the best guidance
 - If you're unsure, select the closest option
-- You can go back to change answers
+- Your answers appear on the right side (purple bubbles)
+- Ruby's questions appear on the left
 
-### Completing Your Check-In
+### Step 5: View Your Results
 
-After answering all questions, you'll see your results (see next section).
+After answering all questions, you'll see your triage result (see next section).
+
+### Step 6: Summary & Actions
+
+At the end, you'll see a complete summary with options:
+
+| Button | What It Does |
+|--------|--------------|
+| 📥 **Download** | Save your summary as a PDF |
+| 📓 **Save to Diary** | Add this check-in to your diary |
+| 🔄 **Report Another** | Check another symptom |
+| ✅ **Done** | Finish and return home |
 
 ---
 
@@ -398,6 +457,30 @@ Use the search bar to find specific topics:
 2. Tap **"Log Out"**
 3. Confirm
 
+### Using Dark Mode 🌙
+
+OncoLife supports a dark theme that's easier on your eyes, especially at night.
+
+**To Turn On Dark Mode:**
+
+**On Phone:**
+1. Look for the 🌙/☀️ icon in the top header
+2. Tap it to switch between light and dark
+
+**On Computer/Tablet:**
+1. Look in the sidebar (left menu)
+2. Find "Light Mode" or "Dark Mode" at the bottom
+3. Tap the toggle to switch
+
+**Automatic Mode:**
+- If your phone/computer is set to dark mode, OncoLife will follow that setting automatically!
+
+| Light Mode | Dark Mode |
+|------------|-----------|
+| White backgrounds | Dark navy backgrounds |
+| Teal accent colors | Lighter teal accents |
+| Best for daytime | Easier on eyes at night |
+
 ---
 
 ## 10. Getting Help
@@ -502,6 +585,6 @@ Questions? Contact support@oncolife.com
 
 ---
 
-*Version 1.0 | January 2026*
+*Version 2.0 | January 2026 - Updated for new Ruby chat experience and dark mode*
 *© 2026 OncoLife Health Technologies*
 

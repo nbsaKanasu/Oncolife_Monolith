@@ -416,6 +416,31 @@ Access via **⚙️ Settings** or click your profile icon:
 | MFA Settings | Enable/disable two-factor |
 | Notification Preferences | Email alerts for escalations |
 | Session Settings | Auto-logout timer |
+| **Dark Mode** | Toggle light/dark theme |
+
+### Dark Mode 🌙
+
+The physician dashboard supports a dark theme that reduces eye strain during long hours.
+
+**To Enable Dark Mode:**
+
+**On Desktop:**
+1. Look at the bottom of the sidebar (left menu)
+2. Find "Light Mode" or "Dark Mode" label
+3. Click the toggle switch to change
+
+**On Mobile:**
+1. Look for the moon/sun icon in the header
+2. Tap to toggle between modes
+
+**What Changes in Dark Mode:**
+- Background becomes dark navy (#0F172A)
+- Cards have slate backgrounds
+- Primary color shifts to brighter blue
+- Charts adapt for readability
+- Tables have dark alternating rows
+
+**Your preference is saved** - it will persist across sessions.
 
 ### Getting Help
 
@@ -524,6 +549,6 @@ Questions? Contact support@oncolife.com
 
 ---
 
-*Version 1.0 | January 2026*
+*Version 2.0 | January 2026 - Updated with dark mode support*
 *© 2026 OncoLife Health Technologies*
 
