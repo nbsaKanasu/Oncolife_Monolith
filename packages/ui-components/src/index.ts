@@ -57,3 +57,6 @@ export * from './components/DatePicker/DatePicker.styles';
 // Session Management
 export { default as SessionTimeoutManager, SESSION_START_KEY } from './components/SessionTimeout/SessionTimeoutManager';
 export { default as SessionTimeoutModal } from './components/SessionTimeout/SessionTimeoutModal';
+
+// Error Boundary
+export { default as ErrorBoundary } from './components/ErrorBoundary';

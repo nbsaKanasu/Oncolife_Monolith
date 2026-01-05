@@ -1,165 +1,229 @@
+/**
+ * OncoLife Physician Portal - Staff Management
+ * Staff list with search and management capabilities
+ */
+
 import React, { useState } from 'react';
-import { 
-  Container, 
-  Header, 
-  Title, 
-  Content, 
-  PageHeader, 
-  PageTitle
-} from '@oncolife/ui-components';
-import { 
-  TextField, 
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  TablePagination,
-  CircularProgress,
-  Typography,
-  IconButton,
-  Tooltip,
-  Box
-} from '@mui/material';
-import { Search, Plus, Edit } from 'lucide-react';
+import { useTheme, useMediaQuery } from '@mui/material';
+import Box from '@mui/material/Box';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TablePagination from '@mui/material/TablePagination';
+import CircularProgress from '@mui/material/CircularProgress';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import Avatar from '@mui/material/Avatar';
+import Chip from '@mui/material/Chip';
+import InputAdornment from '@mui/material/InputAdornment';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import { Search, Plus, Edit, UserCog, Mail, Building2, ChevronRight, X } from 'lucide-react';
 import styled from 'styled-components';
-// import AddStaffModal from './components/AddStaffModal';
-// import EditStaffModal from './components/EditStaffModal';
 
-// Temporary placeholder modals
-const AddStaffModal = ({ open, onClose }: { open: boolean; onClose: () => void }) => 
-  open ? (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        padding: '2rem',
-        borderRadius: '8px',
-        minWidth: '400px'
-      }}>
-        <h3>Add Staff Modal</h3>
-        <p>Add staff functionality will be implemented here</p>
-        <button onClick={onClose}>Close</button>
-      </div>
-    </div>
-  ) : null;
-
-const EditStaffModal = ({ open, onClose, staff }: { open: boolean; onClose: () => void; staff: Staff | null }) => 
-  open ? (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        padding: '2rem',
-        borderRadius: '8px',
-        minWidth: '400px'
-      }}>
-        <h3>Edit Staff Modal</h3>
-        <p>Edit staff functionality for {staff?.firstName} {staff?.lastName} will be implemented here</p>
-        <button onClick={onClose}>Close</button>
-      </div>
-    </div>
-  ) : null;
-
-// Theme
-const theme = {
-  colors: {
-    primary: '#007bff',
-    gray: {
-      300: '#d1d5db',
-      400: '#9ca3af',
-      600: '#6b7280',
-      700: '#374151'
-    }
-  }
+// Theme colors (Doctor)
+const colors = {
+  primary: '#1E3A5F',
+  primaryLight: '#2E5077',
+  secondary: '#2563EB',
+  background: '#F8FAFC',
+  paper: '#FFFFFF',
+  text: '#0F172A',
+  textSecondary: '#475569',
+  border: '#E2E8F0',
+  accent: '#0D9488',
 };
-const StaffContainer = styled.div`
+
+const PageContainer = styled.div`
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  
+  @media (max-width: 768px) {
+    padding: 16px;
+  }
+`;
+
+const PageHeader = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 8px;
+  margin-bottom: 24px;
+  
+  @media (min-width: 768px) {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
 `;
 
-const HeaderControls = styled.div`
+const HeaderTitle = styled.div`
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: ${colors.primary};
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  p {
+    font-size: 0.875rem;
+    color: ${colors.textSecondary};
+    margin: 4px 0 0 0;
+  }
+  
+  @media (max-width: 768px) {
+    h1 {
+      font-size: 1.25rem;
+    }
+  }
+`;
+
+const ControlsRow = styled.div`
   display: flex;
-  justify-content: space-between;
+  gap: 12px;
   align-items: center;
-  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  
+  @media (max-width: 576px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
 `;
 
-const SearchContainer = styled.div`
-  position: relative;
+const SearchWrapper = styled.div`
   flex: 1;
-  max-width: 400px;
-`;
-
-const SearchIcon = styled.div`
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: ${theme.colors.gray[400]};
-  z-index: 1;
+  min-width: 280px;
+  
+  @media (max-width: 576px) {
+    min-width: 100%;
+  }
 `;
 
 const TableWrapper = styled.div`
-  background: white;
+  background: ${colors.paper};
   border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border: 1px solid ${colors.border};
   overflow: hidden;
-  border: 1px solid #e0e0e0;
 `;
 
-const StyledTable = styled(Table)`
-  .MuiTableCell-head {
-    background-color: #e3f2fd;
+const MobileCard = styled.div`
+  background: ${colors.paper};
+  border-radius: 12px;
+  border: 1px solid ${colors.border};
+  margin-bottom: 12px;
+  overflow: hidden;
+`;
+
+const MobileCardHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, ${colors.primary}05 0%, ${colors.accent}05 100%);
+  border-bottom: 1px solid ${colors.border};
+`;
+
+const MobileCardContent = styled.div`
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const MobileCardRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+  
+  .label {
+    color: ${colors.textSecondary};
+    font-weight: 500;
+  }
+  
+  .value {
+    color: ${colors.text};
+  }
+`;
+
+const MobileCardAction = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid ${colors.border};
+`;
+
+const RoleBadge = styled.span<{ $role: string }>`
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  
+  ${props => {
+    switch (props.$role.toLowerCase()) {
+      case 'doctor':
+      case 'physician':
+        return `
+          background: ${colors.primary}15;
+          color: ${colors.primary};
+          border: 1px solid ${colors.primary}30;
+        `;
+      case 'nurse':
+        return `
+          background: ${colors.accent}15;
+          color: ${colors.accent};
+          border: 1px solid ${colors.accent}30;
+        `;
+      default:
+        return `
+          background: ${colors.secondary}15;
+          color: ${colors.secondary};
+          border: 1px solid ${colors.secondary}30;
+        `;
+    }
+  }}
+`;
+
+const EmptyState = styled.div`
+  text-align: center;
+  padding: 64px 24px;
+  
+  svg {
+    color: ${colors.textSecondary};
+    margin-bottom: 16px;
+  }
+  
+  h3 {
+    font-size: 1.125rem;
     font-weight: 600;
-    color: #1976d2;
-    border-bottom: 2px solid #e0e0e0;
-    padding: 1rem 1.5rem;
+    color: ${colors.text};
+    margin: 0 0 8px 0;
   }
   
-  .MuiTableCell-body {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid #f0f0f0;
-  }
-  
-  .MuiTableRow-root:nth-of-type(even) {
-    background-color: #fafafa;
-  }
-  
-  .MuiTableRow-root:hover {
-    background-color: #f5f5f5;
-  }
-  
-  .MuiTableRow-root:last-child .MuiTableCell-body {
-    border-bottom: none;
+  p {
+    color: ${colors.textSecondary};
+    font-size: 0.875rem;
+    margin: 0;
   }
 `;
 
-// Mock Staff type
+// Staff type
 interface Staff {
   id: string;
   firstName: string;
@@ -200,20 +264,121 @@ const mockStaffData = {
   total: 3
 };
 
+// Modal Components
+const AddStaffModal: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => (
+  <Dialog 
+    open={open} 
+    onClose={onClose}
+    maxWidth="sm"
+    fullWidth
+    PaperProps={{
+      sx: { borderRadius: 3 }
+    }}
+  >
+    <DialogTitle sx={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center',
+      borderBottom: `1px solid ${colors.border}`,
+    }}>
+      <Typography variant="h6" fontWeight={600}>Add Staff Member</Typography>
+      <IconButton onClick={onClose} size="small">
+        <X size={20} />
+      </IconButton>
+    </DialogTitle>
+    <DialogContent sx={{ pt: 3 }}>
+      <Typography color="textSecondary" sx={{ mb: 3 }}>
+        Add staff functionality will be implemented here. Staff members will receive 
+        an email invitation to set up their account.
+      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <TextField label="First Name" fullWidth size="small" />
+        <TextField label="Last Name" fullWidth size="small" />
+        <TextField label="Email" fullWidth size="small" type="email" />
+        <TextField label="Role" fullWidth size="small" select>
+          <option value="nurse">Nurse Navigator</option>
+          <option value="ma">Medical Assistant</option>
+        </TextField>
+      </Box>
+    </DialogContent>
+    <DialogActions sx={{ p: 2, borderTop: `1px solid ${colors.border}` }}>
+      <Button onClick={onClose} sx={{ color: colors.textSecondary }}>Cancel</Button>
+      <Button 
+        variant="contained" 
+        sx={{ 
+          bgcolor: colors.primary,
+          '&:hover': { bgcolor: colors.primaryLight }
+        }}
+      >
+        Send Invitation
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
+const EditStaffModal: React.FC<{ open: boolean; onClose: () => void; staff: Staff | null }> = ({ open, onClose, staff }) => (
+  <Dialog 
+    open={open} 
+    onClose={onClose}
+    maxWidth="sm"
+    fullWidth
+    PaperProps={{
+      sx: { borderRadius: 3 }
+    }}
+  >
+    <DialogTitle sx={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center',
+      borderBottom: `1px solid ${colors.border}`,
+    }}>
+      <Typography variant="h6" fontWeight={600}>Edit Staff Member</Typography>
+      <IconButton onClick={onClose} size="small">
+        <X size={20} />
+      </IconButton>
+    </DialogTitle>
+    <DialogContent sx={{ pt: 3 }}>
+      <Typography color="textSecondary" sx={{ mb: 3 }}>
+        Editing {staff?.firstName} {staff?.lastName}'s profile.
+      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <TextField label="First Name" fullWidth size="small" defaultValue={staff?.firstName} />
+        <TextField label="Last Name" fullWidth size="small" defaultValue={staff?.lastName} />
+        <TextField label="Email" fullWidth size="small" type="email" defaultValue={staff?.email} />
+        <TextField label="Role" fullWidth size="small" defaultValue={staff?.role} />
+      </Box>
+    </DialogContent>
+    <DialogActions sx={{ p: 2, borderTop: `1px solid ${colors.border}` }}>
+      <Button onClick={onClose} sx={{ color: colors.textSecondary }}>Cancel</Button>
+      <Button 
+        variant="contained" 
+        sx={{ 
+          bgcolor: colors.primary,
+          '&:hover': { bgcolor: colors.primaryLight }
+        }}
+      >
+        Save Changes
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
 const StaffPage: React.FC = () => {
-  const [page, setPage] = useState(0); // TablePagination uses 0-based indexing
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [search, setSearch] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
   
-  // Mock API response
+  // Mock API
   const data = mockStaffData;
   const isLoading = false;
   const error = null;
   
-  const handleChangePage = (event: unknown, newPage: number) => {
+  const handleChangePage = (_: unknown, newPage: number) => {
     setPage(newPage);
   };
   
@@ -224,11 +389,7 @@ const StaffPage: React.FC = () => {
   
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
-    setPage(0); // Reset to first page when searching
-  };
-  
-  const handleAddStaff = () => {
-    setIsAddModalOpen(true);
+    setPage(0);
   };
   
   const handleEditStaff = (staff: Staff) => {
@@ -236,232 +397,257 @@ const StaffPage: React.FC = () => {
     setIsEditModalOpen(true);
   };
   
-  const handleCloseAddModal = () => {
-    setIsAddModalOpen(false);
+  const getInitials = (firstName: string, lastName: string) => {
+    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase() || 'S';
   };
-  
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-    setSelectedStaff(null);
-  };
-  
-  const getStartRecord = () => {
-    return data ? page * rowsPerPage + 1 : 0;
-  };
-  
-  const getEndRecord = () => {
-    return data ? Math.min((page + 1) * rowsPerPage, data.total) : 0;
+
+  const getRoleColor = (role: string) => {
+    switch (role.toLowerCase()) {
+      case 'doctor':
+      case 'physician':
+        return colors.primary;
+      case 'nurse':
+        return colors.accent;
+      default:
+        return colors.secondary;
+    }
   };
   
   return (
-    <Container>
-      <Header>
-        <Title>Staff</Title>
-      </Header>
-      
-      <Content>
-        <PageHeader>
-          <PageTitle>Manage Staff</PageTitle>
-        </PageHeader>
+    <PageContainer>
+      <PageHeader>
+        <HeaderTitle>
+          <h1>
+            <UserCog size={24} color={colors.accent} />
+            Staff Management
+          </h1>
+          <p>Manage your clinic staff and their access</p>
+        </HeaderTitle>
         
-        <StaffContainer>
-          <HeaderControls>
-            <SearchContainer>
-              <SearchIcon>
-                <Search size={20} />
-              </SearchIcon>
-              <TextField
-                fullWidth
-                placeholder="Search Staff..."
-                value={search}
-                onChange={handleSearchChange}
-                size="small"
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    paddingLeft: '40px',
-                  }
-                }}
-              />
-            </SearchContainer>
-            
-            <Button
-              variant="contained"
-              startIcon={<Plus size={20} />}
-              onClick={handleAddStaff}
-              sx={{
-                backgroundColor: theme.colors.primary,
-                '&:hover': {
-                  backgroundColor: '#0056b3',
-                }
-              }}
-            >
-              Add Staff
-            </Button>
-          </HeaderControls>
-          
-          {error && (
-            <Typography color="error" variant="body2">
-              Error loading staff. Please try again.
-            </Typography>
-          )}
-          
-          {isLoading ? (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-              <CircularProgress />
-            </Box>
-          ) : (
-            <TableWrapper>
-              <TableContainer>
-                <StyledTable>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Name</TableCell>
-                      <TableCell>Email</TableCell>
-                      <TableCell>Role</TableCell>
-                      <TableCell>Clinic Name</TableCell>
-                      <TableCell>Action</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {data?.data.map((staff) => (
-                      <TableRow key={staff.id}>
-                        <TableCell>
+        <Button
+          variant="contained"
+          startIcon={<Plus size={18} />}
+          onClick={() => setIsAddModalOpen(true)}
+          sx={{
+            bgcolor: colors.primary,
+            borderRadius: 2,
+            px: 3,
+            py: 1,
+            textTransform: 'none',
+            fontWeight: 600,
+            '&:hover': {
+              bgcolor: colors.primaryLight,
+            },
+          }}
+        >
+          Add Staff
+        </Button>
+      </PageHeader>
+      
+      <ControlsRow>
+        <SearchWrapper>
+          <TextField
+            fullWidth
+            placeholder="Search by name or email..."
+            value={search}
+            onChange={handleSearchChange}
+            size="small"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Search size={18} color={colors.textSecondary} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '10px',
+                bgcolor: colors.paper,
+              },
+            }}
+          />
+        </SearchWrapper>
+      </ControlsRow>
+      
+      {error && (
+        <Box sx={{ 
+          p: 2, 
+          bgcolor: '#FEF2F2', 
+          borderRadius: 2, 
+          border: '1px solid #FECACA',
+          mb: 2 
+        }}>
+          <Typography color="error" variant="body2">
+            Error loading staff. Please try again.
+          </Typography>
+        </Box>
+      )}
+      
+      {isLoading ? (
+        <TableWrapper>
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}>
+            <CircularProgress />
+          </Box>
+        </TableWrapper>
+      ) : data.data.length === 0 ? (
+        <TableWrapper>
+          <EmptyState>
+            <UserCog size={48} />
+            <h3>No Staff Members Found</h3>
+            <p>Add your first staff member to get started.</p>
+          </EmptyState>
+        </TableWrapper>
+      ) : isMobile ? (
+        // Mobile Card View
+        <Box>
+          {data.data.map((staff) => (
+            <MobileCard key={staff.id}>
+              <MobileCardHeader>
+                <Avatar sx={{ 
+                  bgcolor: getRoleColor(staff.role), 
+                  width: 44, 
+                  height: 44,
+                  fontWeight: 600,
+                }}>
+                  {getInitials(staff.firstName, staff.lastName)}
+                </Avatar>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    {staff.firstName} {staff.lastName}
+                  </Typography>
+                  <RoleBadge $role={staff.role}>{staff.role}</RoleBadge>
+                </Box>
+              </MobileCardHeader>
+              <MobileCardContent>
+                <MobileCardRow>
+                  <span className="label">Email</span>
+                  <span className="value">{staff.email}</span>
+                </MobileCardRow>
+                <MobileCardRow>
+                  <span className="label">Clinic</span>
+                  <span className="value">{staff.clinicName || '-'}</span>
+                </MobileCardRow>
+              </MobileCardContent>
+              <MobileCardAction>
+                <Button
+                  size="small"
+                  endIcon={<ChevronRight size={16} />}
+                  onClick={() => handleEditStaff(staff)}
+                  sx={{ color: colors.secondary }}
+                >
+                  Edit
+                </Button>
+              </MobileCardAction>
+            </MobileCard>
+          ))}
+        </Box>
+      ) : (
+        // Desktop Table View
+        <TableWrapper>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: `${colors.primary}08` }}>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }}>Staff Member</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }}>Email</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }}>Role</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }}>Clinic</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }} align="center">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.data.map((staff) => (
+                  <TableRow 
+                    key={staff.id}
+                    sx={{ 
+                      '&:hover': { bgcolor: colors.background },
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar sx={{ 
+                          bgcolor: getRoleColor(staff.role), 
+                          width: 36, 
+                          height: 36,
+                          fontSize: '0.875rem',
+                          fontWeight: 600,
+                        }}>
+                          {getInitials(staff.firstName, staff.lastName)}
+                        </Avatar>
+                        <Typography fontWeight={500}>
                           {staff.firstName} {staff.lastName}
-                        </TableCell>
-                        <TableCell>{staff.email}</TableCell>
-                        <TableCell>{staff.role}</TableCell>
-                        <TableCell>{staff.clinicName || '-'}</TableCell>
-                        <TableCell>
-                          <Tooltip title="Edit Staff">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleEditStaff(staff)}
-                              sx={{ color: theme.colors.primary }}
-                            >
-                              <Edit size={16} />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </StyledTable>
-                
-                <TablePagination
-                  rowsPerPageOptions={[5, 10, 25]}
-                  component="div"
-                  count={data?.total || 0}
-                  rowsPerPage={rowsPerPage}
-                  page={page}
-                  onPageChange={handleChangePage}
-                  onRowsPerPageChange={handleChangeRowsPerPage}
-                  labelRowsPerPage="Rows per page:"
-                  labelDisplayedRows={({ from, to, count }) =>
-                    `${from}-${to} of ${count !== -1 ? count : `more than ${to}`}`
-                  }
-                  sx={{
-                    '.MuiTablePagination-selectLabel': {
-                      color: theme.colors.gray[600],
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      marginRight: '0.5rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      marginBottom: '0',
-                      lineHeight: '1.5',
-                    },
-                    '.MuiTablePagination-displayedRows': {
-                      color: theme.colors.gray[600],
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      lineHeight: '1.5',
-                    },
-                    '.MuiTablePagination-select': {
-                      color: theme.colors.gray[700],
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      marginLeft: '0.5rem',
-                      marginRight: '1rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      marginTop: '0',
-                      height: 'auto',
-                      '& .MuiSelect-select': {
-                        paddingRight: '2rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        paddingTop: '0',
-                        paddingBottom: '0',
-                        lineHeight: '1.5',
-                        margin: '0',
-                        verticalAlign: 'baseline',
-                        transform: 'translateY(0)',
-                        height: 'auto',
-                        minHeight: 'auto',
-                        boxSizing: 'border-box',
-                      },
-                      '& .MuiSelect-select.MuiSelect-select': {
-                        paddingTop: '0',
-                        paddingBottom: '0',
-                        lineHeight: '1.5',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        height: 'auto',
-                        minHeight: 'auto',
-                        boxSizing: 'border-box',
-                      },
-                      '& .MuiOutlinedInput-root': {
-                        height: 'auto',
-                        minHeight: 'auto',
-                        '& fieldset': {
-                          border: 'none',
-                        },
-                      },
-                    },
-                    '.MuiTablePagination-actions': {
-                      '.MuiIconButton-root': {
-                        color: theme.colors.gray[600],
-                        '&:hover': {
-                          backgroundColor: 'rgba(0, 123, 255, 0.08)',
-                          color: theme.colors.primary,
-                        },
-                        '&.Mui-disabled': {
-                          color: theme.colors.gray[300],
-                        },
-                      },
-                    },
-                    '.MuiTablePagination-toolbar': {
-                      padding: '1rem 2rem',
-                      borderTop: '1px solid #e0e0e0',
-                      backgroundColor: '#fafafa',
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      justifyContent: 'space-between',
-                      minHeight: '52px',
-                    },
-                  }}
-                />
-              </TableContainer>
-            </TableWrapper>
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Mail size={14} color={colors.textSecondary} />
+                        {staff.email}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <RoleBadge $role={staff.role}>{staff.role}</RoleBadge>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Building2 size={14} color={colors.textSecondary} />
+                        {staff.clinicName || '-'}
+                      </Box>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Tooltip title="Edit Staff">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditStaff(staff)}
+                          sx={{ 
+                            color: colors.secondary,
+                            '&:hover': { bgcolor: `${colors.secondary}15` },
+                          }}
+                        >
+                          <Edit size={18} />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          
+          {data.total > rowsPerPage && (
+            <TablePagination
+              component="div"
+              count={data.total}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+              rowsPerPageOptions={[5, 10, 25]}
+              sx={{
+                borderTop: `1px solid ${colors.border}`,
+                bgcolor: colors.background,
+              }}
+            />
           )}
-        </StaffContainer>
-      </Content>
+        </TableWrapper>
+      )}
       
       <AddStaffModal
         open={isAddModalOpen}
-        onClose={handleCloseAddModal}
+        onClose={() => setIsAddModalOpen(false)}
       />
       
       <EditStaffModal
         open={isEditModalOpen}
-        onClose={handleCloseEditModal}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedStaff(null);
+        }}
         staff={selectedStaff}
       />
-    </Container>
+    </PageContainer>
   );
 };
 
-export default StaffPage; 
+export default StaffPage;

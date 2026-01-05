@@ -1,113 +1,206 @@
+/**
+ * OncoLife Physician Portal - Patients Management
+ * Patient list with search and management capabilities
+ */
+
 import React, { useState } from 'react';
-import { 
-  Container, 
-  Header, 
-  Title, 
-  Content, 
-  PageHeader, 
-  PageTitle
-} from '@oncolife/ui-components';
-import { 
-  TextField, 
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  TablePagination,
-  CircularProgress,
-  Typography,
-  IconButton,
-  Tooltip,
-  Box
-} from '@mui/material';
-import { Search, Plus, Edit } from 'lucide-react';
+import { useTheme, useMediaQuery } from '@mui/material';
+import Box from '@mui/material/Box';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TablePagination from '@mui/material/TablePagination';
+import CircularProgress from '@mui/material/CircularProgress';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import Avatar from '@mui/material/Avatar';
+import Chip from '@mui/material/Chip';
+import InputAdornment from '@mui/material/InputAdornment';
+import Skeleton from '@mui/material/Skeleton';
+import Card from '@mui/material/Card';
+import { Search, Plus, Edit, Users, Calendar, Mail, ChevronRight } from 'lucide-react';
 import styled from 'styled-components';
-import { theme } from '@oncolife/ui-components';
 import { usePatients, type Patient } from '../../services/patients';
 import AddPatientModal from './components/AddPatientModal';
 import EditPatientModal from './components/EditPatientModal';
 
-// Styled components
-const PatientsContainer = styled.div`
+// Theme colors (Doctor)
+const colors = {
+  primary: '#1E3A5F',
+  primaryLight: '#2E5077',
+  secondary: '#2563EB',
+  background: '#F8FAFC',
+  paper: '#FFFFFF',
+  text: '#0F172A',
+  textSecondary: '#475569',
+  border: '#E2E8F0',
+};
+
+const PageContainer = styled.div`
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  
+  @media (max-width: 768px) {
+    padding: 16px;
+  }
+`;
+
+const PageHeader = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 8px;
+  margin-bottom: 24px;
+  
+  @media (min-width: 768px) {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
 `;
 
-const HeaderControls = styled.div`
+const HeaderTitle = styled.div`
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: ${colors.primary};
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  p {
+    font-size: 0.875rem;
+    color: ${colors.textSecondary};
+    margin: 4px 0 0 0;
+  }
+  
+  @media (max-width: 768px) {
+    h1 {
+      font-size: 1.25rem;
+    }
+  }
+`;
+
+const ControlsRow = styled.div`
   display: flex;
-  justify-content: space-between;
+  gap: 12px;
   align-items: center;
-  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  
+  @media (max-width: 576px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
 `;
 
-const SearchContainer = styled.div`
-  position: relative;
+const SearchWrapper = styled.div`
   flex: 1;
-  max-width: 400px;
-`;
-
-const SearchIcon = styled.div`
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: ${theme.colors.gray[400]};
-  z-index: 1;
+  min-width: 280px;
+  
+  @media (max-width: 576px) {
+    min-width: 100%;
+  }
 `;
 
 const TableWrapper = styled.div`
-  background: white;
+  background: ${colors.paper};
   border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border: 1px solid ${colors.border};
   overflow: hidden;
-  border: 1px solid #e0e0e0;
 `;
 
-const StyledTable = styled(Table)`
-  .MuiTableCell-head {
-    background-color: #e3f2fd;
+const MobileCard = styled.div`
+  background: ${colors.paper};
+  border-radius: 12px;
+  border: 1px solid ${colors.border};
+  margin-bottom: 12px;
+  overflow: hidden;
+`;
+
+const MobileCardHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, ${colors.primary}05 0%, ${colors.secondary}05 100%);
+  border-bottom: 1px solid ${colors.border};
+`;
+
+const MobileCardContent = styled.div`
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const MobileCardRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+  
+  .label {
+    color: ${colors.textSecondary};
+    font-weight: 500;
+  }
+  
+  .value {
+    color: ${colors.text};
+  }
+`;
+
+const MobileCardAction = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid ${colors.border};
+`;
+
+const EmptyState = styled.div`
+  text-align: center;
+  padding: 64px 24px;
+  
+  svg {
+    color: ${colors.textSecondary};
+    margin-bottom: 16px;
+  }
+  
+  h3 {
+    font-size: 1.125rem;
     font-weight: 600;
-    color: #1976d2;
-    border-bottom: 2px solid #e0e0e0;
-    padding: 1rem 1.5rem;
+    color: ${colors.text};
+    margin: 0 0 8px 0;
   }
   
-  .MuiTableCell-body {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid #f0f0f0;
-  }
-  
-  .MuiTableRow-root:nth-of-type(even) {
-    background-color: #fafafa;
-  }
-  
-  .MuiTableRow-root:hover {
-    background-color: #f5f5f5;
-  }
-  
-  .MuiTableRow-root:last-child .MuiTableCell-body {
-    border-bottom: none;
+  p {
+    color: ${colors.textSecondary};
+    font-size: 0.875rem;
+    margin: 0;
   }
 `;
-
-
 
 const PatientsPage: React.FC = () => {
-  const [page, setPage] = useState(0); // TablePagination uses 0-based indexing
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [search, setSearch] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   
-  const { data, isLoading, error } = usePatients(page + 1, search, rowsPerPage); // Convert to 1-based for API
+  const { data, isLoading, error } = usePatients(page + 1, search, rowsPerPage);
   
-  const handleChangePage = (event: unknown, newPage: number) => {
+  const handleChangePage = (_: unknown, newPage: number) => {
     setPage(newPage);
   };
   
@@ -118,7 +211,7 @@ const PatientsPage: React.FC = () => {
   
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
-    setPage(0); // Reset to first page when searching
+    setPage(0);
   };
   
   const handleAddPatient = () => {
@@ -130,235 +223,281 @@ const PatientsPage: React.FC = () => {
     setIsEditModalOpen(true);
   };
   
-  const handleCloseAddModal = () => {
-    setIsAddModalOpen(false);
-  };
-  
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-    setSelectedPatient(null);
-  };
-  
-  const getStartRecord = () => {
-    return data ? page * rowsPerPage + 1 : 0;
-  };
-  
-  const getEndRecord = () => {
-    return data ? Math.min((page + 1) * rowsPerPage, data.total) : 0;
+  const getInitials = (firstName: string, lastName: string) => {
+    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase() || 'P';
   };
   
   return (
-    <Container>
-      <Header>
-        <Title>Patients</Title>
-      </Header>
-      
-      <Content>
-        <PageHeader>
-          <PageTitle>Manage Patients</PageTitle>
-        </PageHeader>
+    <PageContainer>
+      <PageHeader>
+        <HeaderTitle>
+          <h1>
+            <Users size={24} color={colors.secondary} />
+            Patient Management
+          </h1>
+          <p>View and manage your patient roster</p>
+        </HeaderTitle>
         
-        <PatientsContainer>
-          <HeaderControls>
-            <SearchContainer>
-              <SearchIcon>
-                <Search size={20} />
-              </SearchIcon>
-              <TextField
-                fullWidth
-                placeholder="Search Patients..."
-                value={search}
-                onChange={handleSearchChange}
-                size="small"
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    paddingLeft: '40px',
-                  }
-                }}
-              />
-            </SearchContainer>
-            
-            <Button
-              variant="contained"
-              startIcon={<Plus size={20} />}
-              onClick={handleAddPatient}
-              sx={{
-                backgroundColor: theme.colors.primary,
-                '&:hover': {
-                  backgroundColor: '#0056b3',
-                }
-              }}
-            >
-              Add Patient
-            </Button>
-          </HeaderControls>
+        <Button
+          variant="contained"
+          startIcon={<Plus size={18} />}
+          onClick={handleAddPatient}
+          sx={{
+            bgcolor: colors.primary,
+            borderRadius: 2,
+            px: 3,
+            py: 1,
+            textTransform: 'none',
+            fontWeight: 600,
+            '&:hover': {
+              bgcolor: colors.primaryLight,
+            },
+          }}
+        >
+          Add Patient
+        </Button>
+      </PageHeader>
+      
+      <ControlsRow>
+        <SearchWrapper>
+          <TextField
+            fullWidth
+            placeholder="Search by name, email, or MRN..."
+            value={search}
+            onChange={handleSearchChange}
+            size="small"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Search size={18} color={colors.textSecondary} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '10px',
+                bgcolor: colors.paper,
+              },
+            }}
+          />
+        </SearchWrapper>
+      </ControlsRow>
+      
+      {error && (
+        <Box sx={{ 
+          p: 2, 
+          bgcolor: '#FEF2F2', 
+          borderRadius: 2, 
+          border: '1px solid #FECACA',
+          mb: 2 
+        }}>
+          <Typography color="error" variant="body2">
+            Error loading patients. Please try again.
+          </Typography>
+        </Box>
+      )}
+      
+      {isLoading ? (
+        <TableWrapper>
+          <Box sx={{ p: 3 }}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Box key={i} sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <Skeleton variant="circular" width={40} height={40} />
+                <Box sx={{ flex: 1 }}>
+                  <Skeleton variant="text" width="40%" />
+                  <Skeleton variant="text" width="60%" />
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </TableWrapper>
+      ) : data?.data.length === 0 ? (
+        <TableWrapper>
+          <EmptyState>
+            <Users size={48} />
+            <h3>No Patients Found</h3>
+            <p>Add your first patient or try a different search term.</p>
+          </EmptyState>
+        </TableWrapper>
+      ) : isMobile ? (
+        // Mobile Card View
+        <Box>
+          {data?.data.map((patient) => (
+            <MobileCard key={patient.id}>
+              <MobileCardHeader>
+                <Avatar sx={{ 
+                  bgcolor: colors.primary, 
+                  width: 44, 
+                  height: 44,
+                  fontWeight: 600,
+                }}>
+                  {getInitials(patient.firstName, patient.lastName)}
+                </Avatar>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    {patient.firstName} {patient.lastName}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    MRN: {patient.mrn}
+                  </Typography>
+                </Box>
+              </MobileCardHeader>
+              <MobileCardContent>
+                <MobileCardRow>
+                  <span className="label">Email</span>
+                  <span className="value">{patient.email}</span>
+                </MobileCardRow>
+                <MobileCardRow>
+                  <span className="label">DOB</span>
+                  <span className="value">{patient.dateOfBirth}</span>
+                </MobileCardRow>
+                <MobileCardRow>
+                  <span className="label">Sex</span>
+                  <span className="value">{patient.sex}</span>
+                </MobileCardRow>
+              </MobileCardContent>
+              <MobileCardAction>
+                <Button
+                  size="small"
+                  endIcon={<ChevronRight size={16} />}
+                  onClick={() => handleEditPatient(patient)}
+                  sx={{ color: colors.secondary }}
+                >
+                  Edit
+                </Button>
+              </MobileCardAction>
+            </MobileCard>
+          ))}
           
-          {error && (
-            <Typography color="error" variant="body2">
-              Error loading patients. Please try again.
-            </Typography>
+          {data && data.total > rowsPerPage && (
+            <TablePagination
+              component="div"
+              count={data.total}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+              rowsPerPageOptions={[5, 10, 25]}
+              sx={{ bgcolor: colors.paper, borderRadius: 2, mt: 2 }}
+            />
           )}
-          
-          {isLoading ? (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-              <CircularProgress />
-            </Box>
-          ) : (
-            <TableWrapper>
-              <TableContainer>
-                <StyledTable>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Name</TableCell>
-                      <TableCell>Email</TableCell>
-                      <TableCell>MRN</TableCell>
-                      <TableCell>Date of Birth</TableCell>
-                      <TableCell>Sex</TableCell>
-                      <TableCell>Action</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {data?.data.map((patient) => (
-                      <TableRow key={patient.id}>
-                        <TableCell>
+        </Box>
+      ) : (
+        // Desktop Table View
+        <TableWrapper>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: `${colors.primary}08` }}>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }}>Patient</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }}>Email</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }}>MRN</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }}>DOB</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }}>Sex</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: colors.primary }} align="center">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data?.data.map((patient) => (
+                  <TableRow 
+                    key={patient.id}
+                    sx={{ 
+                      '&:hover': { bgcolor: colors.background },
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar sx={{ 
+                          bgcolor: colors.primary, 
+                          width: 36, 
+                          height: 36,
+                          fontSize: '0.875rem',
+                          fontWeight: 600,
+                        }}>
+                          {getInitials(patient.firstName, patient.lastName)}
+                        </Avatar>
+                        <Typography fontWeight={500}>
                           {patient.firstName} {patient.lastName}
-                        </TableCell>
-                        <TableCell>{patient.email}</TableCell>
-                        <TableCell>{patient.mrn}</TableCell>
-                        <TableCell>{patient.dateOfBirth}</TableCell>
-                        <TableCell>{patient.sex}</TableCell>
-                        <TableCell>
-                          <Tooltip title="Edit Patient">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleEditPatient(patient)}
-                              sx={{ color: theme.colors.primary }}
-                            >
-                              <Edit size={16} />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </StyledTable>
-                
-                <TablePagination
-                  rowsPerPageOptions={[5, 10, 25]}
-                  component="div"
-                  count={data?.total || 0}
-                  rowsPerPage={rowsPerPage}
-                  page={page}
-                  onPageChange={handleChangePage}
-                  onRowsPerPageChange={handleChangeRowsPerPage}
-                  labelRowsPerPage="Rows per page:"
-                  labelDisplayedRows={({ from, to, count }) =>
-                    `${from}-${to} of ${count !== -1 ? count : `more than ${to}`}`
-                  }
-                  sx={{
-                    '.MuiTablePagination-selectLabel': {
-                      color: theme.colors.gray[600],
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      marginRight: '0.5rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      marginBottom: '0',
-                      lineHeight: '1.5',
-                    },
-                    '.MuiTablePagination-displayedRows': {
-                      color: theme.colors.gray[600],
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      lineHeight: '1.5',
-                    },
-                    '.MuiTablePagination-select': {
-                      color: theme.colors.gray[700],
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      marginLeft: '0.5rem',
-                      marginRight: '1rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      marginTop: '0',
-                      height: 'auto',
-                      '& .MuiSelect-select': {
-                        paddingRight: '2rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        paddingTop: '0',
-                        paddingBottom: '0',
-                        lineHeight: '1.5',
-                        margin: '0',
-                        verticalAlign: 'baseline',
-                        transform: 'translateY(0)',
-                        height: 'auto',
-                        minHeight: 'auto',
-                        boxSizing: 'border-box',
-                      },
-                      '& .MuiSelect-select.MuiSelect-select': {
-                        paddingTop: '0',
-                        paddingBottom: '0',
-                        lineHeight: '1.5',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        height: 'auto',
-                        minHeight: 'auto',
-                        boxSizing: 'border-box',
-                      },
-                      '& .MuiOutlinedInput-root': {
-                        height: 'auto',
-                        minHeight: 'auto',
-                        '& fieldset': {
-                          border: 'none',
-                        },
-                      },
-                    },
-                    '.MuiTablePagination-actions': {
-                      '.MuiIconButton-root': {
-                        color: theme.colors.gray[600],
-                        '&:hover': {
-                          backgroundColor: 'rgba(0, 123, 255, 0.08)',
-                          color: theme.colors.primary,
-                        },
-                        '&.Mui-disabled': {
-                          color: theme.colors.gray[300],
-                        },
-                      },
-                    },
-                    '.MuiTablePagination-toolbar': {
-                      padding: '1rem 2rem',
-                      borderTop: '1px solid #e0e0e0',
-                      backgroundColor: '#fafafa',
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      justifyContent: 'space-between',
-                      minHeight: '52px',
-                    },
-
-                  }}
-                />
-              </TableContainer>
-            </TableWrapper>
-          )}
-        </PatientsContainer>
-      </Content>
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Mail size={14} color={colors.textSecondary} />
+                        {patient.email}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={patient.mrn} 
+                        size="small" 
+                        sx={{ 
+                          bgcolor: `${colors.secondary}15`,
+                          color: colors.secondary,
+                          fontWeight: 600,
+                          fontSize: '0.75rem',
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Calendar size={14} color={colors.textSecondary} />
+                        {patient.dateOfBirth}
+                      </Box>
+                    </TableCell>
+                    <TableCell>{patient.sex}</TableCell>
+                    <TableCell align="center">
+                      <Tooltip title="Edit Patient">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditPatient(patient)}
+                          sx={{ 
+                            color: colors.secondary,
+                            '&:hover': { bgcolor: `${colors.secondary}15` },
+                          }}
+                        >
+                          <Edit size={18} />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          
+          <TablePagination
+            component="div"
+            count={data?.total || 0}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[5, 10, 25]}
+            sx={{
+              borderTop: `1px solid ${colors.border}`,
+              bgcolor: colors.background,
+            }}
+          />
+        </TableWrapper>
+      )}
       
       <AddPatientModal
         open={isAddModalOpen}
-        onClose={handleCloseAddModal}
+        onClose={() => setIsAddModalOpen(false)}
       />
       
       <EditPatientModal
         open={isEditModalOpen}
-        onClose={handleCloseEditModal}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedPatient(null);
+        }}
         patient={selectedPatient}
       />
-    </Container>
+    </PageContainer>
   );
 };
 
-export default PatientsPage; 
+export default PatientsPage;
