@@ -879,7 +879,13 @@ aws ecs describe-services `
 
 ## 5. Phase 3: Build and Deploy
 
-### Step 3.1: Build and Push Docker Images (Patient + Doctor)
+> 📝 **Note:** This phase covers 4 applications:
+> - Patient API (backend)
+> - Doctor API (backend)
+> - Patient Web (frontend)
+> - Doctor Web (frontend)
+
+### Step 3.1: Build and Push Docker Images (APIs)
 
 ```powershell
 cd Oncolife_Monolith
@@ -958,6 +964,122 @@ while ($true) {
 }
 # Press Ctrl+C to stop
 ```
+
+### Step 3.4: Build and Deploy Frontend (Two Options)
+
+> Choose ONE of these options for frontend deployment:
+> - **Option A (Recommended):** S3 + CloudFront (lower cost, better performance)
+> - **Option B:** Docker + ECS (containerized, same as APIs)
+
+---
+
+#### Option A: S3 + CloudFront (Recommended)
+
+**Create S3 Buckets for Static Hosting:**
+```powershell
+# Create Patient Web bucket
+aws s3api create-bucket `
+    --bucket "oncolife-patient-web-$ACCOUNT_ID" `
+    --region $AWS_REGION `
+    --create-bucket-configuration LocationConstraint=$AWS_REGION
+
+# Create Doctor Web bucket
+aws s3api create-bucket `
+    --bucket "oncolife-doctor-web-$ACCOUNT_ID" `
+    --region $AWS_REGION `
+    --create-bucket-configuration LocationConstraint=$AWS_REGION
+
+# Enable static website hosting
+aws s3 website "s3://oncolife-patient-web-$ACCOUNT_ID" `
+    --index-document index.html `
+    --error-document index.html
+
+aws s3 website "s3://oncolife-doctor-web-$ACCOUNT_ID" `
+    --index-document index.html `
+    --error-document index.html
+```
+
+**Build and Upload Patient Web:**
+```powershell
+cd apps/patient-platform/patient-web
+
+# Install dependencies and build
+npm ci
+$env:VITE_API_BASE_URL = "https://api.oncolife.com"
+$env:VITE_WS_BASE_URL = "wss://api.oncolife.com"
+npm run build
+
+# Upload to S3
+aws s3 sync dist/ "s3://oncolife-patient-web-$ACCOUNT_ID" --delete
+
+# Set cache headers
+aws s3 cp "s3://oncolife-patient-web-$ACCOUNT_ID" "s3://oncolife-patient-web-$ACCOUNT_ID" `
+    --recursive --metadata-directive REPLACE `
+    --cache-control "max-age=31536000,public" `
+    --exclude "index.html"
+
+aws s3 cp "s3://oncolife-patient-web-$ACCOUNT_ID/index.html" "s3://oncolife-patient-web-$ACCOUNT_ID/index.html" `
+    --cache-control "no-cache,no-store,must-revalidate"
+```
+
+**Build and Upload Doctor Web:**
+```powershell
+cd apps/doctor-platform/doctor-web
+
+npm ci
+$env:VITE_API_BASE_URL = "https://doctor-api.oncolife.com"
+$env:VITE_PATIENT_API_URL = "https://api.oncolife.com"
+npm run build
+
+aws s3 sync dist/ "s3://oncolife-doctor-web-$ACCOUNT_ID" --delete
+```
+
+**Create CloudFront Distributions (via Console recommended):**
+1. Go to CloudFront Console → Create Distribution
+2. Origin: S3 bucket endpoint
+3. Configure: HTTPS redirect, custom domain, ACM certificate
+4. Error pages: 403/404 → /index.html (for SPA routing)
+
+---
+
+#### Option B: Docker + ECS (Containerized)
+
+**Create ECR Repositories for Frontend:**
+```powershell
+aws ecr create-repository --repository-name "oncolife-patient-web" --image-scanning-configuration scanOnPush=true
+aws ecr create-repository --repository-name "oncolife-doctor-web" --image-scanning-configuration scanOnPush=true
+```
+
+**Build and Push Patient Web:**
+```powershell
+cd apps/patient-platform/patient-web
+
+# Build with production API URL
+docker build `
+    --build-arg VITE_API_BASE_URL=https://api.oncolife.com `
+    --build-arg VITE_WS_BASE_URL=wss://api.oncolife.com `
+    -t "oncolife-patient-web:latest" .
+
+docker tag "oncolife-patient-web:latest" "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/oncolife-patient-web:latest"
+docker push "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/oncolife-patient-web:latest"
+```
+
+**Build and Push Doctor Web:**
+```powershell
+cd apps/doctor-platform/doctor-web
+
+docker build `
+    --build-arg VITE_API_BASE_URL=https://doctor-api.oncolife.com `
+    --build-arg VITE_PATIENT_API_URL=https://api.oncolife.com `
+    -t "oncolife-doctor-web:latest" .
+
+docker tag "oncolife-doctor-web:latest" "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/oncolife-doctor-web:latest"
+docker push "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/oncolife-doctor-web:latest"
+```
+
+**Create ECS Services for Frontend:**
+> Similar to API services, but using port 80 and the web Docker images.
+> Use separate ALBs or path-based routing on existing ALBs.
 
 ---
 
