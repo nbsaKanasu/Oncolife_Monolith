@@ -1078,11 +1078,16 @@ aws ecr create-repository --repository-name "oncolife-doctor-web" --image-scanni
 ```
 
 **Build and Push Patient Web:**
-```powershell
-cd apps/patient-platform/patient-web
 
-# Build with production API URL
+> ⚠️ **IMPORTANT**: Frontend builds MUST run from the **monorepo root** directory (not inside the app folder). This is because the frontends depend on shared packages (`packages/ui-components`).
+
+```powershell
+# IMPORTANT: Run from monorepo root!
+cd Oncolife_Monolith
+
+# Build Patient Web with production API URL
 docker build `
+    -f "apps/patient-platform/patient-web/Dockerfile" `
     --build-arg VITE_API_BASE_URL=https://api.oncolife.com `
     --build-arg VITE_WS_BASE_URL=wss://api.oncolife.com `
     -t "oncolife-patient-web:latest" .
@@ -1093,9 +1098,12 @@ docker push "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/oncolife-patient-web:
 
 **Build and Push Doctor Web:**
 ```powershell
-cd apps/doctor-platform/doctor-web
+# IMPORTANT: Run from monorepo root!
+cd Oncolife_Monolith
 
+# Build Doctor Web with production API URL
 docker build `
+    -f "apps/doctor-platform/doctor-web/Dockerfile" `
     --build-arg VITE_API_BASE_URL=https://doctor-api.oncolife.com `
     --build-arg VITE_PATIENT_API_URL=https://api.oncolife.com `
     -t "oncolife-doctor-web:latest" .
@@ -1499,6 +1507,46 @@ aws logs tail "/ecs/oncolife-patient-api" --since 10m
 # - Database connection failed
 # - Import errors
 ```
+
+---
+
+### Error: Frontend Docker Build Fails - Cannot find module '@oncolife/ui-components'
+
+**Cause:** Docker build context doesn't include the shared packages folder.
+
+**Fix:** Build from the **monorepo root**, not from inside the app folder:
+
+```powershell
+# ❌ WRONG - this will fail!
+cd apps/patient-platform/patient-web
+docker build -t "oncolife-patient-web:latest" .
+
+# ✅ CORRECT - run from monorepo root
+cd Oncolife_Monolith
+docker build -f apps/patient-platform/patient-web/Dockerfile -t "oncolife-patient-web:latest" .
+```
+
+The Dockerfiles for `patient-web` and `doctor-web` are designed to run from the monorepo root because they need access to `packages/ui-components`.
+
+---
+
+### Error: CI/CD Deploy Workflow Fails in 7 Seconds
+
+**Cause:** GitHub Secrets are not configured.
+
+**Fix:** Configure these secrets in your GitHub repository:
+1. Go to: `https://github.com/YOUR_USER/Oncolife_Monolith/settings/secrets/actions`
+2. Add all required secrets (see Phase 6 CI/CD Setup section)
+
+Required secrets:
+- `AWS_ACCOUNT_ID`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `PATIENT_DATABASE_URL`
+- `DOCTOR_DATABASE_URL`
+- `PATIENT_API_URL`
+- `PATIENT_WS_URL`
+- `DOCTOR_API_URL`
 
 ---
 
