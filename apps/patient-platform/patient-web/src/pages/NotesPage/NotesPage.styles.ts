@@ -1,21 +1,29 @@
 /**
  * OncoLife Ruby - Notes/Diary Page Styles
- * Responsive, themed design for patient diary entries
+ * Lovable-inspired design with warm colors, left-border cards, For Doctor badge
  */
 
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 
-// Theme colors (Patient)
+// Warm Lovable-style colors
 const colors = {
-  primary: '#00897B',
-  primaryLight: '#4DB6AC',
-  primaryDark: '#00695C',
-  secondary: '#7E57C2',
-  background: '#F5F7FA',
+  background: '#FAF8F5',
   paper: '#FFFFFF',
-  text: '#1E293B',
-  textSecondary: '#64748B',
-  border: '#E2E8F0',
+  primary: '#4F7CAC',
+  primaryLight: '#7BA3C9',
+  primaryDark: '#3B5F8A',
+  foreground: '#3D3A35',
+  muted: '#8A847A',
+  border: '#E8E4DD',
+  
+  // For Doctor badge
+  doctor: '#4F7CAC',
+  doctorBg: 'rgba(79, 124, 172, 0.08)',
+  doctorBorder: 'rgba(79, 124, 172, 0.25)',
+  
+  // Delete/danger
+  danger: '#DC2626',
+  dangerBg: '#FEE2E2',
 };
 
 export const NotesPageContainer = styled.div`
@@ -54,15 +62,15 @@ export const NotesSidebarContainer = styled.div`
 `;
 
 export const SidebarHeader = styled.div`
-  padding: 16px;
+  padding: 1rem;
   border-bottom: 1px solid ${colors.border};
-  background: linear-gradient(135deg, ${colors.primary}05 0%, ${colors.secondary}05 100%);
 `;
 
 export const SidebarTitle = styled.h3`
-  font-size: 1rem;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.125rem;
   font-weight: 600;
-  color: ${colors.text};
+  color: ${colors.foreground};
   margin: 0 0 12px 0;
   display: flex;
   align-items: center;
@@ -73,7 +81,7 @@ export const SearchInput = styled.div`
   display: flex;
   align-items: center;
   background: ${colors.background};
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px 14px;
   border: 1px solid ${colors.border};
   transition: all 0.2s ease;
@@ -81,11 +89,11 @@ export const SearchInput = styled.div`
   &:focus-within {
     border-color: ${colors.primary};
     background: ${colors.paper};
-    box-shadow: 0 0 0 3px ${colors.primary}15;
+    box-shadow: 0 0 0 3px rgba(79, 124, 172, 0.1);
   }
   
   svg {
-    color: ${colors.textSecondary};
+    color: ${colors.muted};
     margin-right: 10px;
     flex-shrink: 0;
   }
@@ -95,11 +103,12 @@ export const SearchInput = styled.div`
     outline: none;
     background: transparent;
     font-size: 0.875rem;
-    color: ${colors.text};
+    color: ${colors.foreground};
     width: 100%;
+    font-family: 'DM Sans', sans-serif;
     
     &::placeholder {
-      color: ${colors.textSecondary};
+      color: ${colors.muted};
     }
   }
 `;
@@ -125,10 +134,10 @@ export const NavButton = styled.button`
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
-  color: ${colors.textSecondary};
+  color: ${colors.muted};
   
   &:hover {
-    background: ${colors.primary}15;
+    background: rgba(79, 124, 172, 0.1);
     color: ${colors.primary};
   }
   
@@ -141,7 +150,7 @@ export const NavButton = styled.button`
 export const CurrentMonth = styled.span`
   font-size: 0.9375rem;
   font-weight: 600;
-  color: ${colors.text};
+  color: ${colors.foreground};
   min-width: 120px;
   text-align: center;
 `;
@@ -156,33 +165,70 @@ export const NotesListContainer = styled.div`
   }
 `;
 
-export const NoteItemCard = styled.div<{ $isSelected?: boolean }>`
+// Note item card with left border and For Doctor styling
+export const NoteItemCard = styled.div<{ $isSelected?: boolean; $isForDoctor?: boolean }>`
   padding: 14px 16px;
-  border-radius: 10px;
+  border-radius: 16px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  margin-bottom: 6px;
-  background: ${props => props.$isSelected ? `${colors.primary}10` : 'transparent'};
-  border: 2px solid ${props => props.$isSelected ? colors.primary : 'transparent'};
+  transition: all 0.25s ease;
+  margin-bottom: 8px;
+  background: ${props => props.$isSelected ? 'rgba(79, 124, 172, 0.08)' : colors.paper};
+  border: 1px solid ${props => props.$isSelected ? colors.primary : colors.border};
+  box-shadow: 0 2px 12px -4px rgba(0, 0, 0, 0.06);
+  
+  ${props => props.$isForDoctor && css`
+    border-left: 4px solid ${colors.primary};
+    background: ${props.$isSelected ? 'rgba(79, 124, 172, 0.12)' : colors.doctorBg};
+  `}
   
   &:hover {
-    background: ${props => props.$isSelected ? `${colors.primary}15` : colors.background};
+    box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
   }
+`;
+
+export const NoteItemHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
 `;
 
 export const NoteItemTitle = styled.h4`
   font-size: 0.9375rem;
   font-weight: 600;
-  color: ${colors.text};
-  margin: 0 0 4px 0;
+  color: ${colors.foreground};
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+`;
+
+// "For Doctor" badge - Lovable style
+export const ForDoctorBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: ${colors.doctorBg};
+  color: ${colors.doctor};
+  border: 1px solid ${colors.doctorBorder};
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  
+  svg {
+    width: 10px;
+    height: 10px;
+  }
 `;
 
 export const NoteItemDate = styled.span`
   font-size: 0.75rem;
-  color: ${colors.textSecondary};
+  color: ${colors.muted};
   display: flex;
   align-items: center;
   gap: 4px;
@@ -190,11 +236,14 @@ export const NoteItemDate = styled.span`
 
 export const NoteItemPreview = styled.p`
   font-size: 0.8125rem;
-  color: ${colors.textSecondary};
+  color: ${colors.muted};
   margin: 6px 0 0 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.5;
 `;
 
 export const AddNoteButton = styled.button`
@@ -205,19 +254,20 @@ export const AddNoteButton = styled.button`
   width: calc(100% - 16px);
   margin: 8px;
   padding: 12px;
-  background: linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryDark} 100%);
+  background: ${colors.primary};
   color: white;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   font-weight: 600;
   font-size: 0.875rem;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px ${colors.primary}40;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 12px rgba(79, 124, 172, 0.3);
   
   &:hover {
+    background: ${colors.primaryDark};
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px ${colors.primary}50;
+    box-shadow: 0 6px 16px rgba(79, 124, 172, 0.4);
   }
 `;
 
@@ -239,7 +289,7 @@ export const EditorHeader = styled.div`
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid ${colors.border};
-  background: linear-gradient(135deg, ${colors.primary}05 0%, ${colors.secondary}05 100%);
+  background: ${colors.background};
   
   @media (max-width: 576px) {
     flex-direction: column;
@@ -248,10 +298,18 @@ export const EditorHeader = styled.div`
   }
 `;
 
+export const EditorTitleRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+`;
+
 export const EditorTitle = styled.input`
+  font-family: 'Fraunces', Georgia, serif;
   font-size: 1.25rem;
   font-weight: 600;
-  color: ${colors.text};
+  color: ${colors.foreground};
   border: none;
   outline: none;
   background: transparent;
@@ -262,11 +320,11 @@ export const EditorTitle = styled.input`
   
   &:focus {
     background: ${colors.paper};
-    box-shadow: 0 0 0 2px ${colors.primary}30;
+    box-shadow: 0 0 0 3px rgba(79, 124, 172, 0.1);
   }
   
   &::placeholder {
-    color: ${colors.textSecondary};
+    color: ${colors.muted};
   }
 `;
 
@@ -280,43 +338,54 @@ export const EditorActions = styled.div`
   }
 `;
 
-export const ActionButton = styled.button<{ $variant?: 'primary' | 'danger' | 'default' }>`
+export const ActionButton = styled.button<{ $variant?: 'primary' | 'danger' | 'doctor' | 'default' }>`
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   
   ${props => {
     switch (props.$variant) {
       case 'primary':
-        return `
+        return css`
           background: ${colors.primary};
           color: white;
           border: none;
           
           &:hover {
             background: ${colors.primaryDark};
+            transform: translateY(-1px);
           }
         `;
       case 'danger':
-        return `
+        return css`
           background: transparent;
-          color: #DC2626;
-          border: 1px solid #DC262630;
+          color: ${colors.danger};
+          border: 1px solid ${colors.danger}30;
           
           &:hover {
-            background: #DC262610;
+            background: ${colors.dangerBg};
+          }
+        `;
+      case 'doctor':
+        return css`
+          background: ${colors.doctorBg};
+          color: ${colors.doctor};
+          border: 1px solid ${colors.doctorBorder};
+          
+          &:hover {
+            background: rgba(79, 124, 172, 0.15);
           }
         `;
       default:
-        return `
+        return css`
           background: transparent;
-          color: ${colors.textSecondary};
+          color: ${colors.muted};
           border: 1px solid ${colors.border};
           
           &:hover {
@@ -336,6 +405,7 @@ export const EditorContent = styled.div`
   flex: 1;
   padding: 20px;
   overflow-y: auto;
+  background: ${colors.paper};
 `;
 
 export const EditorTextarea = styled.textarea`
@@ -345,14 +415,14 @@ export const EditorTextarea = styled.textarea`
   border: none;
   outline: none;
   background: transparent;
+  font-family: 'DM Sans', sans-serif;
   font-size: 1rem;
   line-height: 1.7;
-  color: ${colors.text};
+  color: ${colors.foreground};
   resize: none;
-  font-family: 'Source Sans Pro', sans-serif;
   
   &::placeholder {
-    color: ${colors.textSecondary};
+    color: ${colors.muted};
   }
 `;
 
@@ -362,9 +432,10 @@ export const EmptyEditorState = styled.div`
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: ${colors.textSecondary};
+  color: ${colors.muted};
   text-align: center;
   padding: 40px;
+  background: ${colors.background};
   
   .icon {
     font-size: 3rem;
@@ -372,9 +443,10 @@ export const EmptyEditorState = styled.div`
   }
   
   h3 {
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 1.125rem;
     font-weight: 600;
-    color: ${colors.text};
+    color: ${colors.foreground};
     margin: 0 0 8px 0;
   }
   
@@ -382,5 +454,6 @@ export const EmptyEditorState = styled.div`
     font-size: 0.9375rem;
     margin: 0;
     max-width: 300px;
+    line-height: 1.6;
   }
 `;
