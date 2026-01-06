@@ -11,9 +11,22 @@
 
 name: Deploy to AWS
 
+# =============================================================================
+# IMPORTANT: This workflow only runs MANUALLY, not on every push.
+# To deploy:
+# 1. Go to Actions tab in GitHub
+# 2. Select "Deploy to AWS" workflow
+# 3. Click "Run workflow"
+# 4. Select environment and click "Run workflow"
+#
+# Before running, ensure GitHub Secrets are configured:
+# - AWS_ACCOUNT_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+# - PATIENT_DATABASE_URL, DOCTOR_DATABASE_URL
+# - PATIENT_API_URL, DOCTOR_API_URL
+# =============================================================================
+
 on:
-  push:
-    branches: [main]
+  # Only manual trigger - remove 'push' to prevent auto-deploy
   workflow_dispatch:
     inputs:
       environment:
