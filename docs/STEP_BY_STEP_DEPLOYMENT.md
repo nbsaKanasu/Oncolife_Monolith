@@ -15,8 +15,9 @@
 5. [Phase 3: Build and Deploy](#5-phase-3-build-and-deploy)
 6. [Phase 4: Database Setup](#6-phase-4-database-setup)
 7. [Phase 5: Verification](#7-phase-5-verification)
-8. [Troubleshooting Guide](#8-troubleshooting-guide)
-9. [Common Errors and Fixes](#9-common-errors-and-fixes)
+8. [Phase 6: CI/CD Setup (Automated Deployments)](#8-phase-6-cicd-setup-automated-deployments)
+9. [Troubleshooting Guide](#9-troubleshooting-guide)
+10. [Common Errors and Fixes](#10-common-errors-and-fixes)
 
 ---
 
@@ -1108,7 +1109,7 @@ GRANT ALL PRIVILEGES ON DATABASE oncolife_patient TO oncolife_admin;
 GRANT ALL PRIVILEGES ON DATABASE oncolife_doctor TO oncolife_admin;
 ```
 
-### Step 4.3: Run Migrations
+### Step 4.3: Run Migrations (Alembic)
 
 From a machine that can reach RDS (bastion or local with VPN):
 
@@ -1118,12 +1119,31 @@ python -m venv venv
 source venv/bin/activate  # or .\venv\Scripts\activate on Windows
 pip install -r requirements.txt
 
+# Set environment variables
 export PATIENT_DB_HOST=your-rds-endpoint
 export PATIENT_DB_PORT=5432
 export PATIENT_DB_NAME=oncolife_patient
 export PATIENT_DB_USER=oncolife_admin
 export PATIENT_DB_PASSWORD=your_password
 
+# OR use DATABASE_URL
+export DATABASE_URL=postgresql://oncolife_admin:password@your-rds-endpoint:5432/oncolife_patient
+
+# Run migrations
+alembic upgrade head
+echo "Patient API migrations complete!"
+
+# Repeat for Doctor API
+cd ../../doctor-platform/doctor-api
+export POSTGRES_DOCTOR_DB=oncolife_doctor
+export DATABASE_URL=postgresql://oncolife_admin:password@your-rds-endpoint:5432/oncolife_doctor
+alembic upgrade head
+echo "Doctor API migrations complete!"
+```
+
+**Alternative: Direct Table Creation (Quick Setup)**
+
+```bash
 cd src
 python -c "
 from db.base import Base
@@ -1219,7 +1239,110 @@ aws elbv2 describe-target-health `
 
 ---
 
-## 8. Troubleshooting Guide
+## 8. Phase 6: CI/CD Setup (Automated Deployments)
+
+GitHub Actions is pre-configured for automated CI/CD. Follow these steps to enable it.
+
+### Step 6.1: Configure GitHub Secrets
+
+Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+
+Add these secrets:
+
+| Secret Name | Description | Example |
+|-------------|-------------|---------|
+| `AWS_ACCOUNT_ID` | Your AWS account ID | `123456789012` |
+| `AWS_ACCESS_KEY_ID` | IAM user access key | `AKIAIOSFODNN7EXAMPLE` |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret key | `wJalrXUtnFEMI/K7MDENG/...` |
+| `PATIENT_DATABASE_URL` | Patient DB connection string | `postgresql://user:pass@host:5432/oncolife_patient` |
+| `DOCTOR_DATABASE_URL` | Doctor DB connection string | `postgresql://user:pass@host:5432/oncolife_doctor` |
+| `PATIENT_API_URL` | Production patient API URL | `https://api.oncolife.com` |
+| `PATIENT_WS_URL` | Production WebSocket URL | `wss://api.oncolife.com` |
+| `DOCTOR_API_URL` | Production doctor API URL | `https://doctor-api.oncolife.com` |
+
+### Step 6.2: Create IAM User for GitHub Actions
+
+```powershell
+# Create IAM user for CI/CD
+aws iam create-user --user-name github-actions-oncolife
+
+# Create access key
+aws iam create-access-key --user-name github-actions-oncolife
+# Save the AccessKeyId and SecretAccessKey as GitHub secrets!
+
+# Create policy document
+@'
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ecr:GetAuthorizationToken",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage",
+                "ecr:PutImage",
+                "ecr:InitiateLayerUpload",
+                "ecr:UploadLayerPart",
+                "ecr:CompleteLayerUpload"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ecs:UpdateService",
+                "ecs:DescribeServices",
+                "ecs:DescribeClusters"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+'@ | Out-File -FilePath "github-actions-policy.json" -Encoding utf8
+
+# Attach policy
+aws iam put-user-policy `
+    --user-name github-actions-oncolife `
+    --policy-name OncolifeDeployPolicy `
+    --policy-document "file://github-actions-policy.json"
+
+Remove-Item "github-actions-policy.json"
+```
+
+### Step 6.3: Test CI Workflow
+
+1. Push a commit to a feature branch
+2. Create a Pull Request to `main`
+3. Watch the **Actions** tab for CI to run
+4. CI should: Lint → Test → Build Docker images
+
+### Step 6.4: Test CD Workflow
+
+1. Merge a PR to `main`
+2. Watch the **Actions** tab for CD to run
+3. CD should: Build → Push to ECR → Run Migrations → Deploy to ECS
+
+### Step 6.5: Manual Deployment (Optional)
+
+You can trigger deployments manually:
+
+1. Go to **Actions** → **Deploy to AWS**
+2. Click **Run workflow**
+3. Select environment (staging/production)
+4. Click **Run workflow**
+
+### CI/CD Workflow Files
+
+| File | Trigger | Purpose |
+|------|---------|---------|
+| `.github/workflows/ci.yml` | PR, push to main | Lint, test, build |
+| `.github/workflows/deploy.yml` | Merge to main | Build, push, migrate, deploy |
+
+---
+
+## 9. Troubleshooting Guide
 
 ### Container Won't Start
 
@@ -1265,7 +1388,7 @@ aws secretsmanager describe-secret --secret-id "oncolife/db" --query 'ARN'
 
 ---
 
-## 9. Common Errors and Fixes
+## 10. Common Errors and Fixes
 
 ### Error: `InvalidParameterException` on Log Groups
 

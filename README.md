@@ -383,14 +383,40 @@ python scripts/seed_education.py
 ### Testing
 
 ```bash
-# Backend
+# Backend (Patient API)
 cd apps/patient-platform/patient-api
+pip install pytest pytest-asyncio pytest-cov httpx
+pytest                              # Run all tests
+pytest --cov=src                    # With coverage
+pytest -m unit                      # Only unit tests
+
+# Backend (Doctor API)
+cd apps/doctor-platform/doctor-api
 pytest
 
 # Frontend
 cd apps/patient-platform/patient-web
 npm test
 ```
+
+### Database Migrations (Alembic)
+
+```bash
+cd apps/patient-platform/patient-api
+alembic upgrade head                # Apply migrations
+alembic revision --autogenerate -m "description"  # Create new migration
+```
+
+### CI/CD (GitHub Actions)
+
+Automated pipelines run on every PR and deployment:
+
+| Workflow | Trigger | Jobs |
+|----------|---------|------|
+| `ci.yml` | PR, push | Lint → Test → Build |
+| `deploy.yml` | Merge to main | Build → Push ECR → Migrate → Deploy ECS |
+
+Configure GitHub Secrets for deployments - see [Deployment Guide](docs/STEP_BY_STEP_DEPLOYMENT.md#8-phase-6-cicd-setup-automated-deployments).
 
 ### Git Workflow
 

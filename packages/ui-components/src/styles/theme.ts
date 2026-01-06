@@ -1,12 +1,19 @@
 /**
  * OncoLife Design System - Theme Foundation
  * 
+ * UPDATED: Lovable-inspired warm, emotionally comforting design
+ * 
  * Brand: HealthAI
  * Application: OncoLife
  * Patient: "OncoLife - Ruby: Compassionate Care, Intelligent Triage"
  * Doctor: "OncoLife"
  * 
- * Supports: Light Mode + Dark Mode
+ * Design Philosophy:
+ * - Warm cream backgrounds (not clinical white)
+ * - Serif headings for emotional warmth
+ * - Blue primary accent (trustworthy, calm)
+ * - Soft shadows and rounded corners
+ * - Green/Amber/Red severity system
  */
 
 import { createTheme, ThemeOptions, responsiveFontSizes, PaletteMode } from '@mui/material/styles';
@@ -26,14 +33,19 @@ export const breakpoints = {
 };
 
 // =============================================================================
-// TYPOGRAPHY - Source Sans Pro
+// TYPOGRAPHY - DM Sans (body) + Fraunces (headings)
+// Lovable-inspired warm typography
 // =============================================================================
 
 const typography = {
-  fontFamily: "'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  // Body font: DM Sans - clean, modern, friendly
+  fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  
+  // Headings use Fraunces (serif) for emotional warmth
   h1: {
+    fontFamily: "'Fraunces', Georgia, serif",
     fontSize: '2rem',
-    fontWeight: 700,
+    fontWeight: 600,
     lineHeight: 1.2,
     letterSpacing: '-0.02em',
     '@media (min-width:600px)': {
@@ -44,6 +56,7 @@ const typography = {
     },
   },
   h2: {
+    fontFamily: "'Fraunces', Georgia, serif",
     fontSize: '1.5rem',
     fontWeight: 600,
     lineHeight: 1.3,
@@ -56,57 +69,75 @@ const typography = {
     },
   },
   h3: {
+    fontFamily: "'Fraunces', Georgia, serif",
     fontSize: '1.25rem',
-    fontWeight: 600,
+    fontWeight: 500,
     lineHeight: 1.4,
     '@media (min-width:900px)': {
       fontSize: '1.5rem',
     },
   },
   h4: {
+    fontFamily: "'Fraunces', Georgia, serif",
     fontSize: '1.125rem',
-    fontWeight: 600,
+    fontWeight: 500,
     lineHeight: 1.4,
   },
   h5: {
+    fontFamily: "'DM Sans', sans-serif",
     fontSize: '1rem',
     fontWeight: 600,
     lineHeight: 1.5,
   },
   h6: {
+    fontFamily: "'DM Sans', sans-serif",
     fontSize: '0.875rem',
     fontWeight: 600,
     lineHeight: 1.5,
   },
   body1: {
+    fontFamily: "'DM Sans', sans-serif",
     fontSize: '1rem',
     lineHeight: 1.6,
   },
   body2: {
+    fontFamily: "'DM Sans', sans-serif",
     fontSize: '0.875rem',
     lineHeight: 1.5,
   },
   button: {
+    fontFamily: "'DM Sans', sans-serif",
     textTransform: 'none' as const,
     fontWeight: 600,
   },
   caption: {
+    fontFamily: "'DM Sans', sans-serif",
     fontSize: '0.75rem',
     lineHeight: 1.5,
   },
 };
 
 // =============================================================================
-// SHARED DESIGN TOKENS
+// SHARED DESIGN TOKENS - Lovable-inspired
 // =============================================================================
 
 export const sharedTokens = {
-  // Triage / Severity Colors (consistent across both apps and modes)
+  // Severity Colors (consistent green/amber/red system)
   severity: {
     emergency: '#DC2626',    // Red - Call 911
-    urgent: '#EA580C',       // Orange - Severe
+    urgent: '#EA580C',       // Orange-Red - Severe
+    severe: '#EA580C',       // Alias for urgent
     moderate: '#F59E0B',     // Amber - Moderate
     mild: '#22C55E',         // Green - Mild/OK
+  },
+  
+  // Severity Badge Backgrounds (lighter versions)
+  severityBg: {
+    emergency: '#FEE2E2',    // Red background
+    urgent: '#FFEDD5',       // Orange background
+    severe: '#FFEDD5',       // Alias
+    moderate: '#FEF3C7',     // Amber background
+    mild: '#DCFCE7',         // Green background
   },
   
   // Status Colors
@@ -117,62 +148,69 @@ export const sharedTokens = {
     info: '#3B82F6',
   },
   
-  // Light Mode Gray Scale
-  grayLight: {
-    50: '#F8FAFC',
-    100: '#F1F5F9',
-    200: '#E2E8F0',
-    300: '#CBD5E1',
-    400: '#94A3B8',
-    500: '#64748B',
-    600: '#475569',
-    700: '#334155',
-    800: '#1E293B',
-    900: '#0F172A',
+  // Warm Cream Gray Scale (Light Mode) - Lovable inspired
+  warmLight: {
+    50: '#FDFCFA',           // Warmest white
+    100: '#FAF8F5',          // Cream background
+    200: '#F5F3EE',          // Card hover
+    300: '#E8E4DD',          // Borders
+    400: '#B8B3A8',          // Muted text
+    500: '#8A847A',          // Secondary text
+    600: '#5C574F',          // Body text
+    700: '#3D3A35',          // Headings
+    800: '#2A2825',          // Dark text
+    900: '#1A1917',          // Darkest
   },
   
   // Dark Mode Gray Scale
-  grayDark: {
-    50: '#0F172A',
-    100: '#1E293B',
-    200: '#334155',
-    300: '#475569',
-    400: '#64748B',
-    500: '#94A3B8',
-    600: '#CBD5E1',
-    700: '#E2E8F0',
-    800: '#F1F5F9',
-    900: '#F8FAFC',
+  warmDark: {
+    50: '#1A1917',
+    100: '#252320',
+    200: '#2F2D2A',
+    300: '#3D3A35',
+    400: '#5C574F',
+    500: '#8A847A',
+    600: '#B8B3A8',
+    700: '#E8E4DD',
+    800: '#F5F3EE',
+    900: '#FDFCFA',
   },
   
-  // Shadows
+  // Soft Shadows (Lovable style)
   shadows: {
+    soft: '0 4px 24px -8px rgba(0, 0, 0, 0.08)',
+    warm: '0 8px 32px -12px rgba(139, 90, 43, 0.12)',
+    card: '0 2px 12px -4px rgba(0, 0, 0, 0.06)',
+    hover: '0 8px 24px -8px rgba(0, 0, 0, 0.12)',
     sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
     md: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
     lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-    xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
   },
   
   // Dark Mode Shadows
   shadowsDark: {
+    soft: '0 4px 24px -8px rgba(0, 0, 0, 0.4)',
+    warm: '0 8px 32px -12px rgba(0, 0, 0, 0.5)',
+    card: '0 2px 12px -4px rgba(0, 0, 0, 0.3)',
+    hover: '0 8px 24px -8px rgba(0, 0, 0, 0.5)',
     sm: '0 1px 2px 0 rgba(0, 0, 0, 0.3)',
     md: '0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3)',
     lg: '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3)',
-    xl: '0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.3)',
   },
   
-  // Border Radius
+  // Border Radius (larger for Lovable style)
   borderRadius: {
     xs: 4,
     sm: 8,
     md: 12,
     lg: 16,
     xl: 24,
+    '2xl': 32,
     full: 9999,
   },
   
   // Spacing Scale
-  spacing: 8, // Base spacing unit (8px)
+  spacing: 8,
   
   // Transitions
   transitions: {
@@ -185,25 +223,95 @@ export const sharedTokens = {
 };
 
 // =============================================================================
-// PATIENT THEME COLORS
+// PATIENT THEME COLORS - Warm, Healing Blue
 // =============================================================================
 
 export const patientColors = {
   light: {
     primary: {
-      main: '#00897B',      // Healing Teal
-      light: '#4DB6AC',
-      dark: '#00695C',
+      main: '#4F7CAC',        // Calming Blue (Lovable-inspired)
+      light: '#7BA3C9',
+      dark: '#3B5F8A',
       contrastText: '#FFFFFF',
     },
     secondary: {
-      main: '#7E57C2',      // Soft Lavender/Purple
-      light: '#B388FF',
-      dark: '#5E35B1',
+      main: '#D4A574',        // Warm Terracotta accent
+      light: '#E5C4A8',
+      dark: '#B8875A',
       contrastText: '#FFFFFF',
     },
     background: {
-      default: '#F5F7FA',
+      default: '#FAF8F5',     // Warm cream (Lovable)
+      paper: '#FFFFFF',
+    },
+    text: {
+      primary: '#3D3A35',     // Warm dark brown
+      secondary: '#8A847A',   // Muted warm gray
+      disabled: '#B8B3A8',
+    },
+    divider: '#E8E4DD',
+  },
+  dark: {
+    primary: {
+      main: '#7BA3C9',        // Lighter blue for dark mode
+      light: '#A5C4DE',
+      dark: '#4F7CAC',
+      contrastText: '#1A1917',
+    },
+    secondary: {
+      main: '#E5C4A8',
+      light: '#F2DCC8',
+      dark: '#D4A574',
+      contrastText: '#1A1917',
+    },
+    background: {
+      default: '#1A1917',     // Warm dark
+      paper: '#252320',
+    },
+    text: {
+      primary: '#F5F3EE',
+      secondary: '#B8B3A8',
+      disabled: '#5C574F',
+    },
+    divider: '#3D3A35',
+  },
+  // Ruby Chat Colors
+  ruby: {
+    primary: '#4F7CAC',
+    light: '#7BA3C9',
+    bubble: '#FAF8F5',
+    bubbleDark: '#2F2D2A',
+    border: '#E8E4DD',
+  },
+  // Patient Message Colors
+  patient: {
+    primary: '#4F7CAC',
+    bubble: '#4F7CAC',
+    bubbleDark: '#3B5F8A',
+    text: '#FFFFFF',
+  },
+};
+
+// =============================================================================
+// DOCTOR THEME COLORS - Professional, Clinical
+// =============================================================================
+
+export const doctorColors = {
+  light: {
+    primary: {
+      main: '#1E3A5F',        // Clinical Navy
+      light: '#2E5077',
+      dark: '#0F2942',
+      contrastText: '#FFFFFF',
+    },
+    secondary: {
+      main: '#4F7CAC',        // Same calming blue as patient
+      light: '#7BA3C9',
+      dark: '#3B5F8A',
+      contrastText: '#FFFFFF',
+    },
+    background: {
+      default: '#FAF8F5',     // Warm cream (consistent)
       paper: '#FFFFFF',
     },
     text: {
@@ -211,97 +319,32 @@ export const patientColors = {
       secondary: '#64748B',
       disabled: '#94A3B8',
     },
+    divider: '#E8E4DD',
   },
   dark: {
     primary: {
-      main: '#4DB6AC',      // Lighter teal for dark mode
-      light: '#80CBC4',
-      dark: '#00897B',
-      contrastText: '#0F172A',
-    },
-    secondary: {
-      main: '#B388FF',      // Lighter lavender
-      light: '#E1BEE7',
-      dark: '#7E57C2',
-      contrastText: '#0F172A',
-    },
-    background: {
-      default: '#0F172A',   // Deep navy
-      paper: '#1E293B',
-    },
-    text: {
-      primary: '#F1F5F9',
-      secondary: '#94A3B8',
-      disabled: '#64748B',
-    },
-  },
-  // Ruby Chat Colors
-  ruby: {
-    primary: '#00897B',
-    light: '#4DB6AC',
-    bubble: '#FFFFFF',
-    border: '#B2DFDB',
-  },
-  // Patient Message Colors
-  patient: {
-    primary: '#7E57C2',
-    bubble: '#7E57C2',
-    text: '#FFFFFF',
-  },
-};
-
-// =============================================================================
-// DOCTOR THEME COLORS
-// =============================================================================
-
-export const doctorColors = {
-  light: {
-    primary: {
-      main: '#1E3A5F',      // Clinical Navy
-      light: '#2E5077',
-      dark: '#0F2942',
-      contrastText: '#FFFFFF',
-    },
-    secondary: {
-      main: '#2563EB',      // Medical Blue
-      light: '#3B82F6',
-      dark: '#1D4ED8',
-      contrastText: '#FFFFFF',
-    },
-    background: {
-      default: '#F8FAFC',
-      paper: '#FFFFFF',
-    },
-    text: {
-      primary: '#0F172A',
-      secondary: '#475569',
-      disabled: '#94A3B8',
-    },
-  },
-  dark: {
-    primary: {
-      main: '#3B82F6',      // Brighter blue for dark mode
+      main: '#3B82F6',
       light: '#60A5FA',
       dark: '#2563EB',
-      contrastText: '#0F172A',
+      contrastText: '#1A1917',
     },
     secondary: {
-      main: '#60A5FA',
-      light: '#93C5FD',
-      dark: '#3B82F6',
-      contrastText: '#0F172A',
+      main: '#7BA3C9',
+      light: '#A5C4DE',
+      dark: '#4F7CAC',
+      contrastText: '#1A1917',
     },
     background: {
-      default: '#0F172A',   // Deep navy
-      paper: '#1E293B',
+      default: '#1A1917',
+      paper: '#252320',
     },
     text: {
       primary: '#F1F5F9',
       secondary: '#94A3B8',
       disabled: '#64748B',
     },
+    divider: '#3D3A35',
   },
-  // Dashboard accent colors
   accent: {
     teal: '#0D9488',
     indigo: '#4F46E5',
@@ -310,12 +353,26 @@ export const doctorColors = {
 };
 
 // =============================================================================
+// LEFT BORDER CARD COLORS (Lovable pattern)
+// =============================================================================
+
+export const cardBorderColors = {
+  primary: '#4F7CAC',
+  shared: '#4F7CAC',       // For doctor-shared items
+  severe: '#DC2626',
+  moderate: '#F59E0B',
+  mild: '#22C55E',
+  new: '#8B5CF6',          // Purple for "New" items
+};
+
+// =============================================================================
 // THEME FACTORY FUNCTIONS
 // =============================================================================
 
 const createPatientThemeOptions = (mode: PaletteMode): ThemeOptions => {
   const colors = mode === 'dark' ? patientColors.dark : patientColors.light;
-  const gray = mode === 'dark' ? sharedTokens.grayDark : sharedTokens.grayLight;
+  const warm = mode === 'dark' ? sharedTokens.warmDark : sharedTokens.warmLight;
+  const shadows = mode === 'dark' ? sharedTokens.shadowsDark : sharedTokens.shadows;
   
   return {
     breakpoints,
@@ -326,14 +383,15 @@ const createPatientThemeOptions = (mode: PaletteMode): ThemeOptions => {
       secondary: colors.secondary,
       background: colors.background,
       text: colors.text,
-      success: { main: sharedTokens.severity.mild },
-      warning: { main: sharedTokens.severity.moderate },
-      error: { main: sharedTokens.severity.emergency },
+      divider: colors.divider,
+      success: { main: sharedTokens.severity.mild, light: sharedTokens.severityBg.mild },
+      warning: { main: sharedTokens.severity.moderate, light: sharedTokens.severityBg.moderate },
+      error: { main: sharedTokens.severity.emergency, light: sharedTokens.severityBg.emergency },
       info: { main: sharedTokens.status.info },
-      grey: gray,
+      grey: warm,
     },
     shape: {
-      borderRadius: sharedTokens.borderRadius.sm,
+      borderRadius: sharedTokens.borderRadius.md,
     },
     spacing: sharedTokens.spacing,
     components: {
@@ -348,7 +406,7 @@ const createPatientThemeOptions = (mode: PaletteMode): ThemeOptions => {
       MuiButton: {
         styleOverrides: {
           root: {
-            borderRadius: sharedTokens.borderRadius.md,
+            borderRadius: sharedTokens.borderRadius.lg,
             padding: '10px 24px',
             fontWeight: 600,
             minHeight: 44,
@@ -359,9 +417,10 @@ const createPatientThemeOptions = (mode: PaletteMode): ThemeOptions => {
             },
           },
           contained: {
-            boxShadow: mode === 'dark' ? sharedTokens.shadowsDark.sm : sharedTokens.shadows.sm,
+            boxShadow: shadows.soft,
             '&:hover': {
-              boxShadow: mode === 'dark' ? sharedTokens.shadowsDark.md : sharedTokens.shadows.md,
+              boxShadow: shadows.hover,
+              transform: 'translateY(-1px)',
             },
           },
         },
@@ -369,9 +428,20 @@ const createPatientThemeOptions = (mode: PaletteMode): ThemeOptions => {
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: sharedTokens.borderRadius.lg,
-            boxShadow: mode === 'dark' ? sharedTokens.shadowsDark.md : sharedTokens.shadows.md,
+            borderRadius: sharedTokens.borderRadius.xl,
+            boxShadow: shadows.soft,
+            border: `1px solid ${colors.divider}`,
             transition: `all ${sharedTokens.transitions.normal}`,
+            '&:hover': {
+              boxShadow: shadows.hover,
+            },
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            borderRadius: sharedTokens.borderRadius.xl,
           },
         },
       },
@@ -379,8 +449,11 @@ const createPatientThemeOptions = (mode: PaletteMode): ThemeOptions => {
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': {
-              borderRadius: sharedTokens.borderRadius.sm,
+              borderRadius: sharedTokens.borderRadius.md,
               transition: `all ${sharedTokens.transitions.fast}`,
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: colors.primary.light,
+              },
             },
           },
         },
@@ -388,7 +461,8 @@ const createPatientThemeOptions = (mode: PaletteMode): ThemeOptions => {
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: sharedTokens.borderRadius.md,
+            borderRadius: sharedTokens.borderRadius.lg,
+            fontWeight: 500,
           },
         },
       },
@@ -400,23 +474,11 @@ const createPatientThemeOptions = (mode: PaletteMode): ThemeOptions => {
           },
         },
       },
-      MuiBottomNavigation: {
+      MuiBadge: {
         styleOverrides: {
-          root: {
-            height: 64,
-            backgroundColor: colors.background.paper,
-            borderTop: `1px solid ${gray[200]}`,
-          },
-        },
-      },
-      MuiBottomNavigationAction: {
-        styleOverrides: {
-          root: {
-            minWidth: 64,
-            padding: '8px 12px',
-            '&.Mui-selected': {
-              color: colors.primary.main,
-            },
+          badge: {
+            fontWeight: 600,
+            fontSize: '0.75rem',
           },
         },
       },
@@ -426,7 +488,8 @@ const createPatientThemeOptions = (mode: PaletteMode): ThemeOptions => {
 
 const createDoctorThemeOptions = (mode: PaletteMode): ThemeOptions => {
   const colors = mode === 'dark' ? doctorColors.dark : doctorColors.light;
-  const gray = mode === 'dark' ? sharedTokens.grayDark : sharedTokens.grayLight;
+  const warm = mode === 'dark' ? sharedTokens.warmDark : sharedTokens.warmLight;
+  const shadows = mode === 'dark' ? sharedTokens.shadowsDark : sharedTokens.shadows;
   
   return {
     breakpoints,
@@ -437,14 +500,15 @@ const createDoctorThemeOptions = (mode: PaletteMode): ThemeOptions => {
       secondary: colors.secondary,
       background: colors.background,
       text: colors.text,
-      success: { main: sharedTokens.severity.mild },
-      warning: { main: sharedTokens.severity.moderate },
-      error: { main: sharedTokens.severity.emergency },
+      divider: colors.divider,
+      success: { main: sharedTokens.severity.mild, light: sharedTokens.severityBg.mild },
+      warning: { main: sharedTokens.severity.moderate, light: sharedTokens.severityBg.moderate },
+      error: { main: sharedTokens.severity.emergency, light: sharedTokens.severityBg.emergency },
       info: { main: sharedTokens.status.info },
-      grey: gray,
+      grey: warm,
     },
     shape: {
-      borderRadius: sharedTokens.borderRadius.sm,
+      borderRadius: sharedTokens.borderRadius.md,
     },
     spacing: sharedTokens.spacing,
     components: {
@@ -459,7 +523,7 @@ const createDoctorThemeOptions = (mode: PaletteMode): ThemeOptions => {
       MuiButton: {
         styleOverrides: {
           root: {
-            borderRadius: sharedTokens.borderRadius.sm,
+            borderRadius: sharedTokens.borderRadius.md,
             padding: '8px 20px',
             fontWeight: 600,
             minHeight: 40,
@@ -471,7 +535,7 @@ const createDoctorThemeOptions = (mode: PaletteMode): ThemeOptions => {
           contained: {
             boxShadow: 'none',
             '&:hover': {
-              boxShadow: mode === 'dark' ? sharedTokens.shadowsDark.sm : sharedTokens.shadows.sm,
+              boxShadow: shadows.soft,
             },
           },
         },
@@ -479,10 +543,17 @@ const createDoctorThemeOptions = (mode: PaletteMode): ThemeOptions => {
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: sharedTokens.borderRadius.md,
-            boxShadow: mode === 'dark' ? sharedTokens.shadowsDark.sm : sharedTokens.shadows.sm,
-            border: `1px solid ${gray[200]}`,
+            borderRadius: sharedTokens.borderRadius.xl,
+            boxShadow: shadows.soft,
+            border: `1px solid ${colors.divider}`,
             transition: `all ${sharedTokens.transitions.normal}`,
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            borderRadius: sharedTokens.borderRadius.lg,
           },
         },
       },
@@ -490,8 +561,7 @@ const createDoctorThemeOptions = (mode: PaletteMode): ThemeOptions => {
         styleOverrides: {
           head: {
             fontWeight: 600,
-            backgroundColor: mode === 'dark' ? gray[100] : gray[50],
-            color: mode === 'dark' ? gray[700] : gray[700],
+            backgroundColor: mode === 'dark' ? warm[100] : warm[50],
           },
         },
       },
@@ -499,11 +569,8 @@ const createDoctorThemeOptions = (mode: PaletteMode): ThemeOptions => {
         styleOverrides: {
           root: {
             transition: `background-color ${sharedTokens.transitions.fast}`,
-            '&:nth-of-type(even)': {
-              backgroundColor: mode === 'dark' ? gray[100] : gray[50],
-            },
             '&:hover': {
-              backgroundColor: mode === 'dark' ? gray[200] : gray[100],
+              backgroundColor: mode === 'dark' ? warm[100] : warm[100],
             },
           },
         },
@@ -511,17 +578,8 @@ const createDoctorThemeOptions = (mode: PaletteMode): ThemeOptions => {
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: sharedTokens.borderRadius.xs,
+            borderRadius: sharedTokens.borderRadius.md,
             fontWeight: 600,
-          },
-        },
-      },
-      MuiAppBar: {
-        styleOverrides: {
-          root: {
-            backgroundColor: colors.background.paper,
-            color: colors.text.primary,
-            boxShadow: mode === 'dark' ? sharedTokens.shadowsDark.sm : sharedTokens.shadows.sm,
           },
         },
       },
@@ -541,15 +599,15 @@ const createDoctorThemeOptions = (mode: PaletteMode): ThemeOptions => {
 // THEME EXPORTS
 // =============================================================================
 
-// Light Mode Themes (default)
 export const patientTheme = responsiveFontSizes(createTheme(createPatientThemeOptions('light')));
 export const doctorTheme = responsiveFontSizes(createTheme(createDoctorThemeOptions('light')));
+export const patientDarkTheme = responsiveFontSizes(createTheme(createPatientThemeOptions('dark')));
+export const doctorDarkTheme = responsiveFontSizes(createTheme(createDoctorThemeOptions('dark')));
 
-// Dark Mode Themes
-export const patientThemeDark = responsiveFontSizes(createTheme(createPatientThemeOptions('dark')));
-export const doctorThemeDark = responsiveFontSizes(createTheme(createDoctorThemeOptions('dark')));
+// Aliases for backward compatibility
+export const patientThemeDark = patientDarkTheme;
+export const doctorThemeDark = doctorDarkTheme;
 
-// Theme Factory for dynamic switching
 export const createPatientTheme = (mode: PaletteMode) => 
   responsiveFontSizes(createTheme(createPatientThemeOptions(mode)));
 
@@ -557,25 +615,42 @@ export const createDoctorTheme = (mode: PaletteMode) =>
   responsiveFontSizes(createTheme(createDoctorThemeOptions(mode)));
 
 // =============================================================================
-// SEVERITY BADGE HELPERS
+// SEVERITY HELPERS (Lovable-style consistent system)
 // =============================================================================
 
-export const getSeverityColor = (level: 'emergency' | 'urgent' | 'moderate' | 'mild') => {
-  return sharedTokens.severity[level];
+export const getSeverityColor = (level: 'emergency' | 'urgent' | 'severe' | 'moderate' | 'mild') => {
+  return sharedTokens.severity[level] || sharedTokens.severity.mild;
 };
 
-export const getSeverityLabel = (level: 'emergency' | 'urgent' | 'moderate' | 'mild') => {
-  const labels = {
+export const getSeverityBgColor = (level: 'emergency' | 'urgent' | 'severe' | 'moderate' | 'mild') => {
+  return sharedTokens.severityBg[level] || sharedTokens.severityBg.mild;
+};
+
+export const getSeverityLabel = (level: string) => {
+  const labels: Record<string, string> = {
     emergency: 'Emergency',
     urgent: 'Urgent',
+    severe: 'Severe',
     moderate: 'Moderate',
     mild: 'Mild',
   };
-  return labels[level];
+  return labels[level.toLowerCase()] || level;
+};
+
+// Natural language severity (Lovable style)
+export const getSeverityDescription = (level: string) => {
+  const descriptions: Record<string, string> = {
+    emergency: 'requires immediate medical attention',
+    urgent: 'rated as severe',
+    severe: 'rated as severe',
+    moderate: 'rated as moderate',
+    mild: 'rated as mild',
+  };
+  return descriptions[level.toLowerCase()] || level;
 };
 
 // =============================================================================
-// ANIMATION KEYFRAMES (for CSS-in-JS)
+// ANIMATIONS
 // =============================================================================
 
 export const animations = {
@@ -590,18 +665,6 @@ export const animations = {
       from {
         opacity: 0;
         transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-  `,
-  fadeInDown: `
-    @keyframes fadeInDown {
-      from {
-        opacity: 0;
-        transform: translateY(-20px);
       }
       to {
         opacity: 1;
@@ -645,29 +708,6 @@ export const animations = {
       }
     }
   `,
-  pulse: `
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
-    }
-  `,
-  shimmer: `
-    @keyframes shimmer {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
-  `,
-};
-
-// Animation class names for use in components
-export const animationClasses = {
-  fadeIn: 'animate-fadeIn',
-  fadeInUp: 'animate-fadeInUp',
-  fadeInDown: 'animate-fadeInDown',
-  slideInLeft: 'animate-slideInLeft',
-  slideInRight: 'animate-slideInRight',
-  scaleIn: 'animate-scaleIn',
-  staggerChild: 'animate-stagger-child',
 };
 
 // =============================================================================
@@ -677,19 +717,20 @@ export const animationClasses = {
 export const theme = {
   colors: {
     primary: patientColors.light.primary.main,
-    secondary: sharedTokens.grayLight[500],
+    secondary: sharedTokens.warmLight[500],
     success: sharedTokens.severity.mild,
     danger: sharedTokens.severity.emergency,
     warning: sharedTokens.severity.moderate,
     info: sharedTokens.status.info,
-    light: sharedTokens.grayLight[100],
-    dark: sharedTokens.grayLight[800],
+    light: sharedTokens.warmLight[100],
+    dark: sharedTokens.warmLight[800],
     white: '#ffffff',
-    gray: sharedTokens.grayLight,
+    cream: '#FAF8F5',
+    gray: sharedTokens.warmLight,
   },
   fonts: {
-    body: typography.fontFamily,
-    heading: typography.fontFamily,
+    body: "'DM Sans', sans-serif",
+    heading: "'Fraunces', Georgia, serif",
   },
   fontSizes: {
     xs: '0.75rem',
@@ -711,6 +752,10 @@ export const theme = {
   },
   borderRadius: sharedTokens.borderRadius,
   transitions: sharedTokens.transitions,
+  shadows: sharedTokens.shadows,
+  severity: sharedTokens.severity,
+  severityBg: sharedTokens.severityBg,
+  cardBorderColors,
   animations,
 };
 

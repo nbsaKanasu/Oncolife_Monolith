@@ -543,19 +543,43 @@ const MyComponent = () => {
 
 ## 6. Database Operations
 
-### Running Migrations
+### Running Migrations (Alembic)
+
+Alembic is configured for both APIs with initial migrations.
 
 ```bash
-cd apps/patient-platform/patient-api/src
+cd apps/patient-platform/patient-api
 
-# Create a new migration
-alembic revision --autogenerate -m "Add my_resources table"
+# Check current migration version
+alembic current
 
-# Apply migrations
+# View migration history
+alembic history
+
+# Apply all pending migrations
 alembic upgrade head
 
 # Rollback one migration
 alembic downgrade -1
+
+# Create a new migration (after model changes)
+alembic revision --autogenerate -m "Add my_resources table"
+
+# Generate SQL without applying
+alembic upgrade head --sql > migration.sql
+```
+
+**Environment Variables for Migrations:**
+```bash
+# Patient API
+export PATIENT_DB_HOST=localhost
+export PATIENT_DB_PORT=5432
+export PATIENT_DB_USER=oncolife_admin
+export PATIENT_DB_PASSWORD=your_password
+export PATIENT_DB_NAME=oncolife_patient
+
+# OR use DATABASE_URL
+export DATABASE_URL=postgresql://user:pass@host:5432/database
 ```
 
 ### Direct Table Creation (Development)
@@ -587,22 +611,57 @@ SELECT * FROM users;   # Query
 
 ## 7. Testing
 
-### Backend Tests
+### Backend Tests (pytest)
+
+Test infrastructure is set up with shared fixtures and coverage reporting.
 
 ```bash
 cd apps/patient-platform/patient-api
 
+# Install test dependencies
+pip install pytest pytest-asyncio pytest-cov httpx
+
 # Run all tests
 pytest
 
-# Run with coverage
+# Run with coverage report
 pytest --cov=src --cov-report=html
 
+# Run only unit tests (fast)
+pytest -m unit
+
 # Run specific test file
-pytest tests/test_auth.py -v
+pytest tests/test_questions.py -v
 
 # Run tests matching a pattern
-pytest -k "test_login" -v
+pytest -k "test_create" -v
+
+# Skip slow tests
+pytest -m "not slow"
+```
+
+**Test Markers Available:**
+| Marker | Description |
+|--------|-------------|
+| `@pytest.mark.unit` | Fast unit tests |
+| `@pytest.mark.integration` | Tests requiring database |
+| `@pytest.mark.slow` | Slow tests |
+| `@pytest.mark.auth` | Authentication tests |
+
+**Test Files Created:**
+- `tests/test_health.py` - Health endpoint tests
+- `tests/test_chat.py` - Chat/symptom checker tests
+- `tests/test_diary.py` - Diary endpoint tests
+- `tests/test_questions.py` - Questions feature tests
+
+### Doctor API Tests
+
+```bash
+cd apps/doctor-platform/doctor-api
+
+pytest                          # Run all tests
+pytest --cov=src               # With coverage
+pytest -m unit                 # Only unit tests
 ```
 
 ### Frontend Tests
@@ -635,6 +694,23 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 curl http://localhost:8000/api/v1/profile \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
+
+### CI/CD Pipeline
+
+Tests run automatically via GitHub Actions on every PR and push to main.
+
+**CI Workflow (`.github/workflows/ci.yml`):**
+1. **Lint** - Runs ruff, black, ESLint
+2. **Test Patient API** - pytest with coverage
+3. **Test Doctor API** - pytest with coverage  
+4. **Build** - Validates all Dockerfiles
+
+**CD Workflow (`.github/workflows/deploy.yml`):**
+1. Build & push images to ECR
+2. Run database migrations
+3. Deploy to ECS
+
+See [TESTING_AND_CI_GUIDE.md](TESTING_AND_CI_GUIDE.md) for full details.
 
 ---
 
