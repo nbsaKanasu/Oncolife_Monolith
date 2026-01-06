@@ -630,14 +630,28 @@ patient-web/src/
 │       ├── SymptomChat.css
 │       └── SymptomMessageBubble.tsx
 │
-├── pages/                       # Page components
-│   ├── ChatsPage/
-│   ├── DiaryPage/
-│   ├── ProfilePage/
-│   └── LoginPage/
+├── pages/                       # Page components (React Router routes)
+│   ├── ChatsPage/               # /chat - Symptom checker (6-phase flow)
+│   │   ├── ChatsPage.tsx
+│   │   └── SymptomChatPage.tsx
+│   ├── SummariesPage/           # /summaries - Past triage results
+│   ├── NotesPage/               # /notes - Personal health diary
+│   ├── QuestionsPage/           # /questions - Questions for doctor
+│   │   ├── QuestionsPage.tsx
+│   │   └── QuestionsPage.styles.ts
+│   ├── EducationPage/           # /education - Learning resources
+│   ├── ProfilePage/             # /profile - Account settings
+│   ├── LoginPage/               # /login - Authentication
+│   └── OnboardingPage/          # First-time setup wizard
 │
-├── services/                    # Legacy services (being migrated)
+├── services/                    # API service hooks
+│   ├── questions.ts             # Questions CRUD hooks
+│   ├── notes.ts                 # Diary CRUD hooks
+│   ├── summaries.ts             # Summaries fetch hooks
+│   └── chatService.ts           # WebSocket service
+│
 └── utils/                       # Utility functions
+    └── apiClient.ts             # Axios instance with interceptors
 ```
 
 ### State Management Pattern
@@ -660,6 +674,62 @@ patient-web/src/
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Frontend Architecture (Doctor Web)
+
+### Directory Structure
+
+```
+doctor-web/src/
+├── main.tsx                     # React entry point
+├── App.tsx                      # Root component with routing
+│
+├── config/                      # Configuration
+│   └── api.ts                   # API endpoints config
+│
+├── contexts/                    # React Context providers
+│   ├── AuthContext.tsx          # Authentication state
+│   └── UserContext.tsx          # User profile state
+│
+├── components/                  # React components
+│   └── Layout.tsx               # Sidebar navigation, responsive
+│
+├── pages/                       # Page components (React Router routes)
+│   ├── Dashboard/               # /dashboard - Severity-ranked patient list
+│   │   ├── DashboardPage.tsx    # Stats cards + patient list
+│   │   └── index.tsx
+│   ├── Patients/                # /patients - Patient management
+│   │   ├── PatientsPage.tsx
+│   │   └── components/          # Add/Edit modals
+│   ├── PatientDetail/           # /patients/:uuid - Patient timeline view
+│   │   └── PatientDetailPage.tsx # Zigzag chart, questions, treatment events
+│   ├── Reports/                 # /reports - Weekly physician reports
+│   │   └── ReportsPage.tsx      # Week selector, stats, patient table
+│   ├── Staff/                   # /staff - Staff management
+│   └── LoginPage/               # /login - Authentication
+│
+├── services/                    # API service hooks
+│   ├── dashboard.ts             # Dashboard + timeline + reports hooks
+│   ├── patients.ts              # Patient CRUD hooks
+│   ├── staff.ts                 # Staff CRUD hooks
+│   └── login.ts                 # Auth hooks
+│
+└── utils/                       # Utility functions
+    └── apiClient.ts             # Axios instance with interceptors
+```
+
+### Doctor Web Routes
+
+| Route | Component | Purpose |
+|-------|-----------|---------|
+| /login | LoginPage | Physician/Staff authentication |
+| /dashboard | DashboardPage | Severity-ranked patient list with stats |
+| /patients | PatientsPage | Full patient list with CRUD |
+| /patients/:uuid | PatientDetailPage | Timeline, questions, treatment events |
+| /reports | ReportsPage | Weekly summaries and generation |
+| /staff | StaffPage | Manage nurses, MAs, navigators |
 
 ---
 

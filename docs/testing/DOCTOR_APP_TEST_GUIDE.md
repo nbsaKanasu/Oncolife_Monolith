@@ -803,20 +803,39 @@ Staff (Physician 2): ma.bob@clinic.com / [password]
 
 **Mobile (< 600px):**
 - [ ] Hamburger menu in header
-- [ ] Drawer navigation slides in
+- [ ] Drawer navigation slides in with all nav items
 - [ ] Patient cards stack vertically
 - [ ] Tables become scrollable or cards
 - [ ] Touch-friendly row selection
 
 **Tablet (600px - 900px):**
-- [ ] Sidebar visible
+- [ ] Sidebar visible with all 4 nav items
 - [ ] Dashboard cards in 2-column grid
 - [ ] Timeline chart responsive
 
 **Desktop (> 900px):**
-- [ ] Full sidebar with all menu items
+- [ ] Full sidebar with all menu items and labels
+- [ ] Dark mode toggle visible in sidebar
 - [ ] Multi-column dashboard
 - [ ] Full patient tables
+
+### Navigation Items (All Screen Sizes)
+
+| Icon | Label | Route | Purpose |
+|------|-------|-------|---------|
+| 📊 | Dashboard | /dashboard | Severity-ranked patient list |
+| 👥 | Patients | /patients | Full patient management |
+| 📄 | Weekly Reports | /reports | Weekly summaries & statistics |
+| 👤 | Staff | /staff | Staff management (Physicians only) |
+
+### Patient Detail Navigation (From Dashboard/Patients)
+
+| Tab | Route | Description |
+|-----|-------|-------------|
+| Timeline | /patients/{uuid} | Symptom zigzag chart + treatment overlay |
+| Questions | Tab within detail | Shared patient questions |
+| Treatment Events | Tab within detail | Chemo cycles, treatment milestones |
+| Escalations | Tab within detail | Alert history (coming soon) |
 
 ---
 

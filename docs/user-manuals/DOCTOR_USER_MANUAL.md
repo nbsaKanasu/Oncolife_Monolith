@@ -95,6 +95,26 @@ After logging in, you'll see the main dashboard:
 └────────────────────────────────────────────────────────────┘
 ```
 
+### Main Navigation
+
+**Sidebar Menu (Desktop) / Drawer Menu (Mobile):**
+
+| Icon | Menu Item | Route | Description |
+|------|-----------|-------|-------------|
+| 📊 | Dashboard | /dashboard | Severity-ranked patient list with stats |
+| 👥 | Patients | /patients | Full patient list & management |
+| 📄 | Weekly Reports | /reports | Generate & view weekly summaries |
+| 👤 | Staff | /staff | Manage your nurses, MAs, navigators |
+
+**Clicking a Patient Row Opens:**
+
+| Tab | What You'll See |
+|-----|-----------------|
+| **Timeline** | Zigzag symptom severity chart over time |
+| **Questions** | Patient's shared questions for you |
+| **Treatment Events** | Chemo cycles, medication changes |
+| **Escalations** | History of red flag alerts |
+
 ### Key Metrics
 
 | Metric | Meaning |

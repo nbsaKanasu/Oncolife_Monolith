@@ -117,13 +117,27 @@ When you open OncoLife, you'll see your home screen with these main sections:
 
 ### Navigation Bar Icons
 
+**On Mobile (Bottom Bar):**
+
 | Icon | Name | What It Does |
 |------|------|--------------|
-| 🏠 | Home | Return to main screen |
-| 📓 | Diary | View your daily journal |
+| 💬 | Symptom Check | Start your daily symptom check-in |
+| 📄 | Summaries | View past triage summaries |
+| 📓 | Diary | Your personal health diary |
 | ❓ | Questions | Questions for your doctor |
-| 💊 | Treatment | Your chemo calendar |
-| 👤 | Profile | Your settings |
+| 📚 | Education | Health learning resources |
+
+**On Desktop/Tablet (Sidebar):**
+
+| Icon | Name | What It Does |
+|------|------|--------------|
+| 💬 | Symptom Check | Start your daily symptom check-in |
+| 📄 | Summaries | View past triage summaries |
+| 📓 | Diary | Your personal health diary |
+| ❓ | Questions | Questions for your doctor |
+| 📚 | Education | Health learning resources |
+| 👤 | Profile | Your account settings |
+| 🌙 | Dark Mode | Switch between light and dark themes |
 
 ---
 

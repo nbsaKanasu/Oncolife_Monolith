@@ -589,22 +589,33 @@ GET /api/v1/summaries/2026/1
 ### Responsive Design Testing
 
 **Mobile (< 600px):**
-- [ ] Bottom navigation bar visible (4 icons)
-- [ ] Hamburger menu in header
-- [ ] Profile accessible via header avatar
+- [ ] Bottom navigation bar visible (5 main icons: Chat, Summaries, Diary, Questions, Education)
+- [ ] Profile accessible via header avatar/hamburger menu
 - [ ] Full-width buttons
 - [ ] Chat bubbles properly sized
 - [ ] No horizontal scroll
 
 **Tablet (600px - 900px):**
-- [ ] Sidebar navigation visible
+- [ ] Sidebar navigation visible with all 6 items
 - [ ] Content area adjusts width
 - [ ] Cards stack appropriately
 
 **Desktop (> 900px):**
-- [ ] Full sidebar with labels
+- [ ] Full sidebar with labels (Symptom Check, Summaries, Diary, Questions, Education, Profile)
+- [ ] Dark mode toggle visible in sidebar
 - [ ] Spacious content area
 - [ ] Hover states work properly
+
+### Navigation Items (All Screen Sizes)
+
+| Icon | Label | Route | Purpose |
+|------|-------|-------|---------|
+| 💬 | Symptom Check | /chat | Daily symptom checker |
+| 📄 | Summaries | /summaries | Past triage summaries |
+| 📖 | Diary | /notes | Personal diary/notes |
+| ❓ | Questions | /questions | Questions for doctor |
+| 📚 | Education | /education | Learning resources |
+| 👤 | Profile | /profile | Account settings |
 
 ### Symptom Chat UX Testing
 

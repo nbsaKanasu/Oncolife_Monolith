@@ -82,16 +82,36 @@ OncoLife_Monolith/
 │   │   │
 │   │   └── patient-web/              # React Frontend
 │   │       ├── src/
-│   │       │   ├── components/       # Reusable components
-│   │       │   ├── pages/            # Page components
-│   │       │   ├── services/         # API client
+│   │       │   ├── components/       # Layout, Chat components
+│   │       │   ├── pages/
+│   │       │   │   ├── ChatsPage/    # Symptom checker (6-phase flow)
+│   │       │   │   ├── SummariesPage/# Past triage summaries
+│   │       │   │   ├── NotesPage/    # Patient diary
+│   │       │   │   ├── QuestionsPage/# Questions for doctor ← NEW
+│   │       │   │   ├── EducationPage/# Learning resources
+│   │       │   │   ├── ProfilePage/  # Account settings
+│   │       │   │   ├── LoginPage/    # Auth pages
+│   │       │   │   └── OnboardingPage/# First-time setup
+│   │       │   ├── services/         # API client (questions.ts, notes.ts, etc.)
 │   │       │   ├── hooks/            # Custom hooks
-│   │       │   └── contexts/         # React contexts
+│   │       │   └── contexts/         # AuthContext, UserContext
 │   │       └── package.json
 │   │
 │   └── doctor-platform/
 │       ├── doctor-api/               # Same structure as patient-api
-│       └── doctor-web/               # Same structure as patient-web
+│       └── doctor-web/               # React Frontend
+│           ├── src/
+│           │   ├── components/       # Layout
+│           │   ├── pages/
+│           │   │   ├── Dashboard/    # Severity-ranked patient list
+│           │   │   ├── Patients/     # Patient management
+│           │   │   ├── PatientDetail/# Patient timeline ← NEW
+│           │   │   ├── Reports/      # Weekly reports ← NEW
+│           │   │   ├── Staff/        # Staff management
+│           │   │   └── LoginPage/    # Auth pages
+│           │   ├── services/         # API client (dashboard.ts, patients.ts)
+│           │   └── contexts/         # AuthContext, UserContext
+│           └── package.json
 │
 ├── packages/
 │   └── ui-components/                # Shared React components
