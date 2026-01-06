@@ -484,7 +484,7 @@ create_cognito_user_pool() {
         --user-pool-id $COGNITO_POOL_ID \
         --client-name "$PROJECT_NAME-api-client" \
         --generate-secret \
-        --explicit-auth-flows "ADMIN_NO_SRP_AUTH" "ALLOW_REFRESH_TOKEN_AUTH" "ALLOW_USER_PASSWORD_AUTH" \
+        --explicit-auth-flows "ALLOW_ADMIN_USER_PASSWORD_AUTH" "ALLOW_REFRESH_TOKEN_AUTH" "ALLOW_USER_PASSWORD_AUTH" \
         --output json)
     
     COGNITO_CLIENT_ID=$(echo $CLIENT_RESULT | jq -r '.UserPoolClient.ClientId')
