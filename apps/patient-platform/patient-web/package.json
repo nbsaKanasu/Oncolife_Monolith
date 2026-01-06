@@ -23,7 +23,8 @@
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.3",
     "styled-components": "^6.1.19",
-    "@oncolife/ui-components": "file:../../../packages/ui-components"
+    "@oncolife/ui-components": "file:../../../packages/ui-components",
+    "@oncolife/shared-utils": "file:../../../packages/shared-utils"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
