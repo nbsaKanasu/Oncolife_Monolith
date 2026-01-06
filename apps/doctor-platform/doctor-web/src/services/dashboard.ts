@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-// import { apiClient } from '../utils/apiClient';
-// import { API_CONFIG } from '../config/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../utils/apiClient';
+import { API_CONFIG } from '../config/api';
 
 export interface PatientSummary {
   id: string;
@@ -12,6 +12,83 @@ export interface PatientSummary {
   lastUpdated: string;
   status: 'active' | 'inactive' | 'pending';
   priority: 'high' | 'medium' | 'low';
+}
+
+// ===== New Types for Dashboard API =====
+
+export interface PatientRanking {
+  patient_uuid: string;
+  first_name: string;
+  last_name: string;
+  email_address: string;
+  last_checkin: string;
+  max_severity: string;
+  has_escalation: boolean;
+  severity_badge: 'mild' | 'moderate' | 'severe' | 'urgent';
+}
+
+export interface DashboardLanding {
+  patients: PatientRanking[];
+  total_patients: number;
+  period_days: number;
+}
+
+export interface SymptomDataPoint {
+  date: string;
+  severity: string;
+  severity_numeric: number;
+}
+
+export interface TreatmentEvent {
+  event_type: string;
+  event_date: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface PatientTimeline {
+  patient_uuid: string;
+  period_days: number;
+  symptom_series: Record<string, SymptomDataPoint[]>;
+  treatment_events: TreatmentEvent[];
+}
+
+export interface SharedQuestion {
+  id: string;
+  question_text: string;
+  category: string;
+  is_answered: boolean;
+  created_at: string;
+}
+
+export interface WeeklyReportSummary {
+  report_id: string;
+  physician_id: string;
+  report_week_start: string;
+  report_week_end: string;
+  generated_at: string;
+  total_patients: number;
+  escalation_count: number;
+  s3_path?: string;
+}
+
+export interface WeeklyReportData {
+  report_week_start: string;
+  report_week_end: string;
+  physician_id: string;
+  patients: Array<{
+    patient_uuid: string;
+    first_name: string;
+    last_name: string;
+    max_severity: string;
+    escalation_count: number;
+    symptom_data: SymptomDataPoint[];
+    shared_questions: SharedQuestion[];
+  }>;
+  summary_stats: {
+    total_patients: number;
+    total_escalations: number;
+    severity_breakdown: Record<string, number>;
+  };
 }
 
 export interface DashboardResponse {
@@ -192,4 +269,176 @@ export const usePatientDetails = (patientId: string) => {
     queryFn: () => fetchPatientDetails(patientId),
     enabled: !!patientId,
   });
-}; 
+};
+
+// ===== Real API Functions for Dashboard =====
+
+// Fetch dashboard landing (ranked patient list)
+const fetchDashboardLanding = async (days: number = 7): Promise<DashboardLanding> => {
+  try {
+    const response = await apiClient.get(
+      `${API_CONFIG.ENDPOINTS.DASHBOARD.LANDING}?days=${days}`
+    );
+    return response.data;
+  } catch {
+    // Fallback to mock data if API not ready
+    return {
+      patients: mockPatientSummaries.map(p => ({
+        patient_uuid: p.id,
+        first_name: p.patientName.split(' ')[0],
+        last_name: p.patientName.split(' ')[1] || '',
+        email_address: `${p.patientName.toLowerCase().replace(' ', '.')}@example.com`,
+        last_checkin: p.lastUpdated,
+        max_severity: p.priority === 'high' ? 'severe' : p.priority === 'medium' ? 'moderate' : 'mild',
+        has_escalation: p.priority === 'high',
+        severity_badge: p.priority === 'high' ? 'severe' : p.priority === 'medium' ? 'moderate' : 'mild' as 'mild' | 'moderate' | 'severe' | 'urgent',
+      })),
+      total_patients: mockPatientSummaries.length,
+      period_days: days,
+    };
+  }
+};
+
+export const useDashboardLanding = (days: number = 7) => {
+  return useQuery({
+    queryKey: ['dashboardLanding', days],
+    queryFn: () => fetchDashboardLanding(days),
+  });
+};
+
+// Fetch patient timeline data
+const fetchPatientTimeline = async (
+  patientUuid: string,
+  days: number = 30
+): Promise<PatientTimeline> => {
+  try {
+    const response = await apiClient.get(
+      `${API_CONFIG.ENDPOINTS.DASHBOARD.PATIENT_TIMELINE(patientUuid)}?days=${days}`
+    );
+    return response.data;
+  } catch {
+    // Fallback mock data
+    return {
+      patient_uuid: patientUuid,
+      period_days: days,
+      symptom_series: {
+        'nausea': [
+          { date: '2025-01-01', severity: 'mild', severity_numeric: 1 },
+          { date: '2025-01-02', severity: 'moderate', severity_numeric: 2 },
+          { date: '2025-01-03', severity: 'mild', severity_numeric: 1 },
+        ],
+        'fatigue': [
+          { date: '2025-01-01', severity: 'moderate', severity_numeric: 2 },
+          { date: '2025-01-02', severity: 'severe', severity_numeric: 3 },
+          { date: '2025-01-03', severity: 'moderate', severity_numeric: 2 },
+        ],
+      },
+      treatment_events: [
+        { event_type: 'chemo_start', event_date: '2024-12-16', metadata: { cycle: 1 } },
+        { event_type: 'cycle_start', event_date: '2024-12-30', metadata: { cycle: 2 } },
+      ],
+    };
+  }
+};
+
+export const usePatientTimeline = (patientUuid: string, days: number = 30) => {
+  return useQuery({
+    queryKey: ['patientTimeline', patientUuid, days],
+    queryFn: () => fetchPatientTimeline(patientUuid, days),
+    enabled: !!patientUuid,
+  });
+};
+
+// Fetch patient's shared questions
+const fetchPatientQuestions = async (patientUuid: string): Promise<SharedQuestion[]> => {
+  try {
+    const response = await apiClient.get(
+      API_CONFIG.ENDPOINTS.DASHBOARD.PATIENT_QUESTIONS(patientUuid)
+    );
+    return response.data.questions || response.data;
+  } catch {
+    return [];
+  }
+};
+
+export const usePatientQuestions = (patientUuid: string) => {
+  return useQuery({
+    queryKey: ['patientQuestions', patientUuid],
+    queryFn: () => fetchPatientQuestions(patientUuid),
+    enabled: !!patientUuid,
+  });
+};
+
+// Fetch weekly reports list
+const fetchReportsList = async (): Promise<WeeklyReportSummary[]> => {
+  try {
+    const response = await apiClient.get(API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_LIST);
+    return response.data.reports || response.data;
+  } catch {
+    return [];
+  }
+};
+
+export const useReportsList = () => {
+  return useQuery({
+    queryKey: ['reportsList'],
+    queryFn: fetchReportsList,
+  });
+};
+
+// Fetch weekly report data
+const fetchWeeklyReportData = async (weekStart?: string): Promise<WeeklyReportData> => {
+  try {
+    const url = weekStart 
+      ? `${API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_WEEKLY}?week_start=${weekStart}`
+      : API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_WEEKLY;
+    const response = await apiClient.get(url);
+    return response.data;
+  } catch {
+    // Fallback mock data
+    const now = new Date();
+    const weekStartDate = new Date(now);
+    weekStartDate.setDate(now.getDate() - now.getDay());
+    const weekEndDate = new Date(weekStartDate);
+    weekEndDate.setDate(weekStartDate.getDate() + 6);
+    
+    return {
+      report_week_start: weekStartDate.toISOString().split('T')[0],
+      report_week_end: weekEndDate.toISOString().split('T')[0],
+      physician_id: 'mock-physician',
+      patients: [],
+      summary_stats: {
+        total_patients: 0,
+        total_escalations: 0,
+        severity_breakdown: {},
+      },
+    };
+  }
+};
+
+export const useWeeklyReportData = (weekStart?: string) => {
+  return useQuery({
+    queryKey: ['weeklyReport', weekStart],
+    queryFn: () => fetchWeeklyReportData(weekStart),
+  });
+};
+
+// Generate weekly report
+const generateWeeklyReport = async (weekStart?: string): Promise<{ report_id: string }> => {
+  const response = await apiClient.post(
+    API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_GENERATE,
+    { week_start: weekStart }
+  );
+  return response.data;
+};
+
+export const useGenerateReport = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: generateWeeklyReport,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reportsList'] });
+      queryClient.invalidateQueries({ queryKey: ['weeklyReport'] });
+    },
+  });
+};

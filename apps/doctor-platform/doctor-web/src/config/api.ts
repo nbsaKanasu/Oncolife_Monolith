@@ -52,6 +52,16 @@ export const API_CONFIG = {
       STATS: (uuid: string) => `/patients/${uuid}/stats`,
     },
     
+    // Dashboard & Analytics
+    DASHBOARD: {
+      LANDING: '/dashboard',
+      PATIENT_TIMELINE: (uuid: string) => `/dashboard/patient/${uuid}`,
+      PATIENT_QUESTIONS: (uuid: string) => `/dashboard/patient/${uuid}/questions`,
+      REPORTS_LIST: '/dashboard/reports',
+      REPORTS_WEEKLY: '/dashboard/reports/weekly',
+      REPORTS_GENERATE: '/dashboard/reports/generate',
+    },
+    
     // Health Check
     HEALTH: '/health',
   },

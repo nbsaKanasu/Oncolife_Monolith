@@ -11,6 +11,8 @@ import Layout from './components/Layout';
 import DashboardPage from './pages/Dashboard/DashboardPage';
 import PatientsPage from './pages/Patients/PatientsPage';
 import StaffPage from './pages/Staff/StaffPage';
+import PatientDetailPage from './pages/PatientDetail';
+import ReportsPage from './pages/Reports';
 
 function App() {
   return (
@@ -25,6 +27,8 @@ function App() {
               <Route element={<Layout />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/patients" element={<PatientsPage />} />
+                <Route path="/patients/:uuid" element={<PatientDetailPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/staff" element={<StaffPage />} />
               </Route>
               <Route path="/" element={<Navigate to="/dashboard" />} />

@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme, useMediaQuery } from '@mui/material';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
@@ -382,6 +383,7 @@ const EmptyState = styled.div`
 
 const DashboardPage: React.FC = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -556,7 +558,7 @@ const DashboardPage: React.FC = () => {
       ) : (
         <PatientList>
           {data?.data.map((patient) => (
-            <PatientCard key={patient.id}>
+            <PatientCard key={patient.id} onClick={() => navigate(`/patients/${patient.id}`)}>
               <PatientHeader>
                 <PatientInfo>
                   <PatientName>

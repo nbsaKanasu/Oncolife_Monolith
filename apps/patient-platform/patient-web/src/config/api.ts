@@ -74,6 +74,18 @@ export const API_CONFIG = {
     // Patient Onboarding
     ONBOARDING: '/onboarding',
     
+    // Questions to Ask Doctor
+    QUESTIONS: {
+      LIST: '/questions',
+      CREATE: '/questions',
+      UPDATE: (id: string) => `/questions/${id}`,
+      DELETE: (id: string) => `/questions/${id}`,
+      SHARE: (id: string) => `/questions/${id}/share`,
+    },
+    
+    // Notes/Diary
+    NOTES: '/diary',
+    
     // Health Check
     HEALTH: '/health',
   },

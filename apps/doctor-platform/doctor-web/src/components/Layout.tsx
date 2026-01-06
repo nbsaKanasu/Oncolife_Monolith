@@ -33,7 +33,8 @@ import {
   X,
   Activity,
   Moon,
-  Sun
+  Sun,
+  FileText
 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { DarkModeToggle, useThemeMode } from '@oncolife/ui-components';
@@ -45,6 +46,7 @@ const DRAWER_WIDTH = 260;
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { id: 'patients', label: 'Patients', icon: Users, path: '/patients' },
+  { id: 'reports', label: 'Weekly Reports', icon: FileText, path: '/reports' },
   { id: 'staff', label: 'Staff', icon: UserCog, path: '/staff' },
 ];
 

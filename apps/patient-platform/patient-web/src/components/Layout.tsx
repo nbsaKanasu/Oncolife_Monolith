@@ -35,7 +35,8 @@ import {
   User,
   Menu as MenuIcon,
   LogOut,
-  X
+  X,
+  MessageCircleQuestion
 } from 'lucide-react';
 import { DarkModeToggle, useThemeMode } from '@oncolife/ui-components';
 
@@ -44,9 +45,10 @@ const DRAWER_WIDTH = 260;
 
 // Navigation items
 const navItems = [
-  { id: 'chat', label: 'Chat', icon: MessageCircle, path: '/chat' },
+  { id: 'chat', label: 'Symptom Check', icon: MessageCircle, path: '/chat' },
   { id: 'summaries', label: 'Summaries', icon: FileText, path: '/summaries' },
-  { id: 'notes', label: 'Notes', icon: BookOpen, path: '/notes' },
+  { id: 'notes', label: 'Diary', icon: BookOpen, path: '/notes' },
+  { id: 'questions', label: 'Questions', icon: MessageCircleQuestion, path: '/questions' },
   { id: 'education', label: 'Education', icon: GraduationCap, path: '/education' },
   { id: 'profile', label: 'Profile', icon: User, path: '/profile' },
 ];
