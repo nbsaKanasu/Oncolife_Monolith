@@ -13,10 +13,15 @@
 #
 # Options:
 #   --region REGION      AWS region (default: us-west-2)
-#   --skip-vpc          Skip VPC creation (if already exists)
-#   --skip-rds          Skip RDS creation (if already exists)
-#   --skip-build        Skip Docker build (use existing images)
+#   --skip-vpc          Skip VPC/Security Groups (prompts for existing IDs)
+#   --skip-rds          Skip RDS creation (prompts for existing endpoint)
+#   --skip-cognito      Skip Cognito creation (prompts for existing IDs)
+#   --skip-build        Skip Docker build (use existing images in ECR)
 #   --help              Show this help message
+#
+# Re-running after partial failure:
+#   ./scripts/aws/full-deploy.sh --skip-vpc --skip-rds
+#   ./scripts/aws/full-deploy.sh --skip-vpc --skip-rds --skip-cognito
 #
 # =============================================================================
 
@@ -53,6 +58,8 @@ DESIRED_COUNT="2"
 SKIP_VPC=false
 SKIP_RDS=false
 SKIP_BUILD=false
+SKIP_SECURITY_GROUPS=false
+SKIP_COGNITO=false
 
 # Colors
 RED='\033[0;31m'
@@ -144,15 +151,24 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --skip-cognito)
+            SKIP_COGNITO=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
             echo "  --region REGION    AWS region (default: us-west-2)"
-            echo "  --skip-vpc        Skip VPC creation"
-            echo "  --skip-rds        Skip RDS creation"
-            echo "  --skip-build      Skip Docker build"
+            echo "  --skip-vpc        Skip VPC/Security Groups (prompts for existing IDs)"
+            echo "  --skip-rds        Skip RDS creation (prompts for existing endpoint)"
+            echo "  --skip-cognito    Skip Cognito creation (prompts for existing IDs)"
+            echo "  --skip-build      Skip Docker build (use existing images in ECR)"
             echo "  --help            Show this help"
+            echo ""
+            echo "For re-running after partial failure:"
+            echo "  $0 --skip-vpc --skip-rds"
+            echo "  $0 --skip-vpc --skip-rds --skip-cognito"
             exit 0
             ;;
         *)
@@ -235,11 +251,17 @@ create_vpc_infrastructure() {
     
     if [ "$SKIP_VPC" = true ]; then
         log_info "Skipping VPC creation (--skip-vpc flag)"
-        read -p "  Enter existing VPC ID (vpc-xxxxxxxx): " VPC_ID
-        read -p "  Enter Public Subnet 1 ID: " PUBLIC_SUBNET_1
-        read -p "  Enter Public Subnet 2 ID: " PUBLIC_SUBNET_2
-        read -p "  Enter Private Subnet 1 ID: " PRIVATE_SUBNET_1
-        read -p "  Enter Private Subnet 2 ID: " PRIVATE_SUBNET_2
+        echo ""
+        echo "  Enter your existing AWS resource IDs:"
+        read -p "  VPC ID (vpc-xxxxxxxx): " VPC_ID
+        read -p "  Public Subnet 1 ID (subnet-xxx): " PUBLIC_SUBNET_1
+        read -p "  Public Subnet 2 ID (subnet-xxx): " PUBLIC_SUBNET_2
+        read -p "  Private Subnet 1 ID (subnet-xxx): " PRIVATE_SUBNET_1
+        read -p "  Private Subnet 2 ID (subnet-xxx): " PRIVATE_SUBNET_2
+        read -p "  ALB Security Group ID (sg-xxx): " SG_ALB
+        read -p "  ECS Security Group ID (sg-xxx): " SG_ECS
+        read -p "  RDS Security Group ID (sg-xxx): " SG_RDS
+        SKIP_SECURITY_GROUPS=true
         return
     fi
     
@@ -359,6 +381,14 @@ create_vpc_infrastructure() {
 create_security_groups() {
     log_step "STEP 3: Creating Security Groups"
     
+    if [ "$SKIP_SECURITY_GROUPS" = true ]; then
+        log_info "Skipping Security Groups (using existing from --skip-vpc)"
+        log_success "ALB SG: $SG_ALB"
+        log_success "ECS SG: $SG_ECS"
+        log_success "RDS SG: $SG_RDS"
+        return
+    fi
+    
     # ALB Security Group
     log_info "Creating ALB Security Group..."
     SG_ALB=$(aws ec2 create-security-group \
@@ -411,6 +441,8 @@ create_rds_database() {
     if [ "$SKIP_RDS" = true ]; then
         log_info "Skipping RDS creation (--skip-rds flag)"
         read -p "  Enter existing RDS endpoint (xxx.rds.amazonaws.com): " RDS_ENDPOINT
+        read -p "  Enter DB username (default: oncolife_admin): " DB_USERNAME
+        DB_USERNAME="${DB_USERNAME:-oncolife_admin}"
         get_password
         return
     fi
@@ -465,6 +497,17 @@ create_rds_database() {
 
 create_cognito_user_pool() {
     log_step "STEP 5: Creating Cognito User Pool"
+    
+    if [ "$SKIP_COGNITO" = true ]; then
+        log_info "Skipping Cognito creation (--skip-cognito flag)"
+        read -p "  Enter existing User Pool ID (us-west-2_xxxxxxxx): " COGNITO_POOL_ID
+        read -p "  Enter existing Client ID: " COGNITO_CLIENT_ID
+        read -sp "  Enter existing Client Secret: " COGNITO_CLIENT_SECRET
+        echo ""
+        log_success "User Pool ID: $COGNITO_POOL_ID"
+        log_success "Client ID: $COGNITO_CLIENT_ID"
+        return
+    fi
     
     log_info "Creating User Pool..."
     COGNITO_POOL_ID=$(aws cognito-idp create-user-pool \
