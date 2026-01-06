@@ -179,11 +179,18 @@ $SG_ECS = (aws ec2 create-security-group `
 
 Write-Host "ECS Security Group: $SG_ECS"
 
-# Allow traffic from ALB
+# Allow traffic from ALB (Patient API - port 8000)
 aws ec2 authorize-security-group-ingress `
     --group-id $SG_ECS `
     --protocol tcp `
     --port 8000 `
+    --source-group $SG_ALB
+
+# Allow traffic from ALB (Doctor API - port 8001)
+aws ec2 authorize-security-group-ingress `
+    --group-id $SG_ECS `
+    --protocol tcp `
+    --port 8001 `
     --source-group $SG_ALB
 
 # RDS Security Group
@@ -234,6 +241,12 @@ echo "ECS SG: $SG_ECS"
 aws ec2 authorize-security-group-ingress \
     --group-id $SG_ECS \
     --protocol tcp --port 8000 \
+    --source-group $SG_ALB
+
+# Allow Doctor API port
+aws ec2 authorize-security-group-ingress \
+    --group-id $SG_ECS \
+    --protocol tcp --port 8001 \
     --source-group $SG_ALB
 
 # RDS Security Group
@@ -536,29 +549,36 @@ aws iam put-role-policy `
 Remove-Item "trust-policy.json", "task-policy.json"
 ```
 
-### Step 2.5: Create ALB and Target Group
+### Step 2.5: Create ALBs and Target Groups (Patient + Doctor)
+
+> ⚠️ **You need TWO separate ALBs** - one for Patient API and one for Doctor API!
+
+#### 2.5.1: Patient API ALB
 
 ```powershell
 # Get your public subnet IDs
 $PUBLIC_SUBNET_1 = "subnet-xxxxxxxxx"  # From Step 1.2
 $PUBLIC_SUBNET_2 = "subnet-yyyyyyyyy"
 $SG_ALB = "sg-xxxxxxxxx"  # From Step 1.3
+$VPC_ID = "vpc-xxxxxxxxx"  # Your VPC ID
 
-# Create ALB
-$ALB_ARN = (aws elbv2 create-load-balancer `
-    --name "oncolife-api-alb" `
+# ==========================================
+# PATIENT API ALB (Port 8000)
+# ==========================================
+
+# Create Patient ALB
+$PATIENT_ALB_ARN = (aws elbv2 create-load-balancer `
+    --name "oncolife-patient-alb" `
     --subnets $PUBLIC_SUBNET_1 $PUBLIC_SUBNET_2 `
     --security-groups $SG_ALB `
     --scheme "internet-facing" `
     --type "application" `
     --query 'LoadBalancers[0].LoadBalancerArn' --output text)
 
-Write-Host "ALB ARN: $ALB_ARN"
+Write-Host "Patient ALB ARN: $PATIENT_ALB_ARN"
 
-# Create Target Group
-$VPC_ID = "vpc-xxxxxxxxx"  # Your VPC ID
-
-$TG_ARN = (aws elbv2 create-target-group `
+# Create Patient Target Group
+$PATIENT_TG_ARN = (aws elbv2 create-target-group `
     --name "patient-api-tg" `
     --protocol "HTTP" `
     --port 8000 `
@@ -570,22 +590,111 @@ $TG_ARN = (aws elbv2 create-target-group `
     --unhealthy-threshold-count 3 `
     --query 'TargetGroups[0].TargetGroupArn' --output text)
 
-Write-Host "Target Group ARN: $TG_ARN"
+Write-Host "Patient Target Group ARN: $PATIENT_TG_ARN"
 
 # Create HTTP Listener (redirect to HTTPS)
 aws elbv2 create-listener `
-    --load-balancer-arn $ALB_ARN `
+    --load-balancer-arn $PATIENT_ALB_ARN `
     --protocol "HTTP" `
     --port 80 `
     --default-actions 'Type=redirect,RedirectConfig={Protocol=HTTPS,Port=443,StatusCode=HTTP_301}'
 
-# For HTTPS, you need an ACM certificate first
-# aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol HTTPS --port 443 ...
+# Get Patient ALB DNS
+$PATIENT_ALB_DNS = (aws elbv2 describe-load-balancers `
+    --load-balancer-arns $PATIENT_ALB_ARN `
+    --query 'LoadBalancers[0].DNSName' --output text)
+
+Write-Host "Patient API URL: http://$PATIENT_ALB_DNS"
 ```
 
-### Step 2.6: Register Task Definition
+#### 2.5.2: Doctor API ALB
 
-Create `task-definition.json`:
+```powershell
+# ==========================================
+# DOCTOR API ALB (Port 8001)
+# ==========================================
+
+# Create Doctor ALB
+$DOCTOR_ALB_ARN = (aws elbv2 create-load-balancer `
+    --name "oncolife-doctor-alb" `
+    --subnets $PUBLIC_SUBNET_1 $PUBLIC_SUBNET_2 `
+    --security-groups $SG_ALB `
+    --scheme "internet-facing" `
+    --type "application" `
+    --query 'LoadBalancers[0].LoadBalancerArn' --output text)
+
+Write-Host "Doctor ALB ARN: $DOCTOR_ALB_ARN"
+
+# Create Doctor Target Group
+$DOCTOR_TG_ARN = (aws elbv2 create-target-group `
+    --name "doctor-api-tg" `
+    --protocol "HTTP" `
+    --port 8001 `
+    --vpc-id $VPC_ID `
+    --target-type "ip" `
+    --health-check-path "/health" `
+    --health-check-interval-seconds 30 `
+    --healthy-threshold-count 2 `
+    --unhealthy-threshold-count 3 `
+    --query 'TargetGroups[0].TargetGroupArn' --output text)
+
+Write-Host "Doctor Target Group ARN: $DOCTOR_TG_ARN"
+
+# Create HTTP Listener (redirect to HTTPS)
+aws elbv2 create-listener `
+    --load-balancer-arn $DOCTOR_ALB_ARN `
+    --protocol "HTTP" `
+    --port 80 `
+    --default-actions 'Type=redirect,RedirectConfig={Protocol=HTTPS,Port=443,StatusCode=HTTP_301}'
+
+# Get Doctor ALB DNS
+$DOCTOR_ALB_DNS = (aws elbv2 describe-load-balancers `
+    --load-balancer-arns $DOCTOR_ALB_ARN `
+    --query 'LoadBalancers[0].DNSName' --output text)
+
+Write-Host "Doctor API URL: http://$DOCTOR_ALB_DNS"
+```
+
+#### 2.5.3: Summary of ALBs Created
+
+| Component | Name | Port | Health Check |
+|-----------|------|------|--------------|
+| **Patient ALB** | `oncolife-patient-alb` | 80/443 → 8000 | `/health` |
+| **Doctor ALB** | `oncolife-doctor-alb` | 80/443 → 8001 | `/health` |
+
+> 📝 **Note**: For HTTPS, you need ACM certificates. See Step 2.5.4 below.
+
+#### 2.5.4: (Optional) Add HTTPS Listeners with ACM Certificate
+
+```powershell
+# First, request certificates in ACM Console or via CLI:
+# aws acm request-certificate --domain-name api.oncolife.com --validation-method DNS
+
+# Then create HTTPS listeners:
+# Patient HTTPS Listener
+aws elbv2 create-listener `
+    --load-balancer-arn $PATIENT_ALB_ARN `
+    --protocol "HTTPS" `
+    --port 443 `
+    --certificates CertificateArn=arn:aws:acm:REGION:ACCOUNT:certificate/CERT_ID `
+    --default-actions "Type=forward,TargetGroupArn=$PATIENT_TG_ARN"
+
+# Doctor HTTPS Listener
+aws elbv2 create-listener `
+    --load-balancer-arn $DOCTOR_ALB_ARN `
+    --protocol "HTTPS" `
+    --port 443 `
+    --certificates CertificateArn=arn:aws:acm:REGION:ACCOUNT:certificate/CERT_ID `
+    --default-actions "Type=forward,TargetGroupArn=$DOCTOR_TG_ARN"
+```
+
+### Step 2.6: Register Task Definitions (Patient + Doctor)
+
+> ⚠️ **You need TWO task definitions** - one for Patient API and one for Doctor API!
+
+#### 2.6.1: Patient API Task Definition
+
+Create `patient-task-definition.json`:
 
 ```json
 {
@@ -645,47 +754,144 @@ aws secretsmanager describe-secret --secret-id "oncolife/db" --query 'ARN' --out
 aws secretsmanager describe-secret --secret-id "oncolife/cognito" --query 'ARN' --output text
 ```
 
-**Register the task definition:**
+**Register the Patient task definition:**
 ```powershell
 # First, update the JSON file with your ACCOUNT_ID
-(Get-Content task-definition.json) -replace 'ACCOUNT_ID', $ACCOUNT_ID | Set-Content task-definition.json
+(Get-Content patient-task-definition.json) -replace 'ACCOUNT_ID', $ACCOUNT_ID | Set-Content patient-task-definition.json
 
-aws ecs register-task-definition --cli-input-json "file://task-definition.json"
+aws ecs register-task-definition --cli-input-json "file://patient-task-definition.json"
 ```
 
-### Step 2.7: Create ECS Service
+#### 2.6.2: Doctor API Task Definition
 
-> ⚠️ **IMPORTANT**: Create the service ONLY after the task definition exists!
+Create `doctor-task-definition.json`:
+
+```json
+{
+  "family": "oncolife-doctor-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/oncolifeTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "doctor-api",
+      "image": "ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/oncolife-doctor-api:latest",
+      "portMappings": [{"containerPort": 8001, "protocol": "tcp"}],
+      "essential": true,
+      "environment": [
+        {"name": "ENVIRONMENT", "value": "production"},
+        {"name": "DEBUG", "value": "false"},
+        {"name": "LOG_LEVEL", "value": "INFO"},
+        {"name": "AWS_REGION", "value": "us-west-2"}
+      ],
+      "secrets": [
+        {"name": "DOCTOR_DB_HOST", "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/db-XXXXXX:host::"},
+        {"name": "DOCTOR_DB_PASSWORD", "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/db-XXXXXX:password::"},
+        {"name": "DOCTOR_DB_USER", "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/db-XXXXXX:username::"},
+        {"name": "DOCTOR_DB_NAME", "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/db-XXXXXX:doctor_db::"},
+        {"name": "COGNITO_USER_POOL_ID", "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/cognito-XXXXXX:user_pool_id::"},
+        {"name": "COGNITO_CLIENT_ID", "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/cognito-XXXXXX:client_id::"},
+        {"name": "COGNITO_CLIENT_SECRET", "valueFrom": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:oncolife/cognito-XXXXXX:client_secret::"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/oncolife-doctor-api",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}
+```
+
+**Register the Doctor task definition:**
+```powershell
+(Get-Content doctor-task-definition.json) -replace 'ACCOUNT_ID', $ACCOUNT_ID | Set-Content doctor-task-definition.json
+
+aws ecs register-task-definition --cli-input-json "file://doctor-task-definition.json"
+```
+
+### Step 2.7: Create ECS Services (Patient + Doctor)
+
+> ⚠️ **IMPORTANT**: Create the services ONLY after the task definitions exist!
+
+#### 2.7.1: Patient API Service
 
 ```powershell
 $PRIVATE_SUBNET_1 = "subnet-zzzzzzzzz"  # Private subnets!
 $PRIVATE_SUBNET_2 = "subnet-wwwwwwwww"
 $SG_ECS = "sg-xxxxxxxxx"
 
+# Create Patient API Service
 aws ecs create-service `
     --cluster "oncolife-production" `
     --service-name "patient-api-service" `
     --task-definition "oncolife-patient-api" `
-    --desired-count 1 `
+    --desired-count 2 `
     --launch-type "FARGATE" `
     --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_1,$PRIVATE_SUBNET_2],securityGroups=[$SG_ECS],assignPublicIp=DISABLED}" `
-    --load-balancers "targetGroupArn=$TG_ARN,containerName=patient-api,containerPort=8000" `
+    --load-balancers "targetGroupArn=$PATIENT_TG_ARN,containerName=patient-api,containerPort=8000" `
     --health-check-grace-period-seconds 120
+
+Write-Host "Patient API Service created!"
+```
+
+#### 2.7.2: Doctor API Service
+
+```powershell
+# Create Doctor API Service
+aws ecs create-service `
+    --cluster "oncolife-production" `
+    --service-name "doctor-api-service" `
+    --task-definition "oncolife-doctor-api" `
+    --desired-count 2 `
+    --launch-type "FARGATE" `
+    --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_1,$PRIVATE_SUBNET_2],securityGroups=[$SG_ECS],assignPublicIp=DISABLED}" `
+    --load-balancers "targetGroupArn=$DOCTOR_TG_ARN,containerName=doctor-api,containerPort=8001" `
+    --health-check-grace-period-seconds 120
+
+Write-Host "Doctor API Service created!"
+```
+
+#### 2.7.3: Verify Services Created
+
+```powershell
+# Check both services
+aws ecs describe-services `
+    --cluster "oncolife-production" `
+    --services "patient-api-service" "doctor-api-service" `
+    --query 'services[*].{name:serviceName,status:status,desired:desiredCount,running:runningCount}'
 ```
 
 ---
 
 ## 5. Phase 3: Build and Deploy
 
-### Step 3.1: Build Docker Image
+### Step 3.1: Build and Push Docker Images (Patient + Doctor)
 
 ```powershell
 cd Oncolife_Monolith
 
-# Login to ECR
+# Login to ECR (do this once)
 aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin "$ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com"
+```
 
-# Build image
+#### 3.1.1: Build and Push Patient API
+
+```powershell
+# Build Patient API image
 docker build `
     -t "oncolife-patient-api:latest" `
     -f "apps/patient-platform/patient-api/Dockerfile" `
@@ -694,21 +900,63 @@ docker build `
 # Tag and push
 docker tag "oncolife-patient-api:latest" "$ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/oncolife-patient-api:latest"
 docker push "$ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/oncolife-patient-api:latest"
+
+Write-Host "Patient API image pushed!"
 ```
 
-### Step 3.2: Force New Deployment
+#### 3.1.2: Build and Push Doctor API
 
 ```powershell
+# Build Doctor API image
+docker build `
+    -t "oncolife-doctor-api:latest" `
+    -f "apps/doctor-platform/doctor-api/Dockerfile" `
+    "apps/doctor-platform/doctor-api/"
+
+# Tag and push
+docker tag "oncolife-doctor-api:latest" "$ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/oncolife-doctor-api:latest"
+docker push "$ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/oncolife-doctor-api:latest"
+
+Write-Host "Doctor API image pushed!"
+```
+
+### Step 3.2: Force New Deployments
+
+```powershell
+# Deploy Patient API
 aws ecs update-service `
     --cluster "oncolife-production" `
     --service "patient-api-service" `
     --force-new-deployment
 
-# Monitor deployment
+# Deploy Doctor API
+aws ecs update-service `
+    --cluster "oncolife-production" `
+    --service "doctor-api-service" `
+    --force-new-deployment
+
+# Monitor both deployments
 aws ecs describe-services `
     --cluster "oncolife-production" `
-    --services "patient-api-service" `
-    --query 'services[0].{desiredCount:desiredCount,runningCount:runningCount,status:status}'
+    --services "patient-api-service" "doctor-api-service" `
+    --query 'services[*].{name:serviceName,desired:desiredCount,running:runningCount,status:status}'
+```
+
+### Step 3.3: Monitor Deployment Progress
+
+```powershell
+# Watch deployments (run repeatedly until running = desired)
+while ($true) {
+    Clear-Host
+    Write-Host "=== ECS Service Status ===" -ForegroundColor Cyan
+    aws ecs describe-services `
+        --cluster "oncolife-production" `
+        --services "patient-api-service" "doctor-api-service" `
+        --query 'services[*].{Service:serviceName,Status:status,Desired:desiredCount,Running:runningCount,Pending:pendingCount}' `
+        --output table
+    Start-Sleep -Seconds 10
+}
+# Press Ctrl+C to stop
 ```
 
 ---
@@ -774,30 +1022,78 @@ python scripts/seed_education.py
 
 ## 7. Phase 5: Verification
 
-### Step 5.1: Get ALB DNS
+### Step 5.1: Get ALB DNS Names
 
 ```powershell
-$ALB_DNS = (aws elbv2 describe-load-balancers `
-    --names "oncolife-api-alb" `
+# Get Patient API URL
+$PATIENT_ALB_DNS = (aws elbv2 describe-load-balancers `
+    --names "oncolife-patient-alb" `
     --query 'LoadBalancers[0].DNSName' --output text)
 
-Write-Host "API URL: http://$ALB_DNS"
+Write-Host "Patient API URL: http://$PATIENT_ALB_DNS"
+
+# Get Doctor API URL
+$DOCTOR_ALB_DNS = (aws elbv2 describe-load-balancers `
+    --names "oncolife-doctor-alb" `
+    --query 'LoadBalancers[0].DNSName' --output text)
+
+Write-Host "Doctor API URL: http://$DOCTOR_ALB_DNS"
 ```
 
-### Step 5.2: Test Health Endpoint
+### Step 5.2: Test Health Endpoints
 
-```bash
-curl http://YOUR_ALB_DNS/health
+```powershell
+# Test Patient API
+Write-Host "Testing Patient API..."
+Invoke-RestMethod -Uri "http://$PATIENT_ALB_DNS/health" -Method GET
 
-# Expected response:
-# {"status":"healthy","timestamp":"...","version":"1.0.0"}
+# Test Doctor API
+Write-Host "Testing Doctor API..."
+Invoke-RestMethod -Uri "http://$DOCTOR_ALB_DNS/health" -Method GET
+```
+
+**Expected response for both:**
+```json
+{"status":"healthy","timestamp":"...","version":"1.0.0"}
 ```
 
 ### Step 5.3: Check CloudWatch Logs
 
 ```powershell
-aws logs tail "/ecs/oncolife-patient-api" --follow
+# Patient API logs
+Write-Host "=== Patient API Logs ===" -ForegroundColor Cyan
+aws logs tail "/ecs/oncolife-patient-api" --since 5m
+
+# Doctor API logs
+Write-Host "=== Doctor API Logs ===" -ForegroundColor Cyan
+aws logs tail "/ecs/oncolife-doctor-api" --since 5m
 ```
+
+### Step 5.4: Test API Endpoints
+
+```powershell
+# Test Patient Auth endpoint
+Invoke-RestMethod -Uri "http://$PATIENT_ALB_DNS/api/v1/auth/status" -Method GET
+
+# Test Doctor Auth endpoint
+Invoke-RestMethod -Uri "http://$DOCTOR_ALB_DNS/api/v1/auth/status" -Method GET
+```
+
+### Step 5.5: Verify Target Group Health
+
+```powershell
+# Check Patient Target Group health
+aws elbv2 describe-target-health `
+    --target-group-arn $PATIENT_TG_ARN `
+    --query 'TargetHealthDescriptions[*].{Target:Target.Id,Health:TargetHealth.State}'
+
+# Check Doctor Target Group health
+aws elbv2 describe-target-health `
+    --target-group-arn $DOCTOR_TG_ARN `
+    --query 'TargetHealthDescriptions[*].{Target:Target.Id,Health:TargetHealth.State}'
+```
+
+**Expected:** All targets should show `"Health": "healthy"`
 
 ---
 
@@ -958,15 +1254,74 @@ Cognito:
   Client ID:           ____________________
   Client Secret:       ____________________
 
-ALB:
+PATIENT API:
   ALB ARN:             ____________________
+  ALB DNS:             ____________________
   Target Group ARN:    ____________________
-  DNS Name:            ____________________
+  ECS Service:         patient-api-service
+
+DOCTOR API:
+  ALB ARN:             ____________________
+  ALB DNS:             ____________________
+  Target Group ARN:    ____________________
+  ECS Service:         doctor-api-service
 
 Secrets Manager ARNs:
   oncolife/db:         ____________________
   oncolife/cognito:    ____________________
   oncolife/fax:        ____________________
+
+FINAL URLs (after Route 53 setup):
+  Patient API:         https://api.oncolife.com
+  Doctor API:          https://doctor-api.oncolife.com
+  Patient Web:         https://app.oncolife.com
+  Doctor Web:          https://doctor.oncolife.com
+```
+
+---
+
+## Architecture Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         DEPLOYMENT ARCHITECTURE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   PATIENT SIDE                              DOCTOR SIDE                     │
+│   ────────────                              ───────────                     │
+│                                                                              │
+│   Route 53: api.oncolife.com                Route 53: doctor-api.oncolife   │
+│         │                                         │                         │
+│         ▼                                         ▼                         │
+│   ┌─────────────────┐                       ┌─────────────────┐            │
+│   │  Patient ALB    │                       │  Doctor ALB     │            │
+│   │  (Port 443/80)  │                       │  (Port 443/80)  │            │
+│   └────────┬────────┘                       └────────┬────────┘            │
+│            │                                         │                      │
+│            ▼                                         ▼                      │
+│   ┌─────────────────┐                       ┌─────────────────┐            │
+│   │ Target Group    │                       │ Target Group    │            │
+│   │ (Port 8000)     │                       │ (Port 8001)     │            │
+│   └────────┬────────┘                       └────────┬────────┘            │
+│            │                                         │                      │
+│            ▼                                         ▼                      │
+│   ┌─────────────────┐                       ┌─────────────────┐            │
+│   │ ECS Service     │                       │ ECS Service     │            │
+│   │ patient-api     │                       │ doctor-api      │            │
+│   │ (2 tasks)       │                       │ (2 tasks)       │            │
+│   └────────┬────────┘                       └────────┬────────┘            │
+│            │                                         │                      │
+│            └──────────────────┬──────────────────────┘                      │
+│                               │                                             │
+│                               ▼                                             │
+│                       ┌─────────────────┐                                  │
+│                       │      RDS        │                                  │
+│                       │  PostgreSQL     │                                  │
+│                       │ (patient_db +   │                                  │
+│                       │  doctor_db)     │                                  │
+│                       └─────────────────┘                                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
