@@ -1,6 +1,6 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
-import { AddNewButton } from '../NotesPage.styles';
+import { AddNoteButton } from '../NotesPage.styles';
 import { NoteItem } from './NoteItem';
 import { SidebarContainer, SidebarHeader, NotesList, NotesSidebarTitle } from './NotesSidebar.styles';
 import { DatePicker as SharedDatePicker } from '@oncolife/ui-components';
@@ -51,10 +51,10 @@ export const NotesSidebar: React.FC<NotesSidebarProps> = ({
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', marginTop: '1rem' }}>
           <NotesSidebarTitle>All Notes</NotesSidebarTitle>
-          <AddNewButton onClick={onAddNote}>
+          <AddNoteButton onClick={onAddNote}>
             <Plus size={16} />
             Add New
-          </AddNewButton>
+          </AddNoteButton>
         </div>
         <input
           type="text"
