@@ -6,8 +6,8 @@ Provides endpoints for:
 - Readiness check (dependencies ready)
 - Liveness check (application alive)
 
-These endpoints are used by orchestrators (Kubernetes, Fly.io)
-to determine application health.
+These endpoints are used by orchestrators (AWS ECS, Kubernetes)
+and load balancers (AWS ALB) to determine application health.
 """
 
 from fastapi import APIRouter, Response

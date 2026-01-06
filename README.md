@@ -254,23 +254,38 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 
 ---
 
-## 🚢 Deployment
+## 🚢 Deployment (AWS)
 
-### AWS Deployment
+### Full Deployment Guide
 
-```bash
-# Setup infrastructure
-./scripts/aws/setup-infrastructure.sh
+📖 **[Step-by-Step AWS Deployment Guide](docs/STEP_BY_STEP_DEPLOYMENT.md)**
 
-# Deploy all services
-./scripts/aws/deploy.sh all
+This comprehensive guide covers:
+- VPC, Security Groups, RDS setup
+- ECR repositories and ECS cluster
+- Both Patient and Doctor APIs deployment
+- Frontend deployment (S3+CloudFront or Docker)
+- Database migrations and seeding
 
-# Or deploy individually
-./scripts/aws/deploy.sh patient-api
-./scripts/aws/deploy.sh doctor-api
+### Quick Deploy Commands
+
+```powershell
+# 1. Build and push Docker images
+docker build -t oncolife-patient-api -f apps/patient-platform/patient-api/Dockerfile apps/patient-platform/patient-api/
+docker build -t oncolife-doctor-api -f apps/doctor-platform/doctor-api/Dockerfile apps/doctor-platform/doctor-api/
+docker build -t oncolife-patient-web -f apps/patient-platform/patient-web/Dockerfile apps/patient-platform/patient-web/
+docker build -t oncolife-doctor-web -f apps/doctor-platform/doctor-web/Dockerfile apps/doctor-platform/doctor-web/
+
+# 2. Tag and push to ECR
+aws ecr get-login-password | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
+docker tag oncolife-patient-api:latest $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/oncolife-patient-api:latest
+docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/oncolife-patient-api:latest
+# ... repeat for other images
+
+# 3. Update ECS services
+aws ecs update-service --cluster oncolife-production --service patient-api-service --force-new-deployment
+aws ecs update-service --cluster oncolife-production --service doctor-api-service --force-new-deployment
 ```
-
-See [Deployment Guide](apps/patient-platform/patient-api/docs/DEPLOYMENT.md) for detailed AWS instructions.
 
 ### Education Module Setup (Required)
 
