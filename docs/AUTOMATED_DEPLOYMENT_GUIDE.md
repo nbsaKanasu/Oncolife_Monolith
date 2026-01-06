@@ -442,10 +442,65 @@ This contains all resource IDs. **Keep this file safe!**
 
 1. **✅ Create Databases** - See Step 5 above
 2. **✅ Run Migrations** - See Step 6 above
-3. **⬜ Set Up Custom Domains** - See [STEP_BY_STEP_DEPLOYMENT.md](STEP_BY_STEP_DEPLOYMENT.md) Section 11
-4. **⬜ Configure HTTPS** - Request ACM certificates and add HTTPS listeners
-5. **⬜ Set Up CI/CD** - See [CI/CD Pipeline Guide](CI_CD_PIPELINE_GUIDE.md) for automated deployments
-6. **⬜ Deploy Frontend** - Use S3 + CloudFront or ECS
+3. **⬜ Set Up CI/CD** - See [CI/CD Pipeline Guide](CI_CD_PIPELINE_GUIDE.md) for automated deployments
+4. **⬜ Deploy Frontend** - Use S3 + CloudFront or ECS
+5. **⬜ (Optional) Set Up Custom Domains** - See [STEP_BY_STEP_DEPLOYMENT.md](STEP_BY_STEP_DEPLOYMENT.md) Section 11
+6. **⬜ (Optional) Configure HTTPS** - Request ACM certificates and add HTTPS listeners
+
+> 💡 **Tip**: Custom domains are **OPTIONAL**! You can use the ALB DNS names directly for testing and development. See the next section.
+
+---
+
+## Using ALB DNS Names Directly (No Custom Domain Required)
+
+> 🎯 **For Testing & Development**: You don't need to set up custom domains! The AWS ALB DNS names work immediately after deployment.
+
+### Your Application URLs
+
+After deployment, your apps are accessible at:
+
+| Application | URL Example |
+|-------------|-------------|
+| **Patient API** | `http://oncolife-patient-alb-123456789.us-west-2.elb.amazonaws.com` |
+| **Patient API Docs** | `http://oncolife-patient-alb-123456789.us-west-2.elb.amazonaws.com/docs` |
+| **Doctor API** | `http://oncolife-doctor-alb-987654321.us-west-2.elb.amazonaws.com` |
+| **Doctor API Docs** | `http://oncolife-doctor-alb-987654321.us-west-2.elb.amazonaws.com/docs` |
+
+### Get Your ALB URLs
+
+```powershell
+# Get Patient API URL
+$PATIENT_URL = aws elbv2 describe-load-balancers --names "oncolife-patient-alb" --query 'LoadBalancers[0].DNSName' --output text
+Write-Host "Patient API: http://$PATIENT_URL"
+Write-Host "Patient Docs: http://$PATIENT_URL/docs"
+
+# Get Doctor API URL
+$DOCTOR_URL = aws elbv2 describe-load-balancers --names "oncolife-doctor-alb" --query 'LoadBalancers[0].DNSName' --output text
+Write-Host "Doctor API: http://$DOCTOR_URL"
+Write-Host "Doctor Docs: http://$DOCTOR_URL/docs"
+```
+
+### Configure GitHub Secrets with ALB URLs
+
+For CI/CD, use the ALB DNS names directly:
+
+| Secret | Value (using ALB DNS) |
+|--------|----------------------|
+| `PATIENT_API_URL` | `http://oncolife-patient-alb-XXXXX.us-west-2.elb.amazonaws.com` |
+| `PATIENT_WS_URL` | `ws://oncolife-patient-alb-XXXXX.us-west-2.elb.amazonaws.com` |
+| `DOCTOR_API_URL` | `http://oncolife-doctor-alb-XXXXX.us-west-2.elb.amazonaws.com` |
+
+> ⚠️ **Note**: ALB URLs use `http://` and `ws://` (not `https://` or `wss://`). For production with HTTPS, you'll need custom domains and ACM certificates.
+
+### When You're Ready for Production
+
+When you want to use custom domains (e.g., `api.oncolife.com`):
+1. Register/configure your domain in Route 53
+2. Request ACM certificates
+3. Add HTTPS listeners to ALBs
+4. Create Route 53 alias records
+
+See [STEP_BY_STEP_DEPLOYMENT.md](STEP_BY_STEP_DEPLOYMENT.md) Section 11 for details.
 
 ---
 

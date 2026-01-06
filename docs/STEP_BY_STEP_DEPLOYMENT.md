@@ -16,8 +16,9 @@
 6. [Phase 4: Database Setup](#6-phase-4-database-setup)
 7. [Phase 5: Verification](#7-phase-5-verification)
 8. [Phase 6: CI/CD Setup (Automated Deployments)](#8-phase-6-cicd-setup-automated-deployments)
-9. [Troubleshooting Guide](#9-troubleshooting-guide)
-10. [Common Errors and Fixes](#10-common-errors-and-fixes)
+9. [Using ALB URLs Without Custom Domains](#using-alb-urls-without-custom-domains) ← **No domain needed!**
+10. [Troubleshooting Guide](#9-troubleshooting-guide)
+11. [Common Errors and Fixes](#10-common-errors-and-fixes)
 
 ---
 
@@ -1296,9 +1297,11 @@ Add these secrets:
 | `AWS_SECRET_ACCESS_KEY` | IAM user secret key | `wJalrXUtnFEMI/K7MDENG/...` |
 | `PATIENT_DATABASE_URL` | Patient DB connection string | `postgresql://user:pass@host:5432/oncolife_patient` |
 | `DOCTOR_DATABASE_URL` | Doctor DB connection string | `postgresql://user:pass@host:5432/oncolife_doctor` |
-| `PATIENT_API_URL` | Production patient API URL | `https://api.oncolife.com` |
-| `PATIENT_WS_URL` | Production WebSocket URL | `wss://api.oncolife.com` |
-| `DOCTOR_API_URL` | Production doctor API URL | `https://doctor-api.oncolife.com` |
+| `PATIENT_API_URL` | Patient API URL (ALB DNS or custom domain) | `http://oncolife-patient-alb-xxx.elb.amazonaws.com` |
+| `PATIENT_WS_URL` | WebSocket URL (ALB DNS or custom domain) | `ws://oncolife-patient-alb-xxx.elb.amazonaws.com` |
+| `DOCTOR_API_URL` | Doctor API URL (ALB DNS or custom domain) | `http://oncolife-doctor-alb-xxx.elb.amazonaws.com` |
+
+> 💡 **No Custom Domain?** Use ALB DNS names directly! See [Using ALB URLs Without Custom Domains](#using-alb-urls-without-custom-domains) below.
 
 ### Step 6.2: Create IAM User for GitHub Actions
 
@@ -1379,6 +1382,80 @@ You can trigger deployments manually:
 |------|---------|---------|
 | `.github/workflows/ci.yml` | PR, push to main | Lint, test, build |
 | `.github/workflows/deploy.yml` | Merge to main | Build, push, migrate, deploy |
+
+---
+
+## Using ALB URLs Without Custom Domains
+
+> 🎯 **Custom domains are OPTIONAL!** You can deploy and test with just the ALB DNS names.
+
+### When to Use ALB URLs Directly
+
+| Scenario | Use ALB DNS | Use Custom Domain |
+|----------|-------------|-------------------|
+| Development/Testing | ✅ Yes | ❌ Not needed |
+| Staging Environment | ✅ Yes | ⚠️ Optional |
+| Production (Internal) | ✅ Yes | ⚠️ Optional |
+| Production (Public-facing) | ❌ | ✅ Recommended |
+
+### Get Your ALB URLs
+
+After creating ALBs in Phase 2, get your URLs:
+
+```powershell
+# Get Patient API URL
+$PATIENT_ALB = aws elbv2 describe-load-balancers --names "oncolife-patient-alb" --query 'LoadBalancers[0].DNSName' --output text
+Write-Host "Patient API URL: http://$PATIENT_ALB"
+Write-Host "Patient WebSocket: ws://$PATIENT_ALB"
+
+# Get Doctor API URL
+$DOCTOR_ALB = aws elbv2 describe-load-balancers --names "oncolife-doctor-alb" --query 'LoadBalancers[0].DNSName' --output text
+Write-Host "Doctor API URL: http://$DOCTOR_ALB"
+```
+
+**Example Output:**
+```
+Patient API URL: http://oncolife-patient-alb-1234567890.us-west-2.elb.amazonaws.com
+Patient WebSocket: ws://oncolife-patient-alb-1234567890.us-west-2.elb.amazonaws.com
+Doctor API URL: http://oncolife-doctor-alb-0987654321.us-west-2.elb.amazonaws.com
+```
+
+### Configure GitHub Secrets with ALB URLs
+
+Use these URLs directly in your GitHub Secrets:
+
+| Secret | Value Example |
+|--------|---------------|
+| `PATIENT_API_URL` | `http://oncolife-patient-alb-1234567890.us-west-2.elb.amazonaws.com` |
+| `PATIENT_WS_URL` | `ws://oncolife-patient-alb-1234567890.us-west-2.elb.amazonaws.com` |
+| `DOCTOR_API_URL` | `http://oncolife-doctor-alb-0987654321.us-west-2.elb.amazonaws.com` |
+
+### Test Your APIs
+
+```powershell
+# Test Patient API
+Invoke-RestMethod -Uri "http://$PATIENT_ALB/health"
+# Expected: { "status": "healthy", ... }
+
+# View Swagger UI
+Start-Process "http://$PATIENT_ALB/docs"
+
+# Test Doctor API
+Invoke-RestMethod -Uri "http://$DOCTOR_ALB/health"
+```
+
+### Limitations of ALB URLs (vs Custom Domains)
+
+| Feature | ALB URL | Custom Domain |
+|---------|---------|---------------|
+| **HTTP** | ✅ Works | ✅ Works |
+| **HTTPS** | ❌ Not available | ✅ With ACM certificate |
+| **WebSocket (ws://)** | ✅ Works | ✅ Works |
+| **WebSocket (wss://)** | ❌ Not available | ✅ With ACM certificate |
+| **URL appearance** | Long AWS URL | Your branded URL |
+| **SEO/Branding** | ❌ Not ideal | ✅ Professional |
+
+> 📝 **When to Add Custom Domains**: Add them when you're ready for production, need HTTPS, or want professional branding. See Phase 7 below.
 
 ---
 
@@ -1610,9 +1687,14 @@ Secrets Manager ARNs (from Phase 1, Step 1.7):
   oncolife/cognito:    arn:aws:secretsmanager:us-west-2:${ACCOUNT_ID}:secret:oncolife/cognito-______
   oncolife/fax:        arn:aws:secretsmanager:us-west-2:${ACCOUNT_ID}:secret:oncolife/fax-______
 
-FINAL URLs (after Route 53/CloudFront setup):
-  Patient API:         https://___________________
-  Doctor API:          https://___________________
+ALB URLs (Available Immediately - No Domain Required):
+  Patient API:         http://oncolife-patient-alb-________.elb.amazonaws.com
+  Patient WebSocket:   ws://oncolife-patient-alb-________.elb.amazonaws.com
+  Doctor API:          http://oncolife-doctor-alb-________.elb.amazonaws.com
+
+FINAL URLs (OPTIONAL - after Route 53/CloudFront setup):
+  Patient API:         https://___________________  (or use ALB URL above)
+  Doctor API:          https://___________________  (or use ALB URL above)
   Patient Web:         https://___________________
   Doctor Web:          https://___________________
 ```
@@ -1628,15 +1710,22 @@ Once deployment is complete, add these to GitHub Repository Settings → Secrets
 | `AWS_SECRET_ACCESS_KEY` | IAM user secret key |
 | `PATIENT_DATABASE_URL` | `postgresql://oncolife_admin:PASSWORD@RDS_ENDPOINT:5432/oncolife_patient` |
 | `DOCTOR_DATABASE_URL` | `postgresql://oncolife_admin:PASSWORD@RDS_ENDPOINT:5432/oncolife_doctor` |
-| `PATIENT_API_URL` | Patient API Final URL (https://...) |
-| `PATIENT_WS_URL` | Patient WebSocket URL (wss://...) |
-| `DOCTOR_API_URL` | Doctor API Final URL (https://...) |
+| `PATIENT_API_URL` | **ALB URL** or custom domain (e.g., `http://oncolife-patient-alb-xxx.elb.amazonaws.com`) |
+| `PATIENT_WS_URL` | **ALB URL** or custom domain (e.g., `ws://oncolife-patient-alb-xxx.elb.amazonaws.com`) |
+| `DOCTOR_API_URL` | **ALB URL** or custom domain (e.g., `http://oncolife-doctor-alb-xxx.elb.amazonaws.com`) |
 
+> 💡 **No Custom Domain?** Use ALB URLs directly! Example: `http://oncolife-patient-alb-123456789.us-west-2.elb.amazonaws.com`
+> 
 > 💡 **Tip**: Use `aws secretsmanager get-secret-value --secret-id oncolife/db` to retrieve stored credentials.
 
 ---
 
-## 11. Phase 7: Route 53 & Custom Domains (Optional)
+## 11. Phase 7: Route 53 & Custom Domains (OPTIONAL - Skip for Testing)
+
+> 🔔 **This entire phase is OPTIONAL!** 
+> - For testing and development, use ALB DNS URLs directly (see section above)
+> - Only set up custom domains when you need HTTPS or professional branding
+> - You can complete this phase later when you're ready for production
 
 ### Step 11.1: Register or Configure Domain
 
