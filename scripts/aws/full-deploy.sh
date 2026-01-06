@@ -480,15 +480,20 @@ create_cognito_user_pool() {
     
     # Create App Client
     log_info "Creating App Client..."
-    CLIENT_RESULT=$(aws cognito-idp create-user-pool-client \
+    COGNITO_CLIENT_ID=$(aws cognito-idp create-user-pool-client \
         --user-pool-id $COGNITO_POOL_ID \
         --client-name "$PROJECT_NAME-api-client" \
         --generate-secret \
         --explicit-auth-flows "ALLOW_ADMIN_USER_PASSWORD_AUTH" "ALLOW_REFRESH_TOKEN_AUTH" "ALLOW_USER_PASSWORD_AUTH" \
-        --output json)
+        --query 'UserPoolClient.ClientId' \
+        --output text)
     
-    COGNITO_CLIENT_ID=$(echo $CLIENT_RESULT | jq -r '.UserPoolClient.ClientId')
-    COGNITO_CLIENT_SECRET=$(echo $CLIENT_RESULT | jq -r '.UserPoolClient.ClientSecret')
+    # Get client secret (need separate call)
+    COGNITO_CLIENT_SECRET=$(aws cognito-idp describe-user-pool-client \
+        --user-pool-id $COGNITO_POOL_ID \
+        --client-id $COGNITO_CLIENT_ID \
+        --query 'UserPoolClient.ClientSecret' \
+        --output text)
     log_success "Client ID: $COGNITO_CLIENT_ID"
 }
 
