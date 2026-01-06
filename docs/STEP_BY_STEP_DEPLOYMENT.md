@@ -1269,6 +1269,12 @@ aws elbv2 describe-target-health `
 
 GitHub Actions is pre-configured for automated CI/CD. Follow these steps to enable it.
 
+> 📖 **For comprehensive CI/CD documentation**, see the [CI/CD Pipeline Guide](CI_CD_PIPELINE_GUIDE.md) which includes:
+> - Detailed workflow explanations
+> - Complete IAM policy configurations
+> - Troubleshooting guide
+> - Rollback procedures
+
 ### Step 6.1: Configure GitHub Secrets
 
 Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**

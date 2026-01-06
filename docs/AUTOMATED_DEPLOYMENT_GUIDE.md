@@ -444,8 +444,52 @@ This contains all resource IDs. **Keep this file safe!**
 2. **✅ Run Migrations** - See Step 6 above
 3. **⬜ Set Up Custom Domains** - See [STEP_BY_STEP_DEPLOYMENT.md](STEP_BY_STEP_DEPLOYMENT.md) Section 11
 4. **⬜ Configure HTTPS** - Request ACM certificates and add HTTPS listeners
-5. **⬜ Set Up CI/CD** - Configure GitHub Actions with your AWS credentials
+5. **⬜ Set Up CI/CD** - See [CI/CD Pipeline Guide](CI_CD_PIPELINE_GUIDE.md) for automated deployments
 6. **⬜ Deploy Frontend** - Use S3 + CloudFront or ECS
+
+---
+
+## Step 7: Set Up CI/CD (Automated Future Deployments)
+
+After your initial deployment, set up CI/CD so future code changes deploy automatically.
+
+### Quick Overview
+
+```
+┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   Push Code      │ → │   CI Tests       │ → │   Manual Deploy  │
+│   to GitHub      │    │   (Automatic)    │    │   (One Click)    │
+└──────────────────┘    └──────────────────┘    └──────────────────┘
+```
+
+### What You Need
+
+1. **GitHub Secrets** - AWS credentials and deployment info
+2. **CI/CD IAM User** - Dedicated AWS user for GitHub Actions
+
+### Configure GitHub Secrets
+
+Go to: **GitHub Repo** → **Settings** → **Secrets** → **Actions** → **New repository secret**
+
+| Secret Name | Where to Get Value |
+|-------------|-------------------|
+| `AWS_ACCOUNT_ID` | Your 12-digit AWS account ID |
+| `AWS_ACCESS_KEY_ID` | CI/CD IAM user (see guide) |
+| `AWS_SECRET_ACCESS_KEY` | CI/CD IAM user (see guide) |
+| `PATIENT_DATABASE_URL` | `postgresql://user:pass@RDS_ENDPOINT:5432/oncolife_patient` |
+| `DOCTOR_DATABASE_URL` | `postgresql://user:pass@RDS_ENDPOINT:5432/oncolife_doctor` |
+| `PATIENT_API_URL` | Your Patient ALB DNS or custom domain |
+| `DOCTOR_API_URL` | Your Doctor ALB DNS or custom domain |
+| `PATIENT_WS_URL` | `wss://` + Patient API URL |
+
+### Deploy After Setup
+
+1. Push code to GitHub
+2. CI runs automatically (tests, linting)
+3. Go to **Actions** → **Deploy to AWS** → **Run workflow**
+4. ECS services update automatically!
+
+📖 **Full Guide:** [CI/CD Pipeline Guide](CI_CD_PIPELINE_GUIDE.md)
 
 ---
 

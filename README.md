@@ -12,6 +12,7 @@ A comprehensive healthcare platform for cancer patient symptom tracking and care
 |----------|-------------|
 | [**🚀 AUTOMATED DEPLOYMENT**](docs/AUTOMATED_DEPLOYMENT_GUIDE.md) | ⭐ **ONE-COMMAND AWS deployment - START HERE!** |
 | [Step-by-Step Deployment](docs/STEP_BY_STEP_DEPLOYMENT.md) | Manual AWS deployment walkthrough |
+| [**🔄 CI/CD Pipeline Guide**](docs/CI_CD_PIPELINE_GUIDE.md) | GitHub Actions integration for automated deployments |
 | [Deployment Troubleshooting](docs/DEPLOYMENT_TROUBLESHOOTING.md) | 🔧 Fix common deployment errors |
 | [Architecture Guide](docs/ARCHITECTURE.md) | System architecture, design patterns, code organization |
 | [Developer Guide](docs/DEVELOPER_GUIDE.md) | Getting started, development environment, code patterns |
