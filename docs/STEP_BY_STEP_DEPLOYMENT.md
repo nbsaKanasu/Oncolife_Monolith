@@ -1472,56 +1472,87 @@ aws logs tail "/ecs/oncolife-patient-api" --since 10m
 
 ## Quick Reference: All Required IDs
 
-Keep this filled in as you deploy:
+> ⚠️ **IMPORTANT FOR TEAM**: As you complete each deployment step, **FILL IN THE VALUES BELOW** and save this document. These IDs are needed for:
+> - Task definitions
+> - CI/CD GitHub Secrets
+> - Troubleshooting
+> - Future deployments
+>
+> **Copy this section to a secure location (e.g., AWS Secrets Manager, 1Password, or team wiki) after filling in.**
+
+### 📝 Fill In During Deployment:
 
 ```
-AWS Account ID:        ____________________
-AWS Region:            ____________________
+AWS Account ID:        ____________________  ← Get with: aws sts get-caller-identity
+AWS Region:            ____________________  ← e.g., us-west-2
 
-VPC:
-  VPC ID:              ____________________
-  Public Subnet 1:     ____________________
-  Public Subnet 2:     ____________________
-  Private Subnet 1:    ____________________
-  Private Subnet 2:    ____________________
+VPC (from Phase 1, Step 1.2):
+  VPC ID:              vpc-________________
+  Public Subnet 1:     subnet-______________  (for ALB)
+  Public Subnet 2:     subnet-______________  (for ALB)
+  Private Subnet 1:    subnet-______________  (for ECS tasks)
+  Private Subnet 2:    subnet-______________  (for ECS tasks)
 
-Security Groups:
-  ALB SG:              ____________________
-  ECS SG:              ____________________
-  RDS SG:              ____________________
+Security Groups (from Phase 1, Step 1.3):
+  ALB SG:              sg-__________________
+  ECS SG:              sg-__________________
+  RDS SG:              sg-__________________
 
-RDS:
-  Endpoint:            ____________________
-  Password:            ____________________
+RDS Database (from Phase 1, Step 1.4):
+  Endpoint:            __________________.rds.amazonaws.com
+  Port:                5432
+  Master Username:     oncolife_admin
+  Master Password:     ____________________  ← KEEP SECURE!
 
-Cognito:
-  User Pool ID:        ____________________
-  Client ID:           ____________________
-  Client Secret:       ____________________
+Cognito (from Phase 1, Step 1.5):
+  User Pool ID:        us-west-2_____________
+  Client ID:           __________________________
+  Client Secret:       __________________________  ← KEEP SECURE!
 
-PATIENT API:
-  ALB ARN:             ____________________
-  ALB DNS:             ____________________
-  Target Group ARN:    ____________________
+S3 Buckets (from Phase 1, Step 1.6):
+  Referrals:           oncolife-referrals-${ACCOUNT_ID}
+  Education:           oncolife-education-${ACCOUNT_ID}
+
+PATIENT API (from Phase 2):
+  ALB ARN:             arn:aws:elasticloadbalancing:...
+  ALB DNS:             oncolife-patient-alb-________.elb.amazonaws.com
+  Target Group ARN:    arn:aws:elasticloadbalancing:...
   ECS Service:         patient-api-service
 
-DOCTOR API:
-  ALB ARN:             ____________________
-  ALB DNS:             ____________________
-  Target Group ARN:    ____________________
+DOCTOR API (from Phase 2):
+  ALB ARN:             arn:aws:elasticloadbalancing:...
+  ALB DNS:             oncolife-doctor-alb-________.elb.amazonaws.com
+  Target Group ARN:    arn:aws:elasticloadbalancing:...
   ECS Service:         doctor-api-service
 
-Secrets Manager ARNs:
-  oncolife/db:         ____________________
-  oncolife/cognito:    ____________________
-  oncolife/fax:        ____________________
+Secrets Manager ARNs (from Phase 1, Step 1.7):
+  oncolife/db:         arn:aws:secretsmanager:us-west-2:${ACCOUNT_ID}:secret:oncolife/db-______
+  oncolife/cognito:    arn:aws:secretsmanager:us-west-2:${ACCOUNT_ID}:secret:oncolife/cognito-______
+  oncolife/fax:        arn:aws:secretsmanager:us-west-2:${ACCOUNT_ID}:secret:oncolife/fax-______
 
-FINAL URLs (after Route 53 setup):
-  Patient API:         https://api.oncolife.com
-  Doctor API:          https://doctor-api.oncolife.com
-  Patient Web:         https://app.oncolife.com
-  Doctor Web:          https://doctor.oncolife.com
+FINAL URLs (after Route 53/CloudFront setup):
+  Patient API:         https://___________________
+  Doctor API:          https://___________________
+  Patient Web:         https://___________________
+  Doctor Web:          https://___________________
 ```
+
+### 🔐 GitHub Secrets (for CI/CD - Phase 6):
+
+Once deployment is complete, add these to GitHub Repository Settings → Secrets:
+
+| Secret Name | Value From Above |
+|-------------|------------------|
+| `AWS_ACCOUNT_ID` | AWS Account ID |
+| `AWS_ACCESS_KEY_ID` | IAM user access key (create dedicated CI/CD user) |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret key |
+| `PATIENT_DATABASE_URL` | `postgresql://oncolife_admin:PASSWORD@RDS_ENDPOINT:5432/oncolife_patient` |
+| `DOCTOR_DATABASE_URL` | `postgresql://oncolife_admin:PASSWORD@RDS_ENDPOINT:5432/oncolife_doctor` |
+| `PATIENT_API_URL` | Patient API Final URL (https://...) |
+| `PATIENT_WS_URL` | Patient WebSocket URL (wss://...) |
+| `DOCTOR_API_URL` | Doctor API Final URL (https://...) |
+
+> 💡 **Tip**: Use `aws secretsmanager get-secret-value --secret-id oncolife/db` to retrieve stored credentials.
 
 ---
 
