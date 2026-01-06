@@ -11,6 +11,12 @@
 #   2. Docker installed and running
 #   3. Run from the project root directory (Oncolife_Monolith)
 #
+# Note: This script works with Git Bash on Windows (MINGW64)
+
+# Prevent Git Bash from converting Unix paths to Windows paths
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+#
 # Options:
 #   --region REGION      AWS region (default: us-west-2)
 #   --skip-vpc          Skip VPC/Security Groups (prompts for existing IDs)
