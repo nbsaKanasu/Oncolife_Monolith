@@ -6,20 +6,28 @@
 # docker build -f apps/patient-platform/patient-web/Dockerfile -t patient-web .
 
 # Stage 1: Build
-FROM node:20-alpine as builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 # Copy shared packages first (maintains directory structure for file: references)
 COPY packages/ ./packages/
 
+# Install dependencies for shared packages
+WORKDIR /app/packages/ui-components
+RUN npm install --legacy-peer-deps
+
+WORKDIR /app/packages/shared-utils
+RUN npm install --legacy-peer-deps
+
 # Copy the app's package files
+WORKDIR /app
 COPY apps/patient-platform/patient-web/package*.json ./apps/patient-platform/patient-web/
 
 # Set working directory to the app
 WORKDIR /app/apps/patient-platform/patient-web
 
-# Install dependencies (this will resolve file:../../../packages/ui-components correctly)
+# Install dependencies (this will resolve file:../../../packages/* correctly)
 RUN npm install --legacy-peer-deps
 
 # Copy the rest of the app source code
@@ -38,7 +46,7 @@ RUN npm run build
 
 
 # Stage 2: Production with nginx
-FROM nginx:alpine as production
+FROM nginx:alpine AS production
 
 # Copy custom nginx config
 COPY apps/patient-platform/patient-web/nginx.conf /etc/nginx/conf.d/default.conf
