@@ -177,8 +177,24 @@ async def root():
         "version": settings.app_version,
         "environment": settings.environment,
         "docs": "/docs" if settings.is_development else "Disabled in production",
-        "health": "/api/v1/health",
+        "health": "/health",
     }
+
+
+@app.get("/health", tags=["Health"])
+async def health():
+    """
+    Basic health check endpoint.
+    
+    Returns simple status for load balancer and container health checks.
+    For detailed health info, use /api/v1/health/ready
+    
+    This endpoint is required by:
+    - Docker HEALTHCHECK
+    - AWS ALB Target Group health checks
+    - Kubernetes liveness probes
+    """
+    return {"status": "ok"}
 
 
 # =============================================================================
