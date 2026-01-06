@@ -10,8 +10,9 @@ A comprehensive healthcare platform for cancer patient symptom tracking and care
 
 | Document | Description |
 |----------|-------------|
-| [**Step-by-Step Deployment**](docs/STEP_BY_STEP_DEPLOYMENT.md) | 🚀 **Complete AWS deployment walkthrough** |
-| [**Deployment Troubleshooting**](docs/DEPLOYMENT_TROUBLESHOOTING.md) | 🔧 **Fix common deployment errors** |
+| [**🚀 AUTOMATED DEPLOYMENT**](docs/AUTOMATED_DEPLOYMENT_GUIDE.md) | ⭐ **ONE-COMMAND AWS deployment - START HERE!** |
+| [Step-by-Step Deployment](docs/STEP_BY_STEP_DEPLOYMENT.md) | Manual AWS deployment walkthrough |
+| [Deployment Troubleshooting](docs/DEPLOYMENT_TROUBLESHOOTING.md) | 🔧 Fix common deployment errors |
 | [Architecture Guide](docs/ARCHITECTURE.md) | System architecture, design patterns, code organization |
 | [Developer Guide](docs/DEVELOPER_GUIDE.md) | Getting started, development environment, code patterns |
 | [Patient Onboarding](apps/patient-platform/patient-api/docs/ONBOARDING.md) | Fax/OCR → Cognito → Welcome flow |
