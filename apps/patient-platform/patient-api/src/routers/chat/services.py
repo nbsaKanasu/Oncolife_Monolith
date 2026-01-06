@@ -1,3 +1,25 @@
+"""
+================================================================================
+⚠️  LEGACY CODE - DO NOT USE
+================================================================================
+This module contains the OLD LLM-based conversation service.
+It has been REPLACED by the rule-based SymptomCheckerService.
+
+The active system uses:
+    from .symptom_checker_service import SymptomCheckerService
+
+This file is retained for reference only and is NOT imported anywhere.
+LLM providers (GPT-4o, Groq, Cerebras) are no longer used in production.
+
+For the current implementation, see:
+    - symptom_checker_service.py  (main service)
+    - symptom_checker/symptom_engine.py  (rule-based engine)
+    - symptom_checker/symptom_definitions.py  (27 symptom modules)
+
+Last active: Pre-January 2026
+================================================================================
+"""
+
 import os
 import json
 import uuid
