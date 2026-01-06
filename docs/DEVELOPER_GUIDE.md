@@ -827,5 +827,161 @@ tail -f logs/app.log
 
 ---
 
+## 10. Common Development Tasks
+
+### Adding a New Page (Frontend)
+
+```bash
+# 1. Create page directory
+mkdir -p apps/patient-platform/patient-web/src/pages/NewPage
+
+# 2. Create page component
+```
+
+```tsx
+// apps/patient-platform/patient-web/src/pages/NewPage/index.tsx
+import React from 'react';
+import { Layout } from '@/components/Layout';
+
+const NewPage: React.FC = () => {
+  return (
+    <Layout>
+      <h1>New Page</h1>
+    </Layout>
+  );
+};
+
+export default NewPage;
+```
+
+```tsx
+// 3. Add to App.tsx routes
+import NewPage from './pages/NewPage';
+
+// In routes:
+<Route path="/new-page" element={<NewPage />} />
+```
+
+### Adding a New Feature End-to-End
+
+1. **Backend Model** → `db/models/feature.py`
+2. **Backend Migration** → `alembic revision --autogenerate -m "add feature"`
+3. **Backend Service** → `services/feature_service.py`
+4. **Backend Endpoint** → `api/v1/endpoints/feature.py`
+5. **Frontend API Client** → `services/api/featureApi.ts`
+6. **Frontend Page/Component** → `pages/FeaturePage/`
+7. **Tests** → `tests/test_feature.py`
+
+### Git Workflow
+
+```bash
+# Start new feature
+git checkout main
+git pull origin main
+git checkout -b feature/my-new-feature
+
+# Make changes
+git add -A
+git commit -m "feat: add new feature description"
+
+# Push and create PR
+git push -u origin feature/my-new-feature
+# Open PR in GitHub
+
+# After PR approval
+git checkout main
+git pull origin main
+git branch -d feature/my-new-feature
+```
+
+**Commit Message Format:**
+| Prefix | Use |
+|--------|-----|
+| `feat:` | New feature |
+| `fix:` | Bug fix |
+| `docs:` | Documentation |
+| `refactor:` | Code refactoring |
+| `test:` | Adding tests |
+| `chore:` | Build/tooling changes |
+
+### Running Without Docker (Full Stack)
+
+**Terminal 1 - PostgreSQL (Docker only for DB):**
+```bash
+docker run --name oncolife-pg -e POSTGRES_USER=oncolife_admin \
+  -e POSTGRES_PASSWORD=oncolife_password \
+  -e POSTGRES_MULTIPLE_DATABASES=oncolife_patient,oncolife_doctor \
+  -p 5432:5432 -d postgres:15
+
+# Run init script if needed
+docker exec -i oncolife-pg psql -U oncolife_admin -c "CREATE DATABASE oncolife_patient;"
+docker exec -i oncolife-pg psql -U oncolife_admin -c "CREATE DATABASE oncolife_doctor;"
+```
+
+**Terminal 2 - Patient API:**
+```bash
+cd apps/patient-platform/patient-api
+source venv/bin/activate  # or .\venv\Scripts\Activate.ps1 on Windows
+cd src
+uvicorn main:app --reload --port 8000
+```
+
+**Terminal 3 - Doctor API:**
+```bash
+cd apps/doctor-platform/doctor-api
+source venv/bin/activate
+cd src
+uvicorn main:app --reload --port 8001
+```
+
+**Terminal 4 - Patient Web:**
+```bash
+cd apps/patient-platform/patient-web
+npm run dev  # Runs on :5173
+```
+
+**Terminal 5 - Doctor Web:**
+```bash
+cd apps/doctor-platform/doctor-web
+npm run dev  # Runs on :5174
+```
+
+### Debugging Tips
+
+**Python/FastAPI:**
+```python
+# Add breakpoint in code
+import pdb; pdb.set_trace()
+
+# Or use logging
+from core.logging import get_logger
+logger = get_logger(__name__)
+logger.debug(f"Variable value: {my_var}")
+```
+
+**React/TypeScript:**
+```tsx
+// Debug component renders
+console.log('Rendering with:', props);
+
+// Use React DevTools (browser extension)
+// Use VSCode debugger with launch.json
+```
+
+---
+
+## 11. Reference Links
+
+| Resource | URL |
+|----------|-----|
+| FastAPI Docs | https://fastapi.tiangolo.com/ |
+| SQLAlchemy Docs | https://docs.sqlalchemy.org/ |
+| React Query | https://tanstack.com/query/latest |
+| Vite | https://vitejs.dev/ |
+| AWS CLI Reference | https://awscli.amazonaws.com/v2/documentation/api/latest/ |
+| Alembic | https://alembic.sqlalchemy.org/ |
+
+---
+
 *Document Version: 2.0*
 *Last Updated: January 2026*

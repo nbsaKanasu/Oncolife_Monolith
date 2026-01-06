@@ -744,3 +744,5 @@ class RegistrationService(BaseService):
         if not npi_number or not npi_number.isdigit() or len(npi_number) != 10:
             raise ValidationError("NPI must be 10 digits", field="npi_number")
 
+
+

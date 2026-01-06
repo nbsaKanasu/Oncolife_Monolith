@@ -357,3 +357,5 @@ async def get_weekly_report(
             detail="Failed to generate weekly report",
         )
 
+
+

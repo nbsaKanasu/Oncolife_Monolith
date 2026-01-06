@@ -217,3 +217,5 @@ async def delete_clinic(
 
 
 
+
+

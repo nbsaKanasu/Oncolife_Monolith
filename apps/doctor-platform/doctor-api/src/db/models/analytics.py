@@ -364,3 +364,5 @@ class AuditLog(DoctorBase):
             f"entity={self.entity_type}/{self.entity_id})>"
         )
 
+
+

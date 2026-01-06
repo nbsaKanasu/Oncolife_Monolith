@@ -672,3 +672,5 @@ def get_symptom_catalog() -> list:
         {"code": "WEIGHT-101", "name": "Weight Changes", "category": "other"},
     ]
 
+
+

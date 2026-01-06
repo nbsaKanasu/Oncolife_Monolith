@@ -181,3 +181,5 @@ COMMENT ON TABLE audit_logs IS 'HIPAA-compliant access audit logs';
 -- \dt+ physician_reports
 -- \dt+ audit_logs
 
+
+

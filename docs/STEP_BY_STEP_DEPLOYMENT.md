@@ -420,7 +420,13 @@ Write-Host "Webhook Secret (save this): $WEBHOOK_SECRET"
 
 ### Step 2.1: Create ECR Repositories
 
+> ⚠️ **IMPORTANT**: Create repositories for ALL 4 applications upfront!
+
 ```powershell
+# ==========================================
+# BACKEND API REPOSITORIES
+# ==========================================
+
 # Patient API repository
 aws ecr create-repository `
     --repository-name "oncolife-patient-api" `
@@ -430,6 +436,26 @@ aws ecr create-repository `
 aws ecr create-repository `
     --repository-name "oncolife-doctor-api" `
     --image-scanning-configuration scanOnPush=true
+
+# ==========================================
+# FRONTEND WEB REPOSITORIES (if using ECS for frontend)
+# ==========================================
+
+# Patient Web repository
+aws ecr create-repository `
+    --repository-name "oncolife-patient-web" `
+    --image-scanning-configuration scanOnPush=true
+
+# Doctor Web repository
+aws ecr create-repository `
+    --repository-name "oncolife-doctor-web" `
+    --image-scanning-configuration scanOnPush=true
+```
+
+**Verify repositories created:**
+```powershell
+aws ecr describe-repositories --query 'repositories[*].repositoryName'
+# Expected: ["oncolife-patient-api", "oncolife-doctor-api", "oncolife-patient-web", "oncolife-doctor-web"]
 ```
 
 ### Step 2.2: Create CloudWatch Log Group
@@ -1553,6 +1579,206 @@ Once deployment is complete, add these to GitHub Repository Settings → Secrets
 | `DOCTOR_API_URL` | Doctor API Final URL (https://...) |
 
 > 💡 **Tip**: Use `aws secretsmanager get-secret-value --secret-id oncolife/db` to retrieve stored credentials.
+
+---
+
+## 11. Phase 7: Route 53 & Custom Domains (Optional)
+
+### Step 11.1: Register or Configure Domain
+
+If you have a domain (e.g., `oncolife.com`), set up Route 53:
+
+```powershell
+# Create hosted zone (if not using existing domain)
+aws route53 create-hosted-zone \
+    --name "oncolife.com" \
+    --caller-reference "oncolife-$(Get-Date -Format 'yyyyMMddHHmmss')"
+```
+
+### Step 11.2: Request ACM Certificates
+
+```powershell
+# Request certificate for Patient API
+aws acm request-certificate `
+    --domain-name "api.oncolife.com" `
+    --validation-method DNS `
+    --region $AWS_REGION
+
+# Request certificate for Doctor API
+aws acm request-certificate `
+    --domain-name "doctor-api.oncolife.com" `
+    --validation-method DNS `
+    --region $AWS_REGION
+
+# Request certificate for Patient Web (if using CloudFront, request in us-east-1)
+aws acm request-certificate `
+    --domain-name "app.oncolife.com" `
+    --validation-method DNS `
+    --region us-east-1
+
+# Request certificate for Doctor Web
+aws acm request-certificate `
+    --domain-name "doctor.oncolife.com" `
+    --validation-method DNS `
+    --region us-east-1
+```
+
+**Validate certificates:** Add the CNAME records shown in ACM console to Route 53.
+
+### Step 11.3: Create Route 53 Records
+
+```powershell
+# Get ALB DNS names
+$PATIENT_ALB_DNS = (aws elbv2 describe-load-balancers --names "oncolife-patient-alb" --query 'LoadBalancers[0].DNSName' --output text)
+$DOCTOR_ALB_DNS = (aws elbv2 describe-load-balancers --names "oncolife-doctor-alb" --query 'LoadBalancers[0].DNSName' --output text)
+
+# Get hosted zone ID
+$HOSTED_ZONE_ID = (aws route53 list-hosted-zones-by-name --dns-name "oncolife.com" --query 'HostedZones[0].Id' --output text)
+$HOSTED_ZONE_ID = $HOSTED_ZONE_ID -replace '/hostedzone/', ''
+```
+
+Create `route53-records.json`:
+```json
+{
+  "Changes": [
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "api.oncolife.com",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "ALB_HOSTED_ZONE_ID",
+          "DNSName": "PATIENT_ALB_DNS",
+          "EvaluateTargetHealth": true
+        }
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "doctor-api.oncolife.com",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "ALB_HOSTED_ZONE_ID",
+          "DNSName": "DOCTOR_ALB_DNS",
+          "EvaluateTargetHealth": true
+        }
+      }
+    }
+  ]
+}
+```
+
+```powershell
+aws route53 change-resource-record-sets `
+    --hosted-zone-id $HOSTED_ZONE_ID `
+    --change-batch file://route53-records.json
+```
+
+### Step 11.4: Add HTTPS Listeners to ALBs
+
+After certificates are validated:
+
+```powershell
+# Get certificate ARNs
+$PATIENT_CERT_ARN = (aws acm list-certificates --query "CertificateSummaryList[?DomainName=='api.oncolife.com'].CertificateArn" --output text)
+$DOCTOR_CERT_ARN = (aws acm list-certificates --query "CertificateSummaryList[?DomainName=='doctor-api.oncolife.com'].CertificateArn" --output text)
+
+# Create HTTPS listener for Patient ALB
+aws elbv2 create-listener `
+    --load-balancer-arn $PATIENT_ALB_ARN `
+    --protocol HTTPS `
+    --port 443 `
+    --certificates CertificateArn=$PATIENT_CERT_ARN `
+    --default-actions "Type=forward,TargetGroupArn=$PATIENT_TG_ARN"
+
+# Create HTTPS listener for Doctor ALB
+aws elbv2 create-listener `
+    --load-balancer-arn $DOCTOR_ALB_ARN `
+    --protocol HTTPS `
+    --port 443 `
+    --certificates CertificateArn=$DOCTOR_CERT_ARN `
+    --default-actions "Type=forward,TargetGroupArn=$DOCTOR_TG_ARN"
+```
+
+---
+
+## 12. Deployment Verification Checklist
+
+Use this checklist to verify your deployment is complete and working:
+
+### Infrastructure Checklist
+
+| Component | Command to Verify | Expected |
+|-----------|-------------------|----------|
+| VPC | `aws ec2 describe-vpcs --filters "Name=tag:Name,Values=*oncolife*"` | VPC exists |
+| Subnets | `aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID"` | 4 subnets (2 public, 2 private) |
+| Security Groups | `aws ec2 describe-security-groups --filters "Name=group-name,Values=oncolife-*"` | 3 SGs (ALB, ECS, RDS) |
+| RDS | `aws rds describe-db-instances --db-instance-identifier oncolife-db` | Status: "available" |
+| ECR Repos | `aws ecr describe-repositories --query 'repositories[*].repositoryName'` | 4 repos (patient-api, doctor-api, patient-web, doctor-web) |
+| ECS Cluster | `aws ecs describe-clusters --clusters oncolife-production` | Status: "ACTIVE" |
+| ECS Services | `aws ecs describe-services --cluster oncolife-production --services patient-api-service doctor-api-service` | runningCount >= 1 |
+
+### API Health Checks
+
+```powershell
+# Patient API
+Invoke-RestMethod -Uri "http://$PATIENT_ALB_DNS/health"
+# Expected: { "status": "healthy", ... }
+
+# Patient API Docs
+Start-Process "http://$PATIENT_ALB_DNS/docs"
+# Expected: Swagger UI loads
+
+# Doctor API
+Invoke-RestMethod -Uri "http://$DOCTOR_ALB_DNS/health"
+# Expected: { "status": "healthy", ... }
+
+# Doctor API Docs
+Start-Process "http://$DOCTOR_ALB_DNS/docs"
+# Expected: Swagger UI loads
+```
+
+### Database Verification
+
+```sql
+-- Connect to RDS and verify tables exist
+\c oncolife_patient
+\dt
+-- Expected: patient_info, conversations, messages, etc.
+
+\c oncolife_doctor
+\dt
+-- Expected: staff_profiles, audit_logs, etc.
+```
+
+### Frontend Verification (if deployed)
+
+| App | URL | Expected |
+|-----|-----|----------|
+| Patient Web | `https://app.oncolife.com` or S3 URL | Login page loads |
+| Doctor Web | `https://doctor.oncolife.com` or S3 URL | Login page loads |
+
+### CI/CD Verification
+
+1. **Push a test commit** to a feature branch
+2. **Check GitHub Actions** → CI workflow runs
+3. **Create a PR** to main
+4. **Merge PR** → CD workflow triggers (if configured)
+
+### Final Checklist
+
+- [ ] VPC with 4 subnets created
+- [ ] Security groups configured correctly
+- [ ] RDS instance running and accessible
+- [ ] ECR repositories have images pushed
+- [ ] ECS cluster running with healthy services
+- [ ] ALBs returning healthy responses
+- [ ] Database migrations applied
+- [ ] Education content seeded
+- [ ] GitHub secrets configured
+- [ ] Custom domains set up (optional)
+- [ ] HTTPS working (optional)
 
 ---
 

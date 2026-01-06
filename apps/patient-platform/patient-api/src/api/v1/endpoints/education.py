@@ -534,3 +534,5 @@ async def get_disclaimer(
     service = EducationService(db)
     return service._get_mandatory_disclaimer()
 
+
+
