@@ -14,7 +14,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^7.2.0",
     "@mui/x-date-pickers": "^8.10.0",
-    "@oncolife/ui-components": "file:../../packages/ui-components",
+    "@oncolife/ui-components": "file:../../../packages/ui-components",
     "@tanstack/react-query": "^5.83.0",
     "axios": "^1.7.7",
     "dayjs": "^1.11.13",

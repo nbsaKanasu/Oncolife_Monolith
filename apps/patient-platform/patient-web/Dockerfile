@@ -10,21 +10,19 @@ FROM node:20-alpine as builder
 
 WORKDIR /app
 
-# Copy shared packages first
-COPY packages/ui-components ./packages/ui-components
+# Copy shared packages first (maintains directory structure for file: references)
+COPY packages/ ./packages/
 
-# Copy package files
+# Copy the app's package files
 COPY apps/patient-platform/patient-web/package*.json ./apps/patient-platform/patient-web/
 
-# Install dependencies for shared package
-WORKDIR /app/packages/ui-components
-RUN npm install --legacy-peer-deps || true
-
-# Install dependencies for patient-web
+# Set working directory to the app
 WORKDIR /app/apps/patient-platform/patient-web
+
+# Install dependencies (this will resolve file:../../../packages/ui-components correctly)
 RUN npm install --legacy-peer-deps
 
-# Copy source code
+# Copy the rest of the app source code
 COPY apps/patient-platform/patient-web/ ./
 
 # Build arguments for API URLs (can be overridden at build time)
