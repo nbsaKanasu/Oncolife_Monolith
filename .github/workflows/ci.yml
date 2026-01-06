@@ -210,7 +210,7 @@ jobs:
       - name: Build Patient Web image
         uses: docker/build-push-action@v5
         with:
-          context: apps/patient-platform/patient-web
+          context: .
           file: apps/patient-platform/patient-web/Dockerfile
           push: false
           tags: oncolife-patient-web:${{ github.sha }}
@@ -223,7 +223,7 @@ jobs:
       - name: Build Doctor Web image
         uses: docker/build-push-action@v5
         with:
-          context: apps/doctor-platform/doctor-web
+          context: .
           file: apps/doctor-platform/doctor-web/Dockerfile
           push: false
           tags: oncolife-doctor-web:${{ github.sha }}

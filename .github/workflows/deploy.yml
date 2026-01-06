@@ -104,12 +104,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Patient Web
+      # Patient Web (uses monorepo root context for shared packages)
       - name: Build and push Patient Web
         id: build-patient-web
         uses: docker/build-push-action@v5
         with:
-          context: apps/patient-platform/patient-web
+          context: .
           file: apps/patient-platform/patient-web/Dockerfile
           push: true
           tags: |
@@ -121,12 +121,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Doctor Web
+      # Doctor Web (uses monorepo root context for shared packages)
       - name: Build and push Doctor Web
         id: build-doctor-web
         uses: docker/build-push-action@v5
         with:
-          context: apps/doctor-platform/doctor-web
+          context: .
           file: apps/doctor-platform/doctor-web/Dockerfile
           push: true
           tags: |
