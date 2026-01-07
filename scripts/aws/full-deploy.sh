@@ -880,10 +880,13 @@ create_alb_infrastructure() {
 register_task_definitions() {
     log_step "STEP 14: Registering Task Definitions"
     
+    # Use a temp directory that works on both Windows and Linux
+    TEMP_DIR="${TEMP:-${TMP:-/tmp}}"
+    
     # Patient API Task Definition
     log_info "Registering Patient API Task Definition..."
     
-    cat > /tmp/patient-task-def.json <<EOF
+    cat > "$TEMP_DIR/patient-task-def.json" <<EOF
 {
     "family": "$PROJECT_NAME-patient-api",
     "networkMode": "awsvpc",
@@ -932,14 +935,14 @@ register_task_definitions() {
 }
 EOF
     
-    aws ecs register-task-definition --cli-input-json file:///tmp/patient-task-def.json > /dev/null
-    rm /tmp/patient-task-def.json
+    aws ecs register-task-definition --cli-input-json "file://$TEMP_DIR/patient-task-def.json" > /dev/null
+    rm "$TEMP_DIR/patient-task-def.json"
     log_success "Patient API Task Definition registered"
     
     # Doctor API Task Definition
     log_info "Registering Doctor API Task Definition..."
     
-    cat > /tmp/doctor-task-def.json <<EOF
+    cat > "$TEMP_DIR/doctor-task-def.json" <<EOF
 {
     "family": "$PROJECT_NAME-doctor-api",
     "networkMode": "awsvpc",
@@ -988,8 +991,8 @@ EOF
 }
 EOF
     
-    aws ecs register-task-definition --cli-input-json file:///tmp/doctor-task-def.json > /dev/null
-    rm /tmp/doctor-task-def.json
+    aws ecs register-task-definition --cli-input-json "file://$TEMP_DIR/doctor-task-def.json" > /dev/null
+    rm "$TEMP_DIR/doctor-task-def.json"
     log_success "Doctor API Task Definition registered"
 }
 
