@@ -1,5 +1,5 @@
 # ==============================================================================
-# OncoLife Complete AWS Deployment Script
+# OncoLife Complete AWS Deployment Script (PowerShell)
 # ==============================================================================
 # This script automates the ENTIRE AWS deployment process.
 # 
@@ -17,6 +17,7 @@
 #   -Environment    Environment name (default: production)
 #   -SkipVPC        Skip VPC creation (if already exists)
 #   -SkipRDS        Skip RDS creation (if already exists)
+#   -SkipCognito    Skip Cognito creation (if already exists)
 #   -SkipBuild      Skip Docker build (use existing images)
 #   -Verbose        Show detailed output
 #
@@ -24,6 +25,7 @@
 #   .\scripts\aws\full-deploy.ps1
 #   .\scripts\aws\full-deploy.ps1 -Region us-east-1
 #   .\scripts\aws\full-deploy.ps1 -SkipVPC -SkipRDS
+#   .\scripts\aws\full-deploy.ps1 -SkipVPC -SkipRDS -SkipCognito
 #
 # ==============================================================================
 
@@ -33,6 +35,7 @@ param(
     [string]$Environment = "production",
     [switch]$SkipVPC,
     [switch]$SkipRDS,
+    [switch]$SkipCognito,
     [switch]$SkipBuild,
     [switch]$DryRun
 )
@@ -66,6 +69,7 @@ $DESIRED_COUNT = 2
 
 # Store created resource IDs
 $script:DeploymentConfig = @{}
+$script:SKIP_SECURITY_GROUPS = $false
 
 # ==============================================================================
 # HELPER FUNCTIONS
@@ -81,17 +85,22 @@ function Write-Step {
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "  ✓ $Message" -ForegroundColor Green
+    Write-Host "  [OK] $Message" -ForegroundColor Green
 }
 
 function Write-Info {
     param([string]$Message)
-    Write-Host "  → $Message" -ForegroundColor Yellow
+    Write-Host "  -> $Message" -ForegroundColor Yellow
+}
+
+function Write-Warning2 {
+    param([string]$Message)
+    Write-Host "  [WARN] $Message" -ForegroundColor Yellow
 }
 
 function Write-Error2 {
     param([string]$Message)
-    Write-Host "  ✗ $Message" -ForegroundColor Red
+    Write-Host "  [ERROR] $Message" -ForegroundColor Red
 }
 
 function Get-SecureInput {
@@ -114,22 +123,34 @@ function Wait-ForResource {
     Write-Info "Waiting for $Type '$Name' to be ready (timeout: $TimeoutMinutes min)..."
     
     while ((Get-Date) -lt $endTime) {
-        $result = & $CheckScript
-        if ($result) {
-            Write-Success "$Type '$Name' is ready"
-            return $true
+        try {
+            $result = & $CheckScript
+            if ($result) {
+                Write-Host ""
+                Write-Success "$Type '$Name' is ready"
+                return $true
+            }
+        } catch {
+            # Ignore errors during polling
         }
         Write-Host "." -NoNewline
         Start-Sleep -Seconds $IntervalSeconds
     }
     
+    Write-Host ""
     throw "Timeout waiting for $Type '$Name'"
 }
 
 function Save-DeploymentConfig {
     $configPath = "deployment-config-$(Get-Date -Format 'yyyyMMdd-HHmmss').json"
-    $script:DeploymentConfig | ConvertTo-Json -Depth 10 | Out-File $configPath
+    $script:DeploymentConfig | ConvertTo-Json -Depth 10 | Out-File $configPath -Encoding utf8
     Write-Info "Configuration saved to: $configPath"
+}
+
+function Remove-TempFiles {
+    # Clean up any temp JSON files
+    Remove-Item -Path "patient-task-def.json" -ErrorAction SilentlyContinue
+    Remove-Item -Path "doctor-task-def.json" -ErrorAction SilentlyContinue
 }
 
 # ==============================================================================
@@ -140,6 +161,15 @@ function Test-Prerequisites {
     Write-Step "STEP 0: Checking Prerequisites"
     
     # Check AWS CLI
+    try {
+        $awsVersion = aws --version 2>&1
+        Write-Success "AWS CLI found: $awsVersion"
+    } catch {
+        Write-Error2 "AWS CLI not found. Please install it from https://aws.amazon.com/cli/"
+        exit 1
+    }
+    
+    # Check AWS credentials
     try {
         $identity = aws sts get-caller-identity 2>$null | ConvertFrom-Json
         $script:ACCOUNT_ID = $identity.Account
@@ -162,6 +192,7 @@ function Test-Prerequisites {
     # Check we're in the right directory
     if (-not (Test-Path "apps/patient-platform/patient-api/Dockerfile")) {
         Write-Error2 "Not in project root. cd to Oncolife_Monolith first."
+        Write-Info "Current directory: $(Get-Location)"
         exit 1
     }
     Write-Success "Project directory verified"
@@ -173,10 +204,15 @@ function Test-Prerequisites {
     Write-Success "Region: $Region"
     
     # Get availability zones
-    $azs = (aws ec2 describe-availability-zones --region $Region --query 'AvailabilityZones[0:2].ZoneName' --output json | ConvertFrom-Json)
-    $script:AZ1 = $azs[0]
-    $script:AZ2 = $azs[1]
-    Write-Success "Availability Zones: $($script:AZ1), $($script:AZ2)"
+    try {
+        $azs = (aws ec2 describe-availability-zones --region $Region --query 'AvailabilityZones[0:2].ZoneName' --output json | ConvertFrom-Json)
+        $script:AZ1 = $azs[0]
+        $script:AZ2 = $azs[1]
+        Write-Success "Availability Zones: $($script:AZ1), $($script:AZ2)"
+    } catch {
+        Write-Error2 "Could not get availability zones. Check your AWS region."
+        exit 1
+    }
 }
 
 # ==============================================================================
@@ -187,10 +223,10 @@ function New-ECSServiceRole {
     Write-Step "STEP 1: Creating ECS Service-Linked Role"
     
     try {
-        aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com 2>$null
+        aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com 2>$null | Out-Null
         Write-Success "ECS service-linked role created"
     } catch {
-        Write-Success "ECS service-linked role already exists"
+        Write-Success "ECS service-linked role already exists (OK)"
     }
 }
 
@@ -203,13 +239,29 @@ function New-VPCInfrastructure {
     
     if ($SkipVPC) {
         Write-Info "Skipping VPC creation (-SkipVPC flag)"
+        Write-Host ""
+        Write-Host "  Enter your existing AWS resource IDs:" -ForegroundColor Yellow
         
-        # Prompt for existing VPC ID
-        $script:VPC_ID = Read-Host "Enter existing VPC ID (vpc-xxxxxxxx)"
-        $script:PUBLIC_SUBNET_1 = Read-Host "Enter Public Subnet 1 ID"
-        $script:PUBLIC_SUBNET_2 = Read-Host "Enter Public Subnet 2 ID"
-        $script:PRIVATE_SUBNET_1 = Read-Host "Enter Private Subnet 1 ID"
-        $script:PRIVATE_SUBNET_2 = Read-Host "Enter Private Subnet 2 ID"
+        $script:VPC_ID = Read-Host "  VPC ID (vpc-xxxxxxxx)"
+        $script:PUBLIC_SUBNET_1 = Read-Host "  Public Subnet 1 ID (subnet-xxx)"
+        $script:PUBLIC_SUBNET_2 = Read-Host "  Public Subnet 2 ID (subnet-xxx)"
+        $script:PRIVATE_SUBNET_1 = Read-Host "  Private Subnet 1 ID (subnet-xxx)"
+        $script:PRIVATE_SUBNET_2 = Read-Host "  Private Subnet 2 ID (subnet-xxx)"
+        $script:SG_ALB = Read-Host "  ALB Security Group ID (sg-xxx)"
+        $script:SG_ECS = Read-Host "  ECS Security Group ID (sg-xxx)"
+        $script:SG_RDS = Read-Host "  RDS Security Group ID (sg-xxx)"
+        
+        $script:SKIP_SECURITY_GROUPS = $true
+        
+        # Save to config
+        $script:DeploymentConfig["VpcId"] = $script:VPC_ID
+        $script:DeploymentConfig["PublicSubnet1"] = $script:PUBLIC_SUBNET_1
+        $script:DeploymentConfig["PublicSubnet2"] = $script:PUBLIC_SUBNET_2
+        $script:DeploymentConfig["PrivateSubnet1"] = $script:PRIVATE_SUBNET_1
+        $script:DeploymentConfig["PrivateSubnet2"] = $script:PRIVATE_SUBNET_2
+        $script:DeploymentConfig["AlbSecurityGroup"] = $script:SG_ALB
+        $script:DeploymentConfig["EcsSecurityGroup"] = $script:SG_ECS
+        $script:DeploymentConfig["RdsSecurityGroup"] = $script:SG_RDS
         return
     }
     
@@ -221,6 +273,9 @@ function New-VPCInfrastructure {
         --output json | ConvertFrom-Json
     
     $script:VPC_ID = $vpcResult.Vpc.VpcId
+    if (-not $script:VPC_ID) {
+        throw "Failed to create VPC"
+    }
     Write-Success "VPC created: $($script:VPC_ID)"
     
     # Enable DNS hostnames
@@ -346,6 +401,14 @@ function New-VPCInfrastructure {
 function New-SecurityGroups {
     Write-Step "STEP 3: Creating Security Groups"
     
+    if ($script:SKIP_SECURITY_GROUPS) {
+        Write-Info "Skipping Security Groups (using existing from -SkipVPC)"
+        Write-Success "ALB SG: $($script:SG_ALB)"
+        Write-Success "ECS SG: $($script:SG_ECS)"
+        Write-Success "RDS SG: $($script:SG_RDS)"
+        return
+    }
+    
     # ALB Security Group
     Write-Info "Creating ALB Security Group..."
     $albSg = aws ec2 create-security-group `
@@ -402,17 +465,27 @@ function New-RDSDatabase {
     
     if ($SkipRDS) {
         Write-Info "Skipping RDS creation (-SkipRDS flag)"
-        $script:RDS_ENDPOINT = Read-Host "Enter existing RDS endpoint (xxx.rds.amazonaws.com)"
-        $script:DB_PASSWORD = Get-SecureInput "Enter existing RDS password"
+        $script:RDS_ENDPOINT = Read-Host "  Enter existing RDS endpoint (xxx.rds.amazonaws.com)"
+        $script:DB_USERNAME = Read-Host "  Enter DB username (default: oncolife_admin)"
+        if ([string]::IsNullOrWhiteSpace($script:DB_USERNAME)) {
+            $script:DB_USERNAME = "oncolife_admin"
+        }
+        $script:DB_PASSWORD = Get-SecureInput "  Enter existing RDS password"
         return
     }
     
     # Get database password
     Write-Host ""
     Write-Host "  Enter a password for the database." -ForegroundColor Yellow
-    Write-Host "  Requirements: 8+ chars, letters, numbers, no @/\"/spaces" -ForegroundColor Yellow
-    $script:DB_PASSWORD = Get-SecureInput "Database Password"
+    Write-Host "  Requirements: 8+ chars, letters, numbers, no @/`"/spaces" -ForegroundColor Yellow
+    $script:DB_PASSWORD = Get-SecureInput "  Database Password"
     $script:DB_USERNAME = "oncolife_admin"
+    
+    # Validate password length
+    if ($script:DB_PASSWORD.Length -lt 8) {
+        Write-Error2 "Password must be at least 8 characters!"
+        exit 1
+    }
     
     # Create DB Subnet Group
     Write-Info "Creating DB Subnet Group..."
@@ -465,6 +538,20 @@ function New-RDSDatabase {
 function New-CognitoUserPool {
     Write-Step "STEP 5: Creating Cognito User Pool"
     
+    if ($SkipCognito) {
+        Write-Info "Skipping Cognito creation (-SkipCognito flag)"
+        $script:COGNITO_POOL_ID = Read-Host "  Enter existing User Pool ID (us-west-2_xxxxxxxx)"
+        $script:COGNITO_CLIENT_ID = Read-Host "  Enter existing Client ID"
+        $script:COGNITO_CLIENT_SECRET = Get-SecureInput "  Enter existing Client Secret"
+        
+        Write-Success "User Pool ID: $($script:COGNITO_POOL_ID)"
+        Write-Success "Client ID: $($script:COGNITO_CLIENT_ID)"
+        
+        $script:DeploymentConfig["CognitoPoolId"] = $script:COGNITO_POOL_ID
+        $script:DeploymentConfig["CognitoClientId"] = $script:COGNITO_CLIENT_ID
+        return
+    }
+    
     Write-Info "Creating User Pool..."
     $poolResult = aws cognito-idp create-user-pool `
         --pool-name "$PROJECT_NAME-patients" `
@@ -478,13 +565,13 @@ function New-CognitoUserPool {
     $script:COGNITO_POOL_ID = $poolResult.UserPool.Id
     Write-Success "User Pool ID: $($script:COGNITO_POOL_ID)"
     
-    # Create App Client
+    # Create App Client with CORRECT auth flow names
     Write-Info "Creating App Client..."
     $clientResult = aws cognito-idp create-user-pool-client `
         --user-pool-id $script:COGNITO_POOL_ID `
         --client-name "$PROJECT_NAME-api-client" `
         --generate-secret `
-        --explicit-auth-flows "ADMIN_NO_SRP_AUTH" "ALLOW_REFRESH_TOKEN_AUTH" "ALLOW_USER_PASSWORD_AUTH" `
+        --explicit-auth-flows "ALLOW_ADMIN_USER_PASSWORD_AUTH" "ALLOW_REFRESH_TOKEN_AUTH" "ALLOW_USER_PASSWORD_AUTH" `
         --output json | ConvertFrom-Json
     
     $script:COGNITO_CLIENT_ID = $clientResult.UserPoolClient.ClientId
@@ -509,19 +596,23 @@ function New-S3Buckets {
         
         try {
             if ($Region -eq "us-east-1") {
-                aws s3api create-bucket --bucket $bucket --region $Region | Out-Null
+                aws s3api create-bucket --bucket $bucket --region $Region 2>$null | Out-Null
             } else {
-                aws s3api create-bucket --bucket $bucket --region $Region --create-bucket-configuration LocationConstraint=$Region | Out-Null
+                aws s3api create-bucket --bucket $bucket --region $Region --create-bucket-configuration LocationConstraint=$Region 2>$null | Out-Null
             }
         } catch {
             Write-Info "Bucket may already exist, continuing..."
         }
         
         # Enable encryption
-        aws s3api put-bucket-encryption --bucket $bucket --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"}}]}' | Out-Null
+        try {
+            aws s3api put-bucket-encryption --bucket $bucket --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"}}]}' | Out-Null
+        } catch { }
         
         # Block public access
-        aws s3api put-public-access-block --bucket $bucket --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" | Out-Null
+        try {
+            aws s3api put-public-access-block --bucket $bucket --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" | Out-Null
+        } catch { }
         
         Write-Success "Bucket configured: $bucket"
     }
@@ -546,7 +637,7 @@ function New-SecretsManagerSecrets {
     } | ConvertTo-Json -Compress
     
     try {
-        aws secretsmanager create-secret --name "$PROJECT_NAME/db" --secret-string $dbSecret | Out-Null
+        aws secretsmanager create-secret --name "$PROJECT_NAME/db" --secret-string $dbSecret 2>$null | Out-Null
         Write-Success "Database secret created"
     } catch {
         aws secretsmanager put-secret-value --secret-id "$PROJECT_NAME/db" --secret-string $dbSecret | Out-Null
@@ -562,7 +653,7 @@ function New-SecretsManagerSecrets {
     } | ConvertTo-Json -Compress
     
     try {
-        aws secretsmanager create-secret --name "$PROJECT_NAME/cognito" --secret-string $cognitoSecret | Out-Null
+        aws secretsmanager create-secret --name "$PROJECT_NAME/cognito" --secret-string $cognitoSecret 2>$null | Out-Null
         Write-Success "Cognito secret created"
     } catch {
         aws secretsmanager put-secret-value --secret-id "$PROJECT_NAME/cognito" --secret-string $cognitoSecret | Out-Null
@@ -639,18 +730,18 @@ function Build-DockerImages {
     Write-Success "Logged in to ECR"
     
     # Build Patient API
-    Write-Info "Building patient-api..."
+    Write-Info "Building patient-api (this may take a few minutes)..."
     docker build -t "$PROJECT_NAME-patient-api:latest" -f "apps/patient-platform/patient-api/Dockerfile" "apps/patient-platform/patient-api/"
     docker tag "$PROJECT_NAME-patient-api:latest" "$($script:ACCOUNT_ID).dkr.ecr.$Region.amazonaws.com/$PROJECT_NAME-patient-api:latest"
     docker push "$($script:ACCOUNT_ID).dkr.ecr.$Region.amazonaws.com/$PROJECT_NAME-patient-api:latest"
-    Write-Success "patient-api pushed"
+    Write-Success "patient-api pushed to ECR"
     
     # Build Doctor API
-    Write-Info "Building doctor-api..."
+    Write-Info "Building doctor-api (this may take a few minutes)..."
     docker build -t "$PROJECT_NAME-doctor-api:latest" -f "apps/doctor-platform/doctor-api/Dockerfile" "apps/doctor-platform/doctor-api/"
     docker tag "$PROJECT_NAME-doctor-api:latest" "$($script:ACCOUNT_ID).dkr.ecr.$Region.amazonaws.com/$PROJECT_NAME-doctor-api:latest"
     docker push "$($script:ACCOUNT_ID).dkr.ecr.$Region.amazonaws.com/$PROJECT_NAME-doctor-api:latest"
-    Write-Success "doctor-api pushed"
+    Write-Success "doctor-api pushed to ECR"
 }
 
 # ==============================================================================
@@ -674,9 +765,10 @@ function New-IAMRoles {
     # Create execution role
     Write-Info "Creating Task Execution Role..."
     try {
-        aws iam create-role --role-name "ecsTaskExecutionRole" --assume-role-policy-document $trustPolicy | Out-Null
+        aws iam create-role --role-name "ecsTaskExecutionRole" --assume-role-policy-document $trustPolicy 2>$null | Out-Null
+        Write-Success "Created ecsTaskExecutionRole"
     } catch {
-        Write-Info "Role may already exist"
+        Write-Info "ecsTaskExecutionRole already exists (OK)"
     }
     
     aws iam attach-role-policy --role-name "ecsTaskExecutionRole" --policy-arn "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy" 2>$null
@@ -686,9 +778,10 @@ function New-IAMRoles {
     # Create task role
     Write-Info "Creating Task Role..."
     try {
-        aws iam create-role --role-name "${PROJECT_NAME}TaskRole" --assume-role-policy-document $trustPolicy | Out-Null
+        aws iam create-role --role-name "${PROJECT_NAME}TaskRole" --assume-role-policy-document $trustPolicy 2>$null | Out-Null
+        Write-Success "Created ${PROJECT_NAME}TaskRole"
     } catch {
-        Write-Info "Role may already exist"
+        Write-Info "${PROJECT_NAME}TaskRole already exists (OK)"
     }
     
     $taskPolicy = @{
@@ -734,7 +827,7 @@ function New-ECSCluster {
     Write-Step "STEP 12: Creating ECS Cluster"
     
     try {
-        $clusters = (aws ecs describe-clusters --clusters "$PROJECT_NAME-$Environment" | ConvertFrom-Json).clusters
+        $clusters = (aws ecs describe-clusters --clusters "$PROJECT_NAME-$Environment" 2>$null | ConvertFrom-Json).clusters
         if ($clusters.Count -gt 0 -and $clusters[0].status -eq "ACTIVE") {
             Write-Success "Cluster already exists"
             return
@@ -898,7 +991,7 @@ function Register-TaskDefinitions {
     
     $patientTaskDef | ConvertTo-Json -Depth 10 | Out-File -FilePath "patient-task-def.json" -Encoding utf8
     aws ecs register-task-definition --cli-input-json "file://patient-task-def.json" | Out-Null
-    Remove-Item "patient-task-def.json"
+    Remove-Item "patient-task-def.json" -ErrorAction SilentlyContinue
     Write-Success "Patient API Task Definition registered"
     
     # Doctor API Task Definition
@@ -953,7 +1046,7 @@ function Register-TaskDefinitions {
     
     $doctorTaskDef | ConvertTo-Json -Depth 10 | Out-File -FilePath "doctor-task-def.json" -Encoding utf8
     aws ecs register-task-definition --cli-input-json "file://doctor-task-def.json" | Out-Null
-    Remove-Item "doctor-task-def.json"
+    Remove-Item "doctor-task-def.json" -ErrorAction SilentlyContinue
     Write-Success "Doctor API Task Definition registered"
 }
 
@@ -1009,24 +1102,32 @@ function Test-Deployment {
     $maxAttempts = 20
     
     while ($attempts -lt $maxAttempts) {
-        $services = aws ecs describe-services `
-            --cluster "$PROJECT_NAME-$Environment" `
-            --services "patient-api-service" "doctor-api-service" `
-            --output json | ConvertFrom-Json
-        
-        $patientRunning = $services.services | Where-Object { $_.serviceName -eq "patient-api-service" } | Select-Object -ExpandProperty runningCount
-        $doctorRunning = $services.services | Where-Object { $_.serviceName -eq "doctor-api-service" } | Select-Object -ExpandProperty runningCount
-        
-        Write-Host "  Patient API: $patientRunning running, Doctor API: $doctorRunning running" -ForegroundColor Yellow
-        
-        if ($patientRunning -ge 1 -and $doctorRunning -ge 1) {
-            Write-Success "Services are running!"
-            break
+        try {
+            $services = aws ecs describe-services `
+                --cluster "$PROJECT_NAME-$Environment" `
+                --services "patient-api-service" "doctor-api-service" `
+                --output json | ConvertFrom-Json
+            
+            $patientRunning = ($services.services | Where-Object { $_.serviceName -eq "patient-api-service" }).runningCount
+            $doctorRunning = ($services.services | Where-Object { $_.serviceName -eq "doctor-api-service" }).runningCount
+            
+            Write-Host "  Patient API: $patientRunning running, Doctor API: $doctorRunning running" -ForegroundColor Yellow
+            
+            if ($patientRunning -ge 1 -and $doctorRunning -ge 1) {
+                Write-Success "Services are running!"
+                break
+            }
+        } catch {
+            Write-Host "  Checking services..." -ForegroundColor Yellow
         }
         
         $attempts++
         Start-Sleep -Seconds 15
     }
+    
+    # Give ALB time to register targets
+    Write-Info "Waiting for ALB to register targets..."
+    Start-Sleep -Seconds 30
     
     # Test health endpoints
     Write-Info "Testing health endpoints..."
@@ -1035,14 +1136,14 @@ function Test-Deployment {
         $patientHealth = Invoke-RestMethod -Uri "http://$($script:PATIENT_ALB_DNS)/health" -Method GET -TimeoutSec 10
         Write-Success "Patient API healthy: $($patientHealth.status)"
     } catch {
-        Write-Info "Patient API not responding yet (may still be starting)"
+        Write-Warning2 "Patient API not responding yet (may still be starting)"
     }
     
     try {
         $doctorHealth = Invoke-RestMethod -Uri "http://$($script:DOCTOR_ALB_DNS)/health" -Method GET -TimeoutSec 10
         Write-Success "Doctor API healthy: $($doctorHealth.status)"
     } catch {
-        Write-Info "Doctor API not responding yet (may still be starting)"
+        Write-Warning2 "Doctor API not responding yet (may still be starting)"
     }
 }
 
@@ -1054,12 +1155,12 @@ function Main {
     $startTime = Get-Date
     
     Write-Host ""
-    Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
-    Write-Host "║       ONCOLIFE COMPLETE AWS DEPLOYMENT SCRIPT                ║" -ForegroundColor Magenta
-    Write-Host "║                                                              ║" -ForegroundColor Magenta
-    Write-Host "║  This script will deploy the complete OncoLife platform     ║" -ForegroundColor Magenta
-    Write-Host "║  to AWS. Estimated time: 20-30 minutes                       ║" -ForegroundColor Magenta
-    Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Magenta
+    Write-Host "+==============================================================+" -ForegroundColor Magenta
+    Write-Host "|       ONCOLIFE COMPLETE AWS DEPLOYMENT SCRIPT (PowerShell)   |" -ForegroundColor Magenta
+    Write-Host "|                                                              |" -ForegroundColor Magenta
+    Write-Host "|  This script will deploy the complete OncoLife platform     |" -ForegroundColor Magenta
+    Write-Host "|  to AWS. Estimated time: 20-30 minutes                       |" -ForegroundColor Magenta
+    Write-Host "+==============================================================+" -ForegroundColor Magenta
     Write-Host ""
     
     if ($DryRun) {
@@ -1095,9 +1196,9 @@ function Main {
         
         # Final Summary
         Write-Host ""
-        Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-        Write-Host "║              DEPLOYMENT COMPLETE!                            ║" -ForegroundColor Green
-        Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+        Write-Host "+==============================================================+" -ForegroundColor Green
+        Write-Host "|              DEPLOYMENT COMPLETE!                            |" -ForegroundColor Green
+        Write-Host "+==============================================================+" -ForegroundColor Green
         Write-Host ""
         Write-Host "Duration: $($duration.Minutes) minutes $($duration.Seconds) seconds" -ForegroundColor Cyan
         Write-Host ""
@@ -1121,19 +1222,28 @@ function Main {
         
     } catch {
         Write-Host ""
-        Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Red
-        Write-Host "║              DEPLOYMENT FAILED                               ║" -ForegroundColor Red
-        Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+        Write-Host "+==============================================================+" -ForegroundColor Red
+        Write-Host "|              DEPLOYMENT FAILED                               |" -ForegroundColor Red
+        Write-Host "+==============================================================+" -ForegroundColor Red
         Write-Host ""
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host ""
+        Write-Host "To resume deployment after fixing the issue:" -ForegroundColor Yellow
+        Write-Host "  .\scripts\aws\full-deploy.ps1 -SkipVPC -SkipRDS -SkipCognito" -ForegroundColor Yellow
+        Write-Host ""
         Write-Host "See docs/DEPLOYMENT_TROUBLESHOOTING.md for help." -ForegroundColor Yellow
         Write-Host ""
+        
+        # Clean up temp files
+        Remove-TempFiles
         
         # Save partial config
         Save-DeploymentConfig
         
         exit 1
+    } finally {
+        # Clean up temp files
+        Remove-TempFiles
     }
 }
 
