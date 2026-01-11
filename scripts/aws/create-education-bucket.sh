@@ -4,114 +4,147 @@
 # =============================================================================
 # This script creates and configures the S3 bucket for education content.
 #
+# Usage:
+#   ./scripts/aws/create-education-bucket.sh
+#   ./scripts/aws/create-education-bucket.sh --region us-east-1
+#
 # Prerequisites:
 #   - AWS CLI configured with appropriate permissions
-#   - ACCOUNT_ID and AWS_REGION environment variables set
 #
-# Usage:
-#   chmod +x scripts/aws/create-education-bucket.sh
-#   ./scripts/aws/create-education-bucket.sh
+# Note: This is a STANDALONE script. You don't need to run this if you
+#       used full-deploy.sh, as that script creates the education bucket.
 # =============================================================================
+
+# Prevent Git Bash from converting Unix paths to Windows paths
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
 
 set -e
 
-# Check required environment variables
-if [ -z "$AWS_REGION" ]; then
-    echo "Error: AWS_REGION not set"
-    echo "Run: export AWS_REGION=us-west-2"
-    exit 1
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --region)
+            AWS_REGION="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--region REGION]"
+            echo ""
+            echo "Options:"
+            echo "  --region REGION    AWS region (default: us-west-2)"
+            echo "  --help             Show this help"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Set defaults
+AWS_REGION="${AWS_REGION:-us-west-2}"
+
+# Colors (with fallback for terminals without color support)
+if [[ "$TERM" == "dumb" ]] || [[ -z "$TERM" ]]; then
+    GREEN=''
+    YELLOW=''
+    CYAN=''
+    RED=''
+    NC=''
+else
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    CYAN='\033[0;36m'
+    RED='\033[0;31m'
+    NC='\033[0m'
 fi
 
-# Get account ID if not set
+# Get account ID
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
 if [ -z "$ACCOUNT_ID" ]; then
-    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    echo -e "${RED}[ERROR] Could not get AWS account ID. Run 'aws configure' first.${NC}"
+    exit 1
 fi
 
 BUCKET_NAME="oncolife-education-${ACCOUNT_ID}"
 
-echo "=============================================="
-echo "Creating OncoLife Education Bucket"
-echo "=============================================="
-echo "Bucket: $BUCKET_NAME"
-echo "Region: $AWS_REGION"
-echo "=============================================="
+echo ""
+echo -e "${CYAN}+============================================+${NC}"
+echo -e "${CYAN}|  Creating OncoLife Education Bucket       |${NC}"
+echo -e "${CYAN}+============================================+${NC}"
+echo ""
+echo "  Bucket: $BUCKET_NAME"
+echo "  Region: $AWS_REGION"
+echo ""
 
-# Create bucket
-echo "Creating bucket..."
-if [ "$AWS_REGION" = "us-east-1" ]; then
-    aws s3api create-bucket \
-        --bucket "$BUCKET_NAME" \
-        --region "$AWS_REGION"
+# Check if bucket already exists
+if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
+    echo -e "${YELLOW}[WARN] Bucket already exists: $BUCKET_NAME${NC}"
+    echo "  Continuing with configuration..."
 else
-    aws s3api create-bucket \
-        --bucket "$BUCKET_NAME" \
-        --region "$AWS_REGION" \
-        --create-bucket-configuration LocationConstraint="$AWS_REGION"
+    # Create bucket
+    echo -e "${CYAN}Creating bucket...${NC}"
+    if [ "$AWS_REGION" = "us-east-1" ]; then
+        aws s3api create-bucket \
+            --bucket "$BUCKET_NAME" \
+            --region "$AWS_REGION"
+    else
+        aws s3api create-bucket \
+            --bucket "$BUCKET_NAME" \
+            --region "$AWS_REGION" \
+            --create-bucket-configuration LocationConstraint="$AWS_REGION"
+    fi
+    echo -e "${GREEN}[OK] Bucket created${NC}"
 fi
 
 # Enable versioning
-echo "Enabling versioning..."
+echo -e "${CYAN}Enabling versioning...${NC}"
 aws s3api put-bucket-versioning \
     --bucket "$BUCKET_NAME" \
     --versioning-configuration Status=Enabled
+echo -e "${GREEN}[OK] Versioning enabled${NC}"
 
 # Enable encryption (KMS)
-echo "Enabling encryption..."
+echo -e "${CYAN}Enabling encryption...${NC}"
 aws s3api put-bucket-encryption \
     --bucket "$BUCKET_NAME" \
-    --server-side-encryption-configuration '{
-        "Rules": [{
-            "ApplyServerSideEncryptionByDefault": {
-                "SSEAlgorithm": "aws:kms"
-            },
-            "BucketKeyEnabled": true
-        }]
-    }'
+    --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"},"BucketKeyEnabled":true}]}'
+echo -e "${GREEN}[OK] Encryption enabled${NC}"
 
 # Block public access
-echo "Blocking public access..."
+echo -e "${CYAN}Blocking public access...${NC}"
 aws s3api put-public-access-block \
     --bucket "$BUCKET_NAME" \
-    --public-access-block-configuration '{
-        "BlockPublicAcls": true,
-        "IgnorePublicAcls": true,
-        "BlockPublicPolicy": true,
-        "RestrictPublicBuckets": true
-    }'
+    --public-access-block-configuration '{"BlockPublicAcls":true,"IgnorePublicAcls":true,"BlockPublicPolicy":true,"RestrictPublicBuckets":true}'
+echo -e "${GREEN}[OK] Public access blocked${NC}"
 
 # Create folder structure
-echo "Creating folder structure..."
-aws s3api put-object --bucket "$BUCKET_NAME" --key "symptoms/"
-aws s3api put-object --bucket "$BUCKET_NAME" --key "care-team/"
-aws s3api put-object --bucket "$BUCKET_NAME" --key "handouts/"
+echo -e "${CYAN}Creating folder structure...${NC}"
+aws s3api put-object --bucket "$BUCKET_NAME" --key "symptoms/" > /dev/null
+aws s3api put-object --bucket "$BUCKET_NAME" --key "care-team/" > /dev/null
+aws s3api put-object --bucket "$BUCKET_NAME" --key "handouts/" > /dev/null
+echo -e "${GREEN}[OK] Folder structure created${NC}"
 
-# Set lifecycle policy (optional - for cost management)
-echo "Setting lifecycle policy..."
+# Set lifecycle policy (for cost management)
+echo -e "${CYAN}Setting lifecycle policy...${NC}"
 aws s3api put-bucket-lifecycle-configuration \
     --bucket "$BUCKET_NAME" \
-    --lifecycle-configuration '{
-        "Rules": [{
-            "ID": "MoveToIAAfter90Days",
-            "Status": "Enabled",
-            "Filter": {},
-            "Transitions": [{
-                "Days": 90,
-                "StorageClass": "STANDARD_IA"
-            }]
-        }]
-    }'
-
-# Enable access logging (optional but recommended for HIPAA)
-echo "Note: For HIPAA compliance, enable access logging to a separate log bucket."
+    --lifecycle-configuration '{"Rules":[{"ID":"MoveToIAAfter90Days","Status":"Enabled","Filter":{},"Transitions":[{"Days":90,"StorageClass":"STANDARD_IA"}]}]}'
+echo -e "${GREEN}[OK] Lifecycle policy set${NC}"
 
 echo ""
-echo "=============================================="
-echo "SUCCESS: Education bucket created!"
-echo "=============================================="
-echo "Bucket Name: $BUCKET_NAME"
-echo "Bucket ARN:  arn:aws:s3:::$BUCKET_NAME"
+echo -e "${GREEN}+============================================+${NC}"
+echo -e "${GREEN}|  SUCCESS: Education bucket created!       |${NC}"
+echo -e "${GREEN}+============================================+${NC}"
 echo ""
-echo "Next Steps:"
-echo "1. Upload education PDFs: ./scripts/aws/upload-education-pdfs.sh"
-echo "2. Run seed script: python scripts/seed_education.py"
-echo "=============================================="
+echo "  Bucket Name: $BUCKET_NAME"
+echo "  Bucket ARN:  arn:aws:s3:::$BUCKET_NAME"
+echo ""
+echo -e "${CYAN}Next Steps:${NC}"
+echo "  1. Upload education PDFs: ./scripts/aws/upload-education-pdfs.sh"
+echo "  2. Run seed script: python scripts/seed_education.py"
+echo ""
+echo -e "${YELLOW}Note: For HIPAA compliance, enable access logging to a separate log bucket.${NC}"
+echo ""

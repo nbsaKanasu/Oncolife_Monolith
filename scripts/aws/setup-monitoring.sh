@@ -10,68 +10,133 @@
 # 4. CloudWatch Dashboard
 #
 # Usage:
-#   ./setup-monitoring.sh production email@example.com
+#   ./scripts/aws/setup-monitoring.sh email@example.com
+#   ./scripts/aws/setup-monitoring.sh email@example.com --region us-east-1
 #
 # Prerequisites:
 #   - AWS CLI configured with appropriate credentials
-#   - Appropriate IAM permissions
+#   - Run full-deploy.sh first to create the base infrastructure
 # =============================================================================
+
+# Prevent Git Bash from converting Unix paths to Windows paths
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Parse arguments
+ALERT_EMAIL=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --region)
+            AWS_REGION="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [email@example.com] [--region REGION]"
+            echo ""
+            echo "Arguments:"
+            echo "  email              Email address for alert notifications"
+            echo ""
+            echo "Options:"
+            echo "  --region REGION    AWS region (default: us-west-2)"
+            echo "  --help             Show this help"
+            exit 0
+            ;;
+        *)
+            if [ -z "$ALERT_EMAIL" ]; then
+                ALERT_EMAIL="$1"
+            else
+                echo "Unknown option: $1"
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
 
 # Configuration
-ENVIRONMENT="${1:-production}"
-ALERT_EMAIL="${2:-}"
-AWS_REGION="${AWS_REGION:-eu-west-2}"
+AWS_REGION="${AWS_REGION:-us-west-2}"
 PROJECT_NAME="oncolife"
+ENVIRONMENT="production"
 
-echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║     OncoLife Monitoring Setup - ${ENVIRONMENT}                    ║${NC}"
-echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
+# Colors (with fallback for terminals without color support)
+if [[ "$TERM" == "dumb" ]] || [[ -z "$TERM" ]]; then
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    CYAN=''
+    NC=''
+else
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    NC='\033[0m'
+fi
+
+echo ""
+echo -e "${CYAN}+==============================================================+${NC}"
+echo -e "${CYAN}|     OncoLife Monitoring Setup                                |${NC}"
+echo -e "${CYAN}|     Environment: ${ENVIRONMENT}                                       |${NC}"
+echo -e "${CYAN}|     Region: ${AWS_REGION}                                       |${NC}"
+echo -e "${CYAN}+==============================================================+${NC}"
+echo ""
+
+# Get Account ID
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
+if [ -z "$ACCOUNT_ID" ]; then
+    echo -e "${RED}[ERROR] Could not get AWS account ID. Run 'aws configure' first.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}[OK] AWS Account: $ACCOUNT_ID${NC}"
 
 # =============================================================================
 # SNS Topics Setup
 # =============================================================================
 
-echo -e "\n${YELLOW}📧 Setting up SNS Topics...${NC}"
+echo ""
+echo -e "${YELLOW}=== Setting up SNS Topics ===${NC}"
 
 # Create main alerts topic
 ALERTS_TOPIC_ARN=$(aws sns create-topic \
     --name "${PROJECT_NAME}-${ENVIRONMENT}-alerts" \
     --region "$AWS_REGION" \
-    --tags "Key=Environment,Value=${ENVIRONMENT}" "Key=Project,Value=${PROJECT_NAME}" \
     --query 'TopicArn' \
     --output text 2>/dev/null || echo "")
 
 if [ -n "$ALERTS_TOPIC_ARN" ]; then
-    echo -e "${GREEN}✓ Created SNS topic: ${ALERTS_TOPIC_ARN}${NC}"
+    aws sns tag-resource \
+        --resource-arn "$ALERTS_TOPIC_ARN" \
+        --tags "Key=Environment,Value=${ENVIRONMENT}" "Key=Project,Value=${PROJECT_NAME}" \
+        --region "$AWS_REGION" 2>/dev/null || true
+    echo -e "${GREEN}[OK] Created SNS topic: ${ALERTS_TOPIC_ARN}${NC}"
 else
-    ALERTS_TOPIC_ARN=$(aws sns list-topics --region "$AWS_REGION" --query "Topics[?contains(TopicArn, '${PROJECT_NAME}-${ENVIRONMENT}-alerts')].TopicArn" --output text)
-    echo -e "${YELLOW}! SNS topic already exists: ${ALERTS_TOPIC_ARN}${NC}"
+    ALERTS_TOPIC_ARN=$(aws sns list-topics --region "$AWS_REGION" --query "Topics[?contains(TopicArn, '${PROJECT_NAME}-${ENVIRONMENT}-alerts')].TopicArn" --output text 2>/dev/null)
+    echo -e "${YELLOW}[WARN] SNS topic already exists: ${ALERTS_TOPIC_ARN}${NC}"
 fi
 
 # Create critical alerts topic (for immediate attention)
 CRITICAL_TOPIC_ARN=$(aws sns create-topic \
     --name "${PROJECT_NAME}-${ENVIRONMENT}-critical-alerts" \
     --region "$AWS_REGION" \
-    --tags "Key=Environment,Value=${ENVIRONMENT}" "Key=Project,Value=${PROJECT_NAME}" "Key=Severity,Value=critical" \
     --query 'TopicArn' \
     --output text 2>/dev/null || echo "")
 
 if [ -n "$CRITICAL_TOPIC_ARN" ]; then
-    echo -e "${GREEN}✓ Created critical alerts topic: ${CRITICAL_TOPIC_ARN}${NC}"
+    aws sns tag-resource \
+        --resource-arn "$CRITICAL_TOPIC_ARN" \
+        --tags "Key=Environment,Value=${ENVIRONMENT}" "Key=Project,Value=${PROJECT_NAME}" "Key=Severity,Value=critical" \
+        --region "$AWS_REGION" 2>/dev/null || true
+    echo -e "${GREEN}[OK] Created critical alerts topic: ${CRITICAL_TOPIC_ARN}${NC}"
 fi
 
 # Subscribe email if provided
 if [ -n "$ALERT_EMAIL" ]; then
-    echo -e "\n${YELLOW}📬 Subscribing email to alerts...${NC}"
+    echo ""
+    echo -e "${YELLOW}=== Subscribing email to alerts ===${NC}"
     
     aws sns subscribe \
         --topic-arn "$ALERTS_TOPIC_ARN" \
@@ -80,8 +145,8 @@ if [ -n "$ALERT_EMAIL" ]; then
         --region "$AWS_REGION" \
         --return-subscription-arn 2>/dev/null || true
     
-    echo -e "${GREEN}✓ Subscription request sent to ${ALERT_EMAIL}${NC}"
-    echo -e "${YELLOW}! Please check your email and confirm the subscription${NC}"
+    echo -e "${GREEN}[OK] Subscription request sent to ${ALERT_EMAIL}${NC}"
+    echo -e "${YELLOW}[INFO] Please check your email and confirm the subscription!${NC}"
     
     # Also subscribe to critical alerts
     aws sns subscribe \
@@ -90,44 +155,66 @@ if [ -n "$ALERT_EMAIL" ]; then
         --notification-endpoint "$ALERT_EMAIL" \
         --region "$AWS_REGION" \
         --return-subscription-arn 2>/dev/null || true
+else
+    echo -e "${YELLOW}[INFO] No email provided - skipping subscription${NC}"
+    echo "  To subscribe later: aws sns subscribe --topic-arn $ALERTS_TOPIC_ARN --protocol email --notification-endpoint YOUR_EMAIL"
 fi
 
 # =============================================================================
 # CloudWatch Log Groups
 # =============================================================================
 
-echo -e "\n${YELLOW}📋 Setting up CloudWatch Log Groups...${NC}"
+echo ""
+echo -e "${YELLOW}=== Setting up CloudWatch Log Groups ===${NC}"
 
+# These match the log groups created in full-deploy.sh
 LOG_GROUPS=(
-    "/ecs/${PROJECT_NAME}-${ENVIRONMENT}/patient-api"
-    "/ecs/${PROJECT_NAME}-${ENVIRONMENT}/doctor-api"
-    "/ecs/${PROJECT_NAME}-${ENVIRONMENT}/patient-web"
-    "/ecs/${PROJECT_NAME}-${ENVIRONMENT}/doctor-web"
-    "/ecs/${PROJECT_NAME}-${ENVIRONMENT}/patient-server"
+    "/ecs/${PROJECT_NAME}-patient-api"
+    "/ecs/${PROJECT_NAME}-doctor-api"
 )
 
 for LOG_GROUP in "${LOG_GROUPS[@]}"; do
-    aws logs create-log-group \
-        --log-group-name "$LOG_GROUP" \
-        --region "$AWS_REGION" 2>/dev/null || true
-    
-    # Set retention to 30 days
-    aws logs put-retention-policy \
-        --log-group-name "$LOG_GROUP" \
-        --retention-in-days 30 \
-        --region "$AWS_REGION" 2>/dev/null || true
-    
-    echo -e "${GREEN}✓ Log group: ${LOG_GROUP}${NC}"
+    if aws logs create-log-group --log-group-name "$LOG_GROUP" --region "$AWS_REGION" 2>/dev/null; then
+        aws logs put-retention-policy \
+            --log-group-name "$LOG_GROUP" \
+            --retention-in-days 30 \
+            --region "$AWS_REGION" 2>/dev/null || true
+        echo -e "${GREEN}[OK] Created log group: ${LOG_GROUP}${NC}"
+    else
+        echo -e "${YELLOW}[INFO] Log group already exists: ${LOG_GROUP}${NC}"
+    fi
 done
 
 # =============================================================================
 # CloudWatch Dashboard
 # =============================================================================
 
-echo -e "\n${YELLOW}📊 Creating CloudWatch Dashboard...${NC}"
+echo ""
+echo -e "${YELLOW}=== Creating CloudWatch Dashboard ===${NC}"
 
 DASHBOARD_NAME="${PROJECT_NAME}-${ENVIRONMENT}-dashboard"
 
+# Get ALB ARN suffixes for dashboard
+PATIENT_ALB_ARN_SUFFIX=$(aws elbv2 describe-load-balancers \
+    --names "${PROJECT_NAME}-patient-alb" \
+    --region "$AWS_REGION" \
+    --query 'LoadBalancers[0].LoadBalancerArn' \
+    --output text 2>/dev/null | awk -F':loadbalancer/' '{print $2}' || echo "")
+
+DOCTOR_ALB_ARN_SUFFIX=$(aws elbv2 describe-load-balancers \
+    --names "${PROJECT_NAME}-doctor-alb" \
+    --region "$AWS_REGION" \
+    --query 'LoadBalancers[0].LoadBalancerArn' \
+    --output text 2>/dev/null | awk -F':loadbalancer/' '{print $2}' || echo "")
+
+# Get RDS instance ID
+RDS_INSTANCE_ID=$(aws rds describe-db-instances \
+    --db-instance-identifier "${PROJECT_NAME}-db" \
+    --region "$AWS_REGION" \
+    --query 'DBInstances[0].DBInstanceIdentifier' \
+    --output text 2>/dev/null || echo "${PROJECT_NAME}-db")
+
+# Create dashboard JSON
 DASHBOARD_BODY=$(cat <<EOF
 {
     "widgets": [
@@ -138,7 +225,7 @@ DASHBOARD_BODY=$(cat <<EOF
             "width": 24,
             "height": 1,
             "properties": {
-                "markdown": "# OncoLife Production Dashboard\n**Environment:** ${ENVIRONMENT} | **Last Updated:** $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                "markdown": "# OncoLife ${ENVIRONMENT} Dashboard\\n**Region:** ${AWS_REGION} | **Account:** ${ACCOUNT_ID}"
             }
         },
         {
@@ -148,13 +235,16 @@ DASHBOARD_BODY=$(cat <<EOF
             "width": 12,
             "height": 6,
             "properties": {
-                "title": "API Response Times (P95)",
+                "title": "ECS Service Health",
                 "metrics": [
-                    [ "AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", "app/oncolife-alb/${ENVIRONMENT}", { "stat": "p95", "label": "All APIs" } ]
+                    [ "AWS/ECS", "CPUUtilization", "ClusterName", "${PROJECT_NAME}-${ENVIRONMENT}", "ServiceName", "patient-api-service", { "label": "Patient API CPU" } ],
+                    [ ".", "MemoryUtilization", ".", ".", ".", ".", { "label": "Patient API Memory" } ],
+                    [ ".", "CPUUtilization", ".", ".", ".", "doctor-api-service", { "label": "Doctor API CPU" } ],
+                    [ ".", "MemoryUtilization", ".", ".", ".", ".", { "label": "Doctor API Memory" } ]
                 ],
-                "period": 60,
+                "period": 300,
                 "region": "${AWS_REGION}",
-                "stat": "p95"
+                "stat": "Average"
             }
         },
         {
@@ -164,61 +254,48 @@ DASHBOARD_BODY=$(cat <<EOF
             "width": 12,
             "height": 6,
             "properties": {
-                "title": "Request Count",
+                "title": "ALB Request Metrics",
                 "metrics": [
-                    [ "AWS/ApplicationELB", "RequestCount", "LoadBalancer", "app/oncolife-alb/${ENVIRONMENT}", { "stat": "Sum" } ]
+                    [ "AWS/ApplicationELB", "RequestCount", "LoadBalancer", "${PATIENT_ALB_ARN_SUFFIX:-app/oncolife-patient-alb/placeholder}", { "label": "Patient API Requests", "stat": "Sum" } ],
+                    [ ".", "HTTPCode_Target_5XX_Count", ".", ".", { "label": "Patient API 5XX", "stat": "Sum", "color": "#d62728" } ],
+                    [ ".", "RequestCount", ".", "${DOCTOR_ALB_ARN_SUFFIX:-app/oncolife-doctor-alb/placeholder}", { "label": "Doctor API Requests", "stat": "Sum" } ],
+                    [ ".", "HTTPCode_Target_5XX_Count", ".", ".", { "label": "Doctor API 5XX", "stat": "Sum", "color": "#ff7f0e" } ]
                 ],
-                "period": 60,
-                "region": "${AWS_REGION}",
-                "stat": "Sum"
+                "period": 300,
+                "region": "${AWS_REGION}"
             }
         },
         {
             "type": "metric",
             "x": 0,
             "y": 7,
-            "width": 8,
+            "width": 12,
             "height": 6,
             "properties": {
-                "title": "ECS CPU Utilization",
+                "title": "ALB Response Time (P95)",
                 "metrics": [
-                    [ "AWS/ECS", "CPUUtilization", "ClusterName", "oncolife-cluster", "ServiceName", "patient-api", { "label": "Patient API" } ],
-                    [ "...", "doctor-api", { "label": "Doctor API" } ]
+                    [ "AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", "${PATIENT_ALB_ARN_SUFFIX:-app/oncolife-patient-alb/placeholder}", { "label": "Patient API", "stat": "p95" } ],
+                    [ ".", ".", ".", "${DOCTOR_ALB_ARN_SUFFIX:-app/oncolife-doctor-alb/placeholder}", { "label": "Doctor API", "stat": "p95" } ]
                 ],
-                "period": 60,
+                "period": 300,
                 "region": "${AWS_REGION}"
             }
         },
         {
             "type": "metric",
-            "x": 8,
+            "x": 12,
             "y": 7,
-            "width": 8,
+            "width": 12,
             "height": 6,
             "properties": {
-                "title": "ECS Memory Utilization",
+                "title": "RDS Database Metrics",
                 "metrics": [
-                    [ "AWS/ECS", "MemoryUtilization", "ClusterName", "oncolife-cluster", "ServiceName", "patient-api", { "label": "Patient API" } ],
-                    [ "...", "doctor-api", { "label": "Doctor API" } ]
+                    [ "AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", "${RDS_INSTANCE_ID}", { "label": "CPU %" } ],
+                    [ ".", "DatabaseConnections", ".", ".", { "label": "Connections", "yAxis": "right" } ],
+                    [ ".", "FreeStorageSpace", ".", ".", { "label": "Free Storage (bytes)", "yAxis": "right" } ]
                 ],
-                "period": 60,
+                "period": 300,
                 "region": "${AWS_REGION}"
-            }
-        },
-        {
-            "type": "metric",
-            "x": 16,
-            "y": 7,
-            "width": 8,
-            "height": 6,
-            "properties": {
-                "title": "HTTP 5xx Errors",
-                "metrics": [
-                    [ "AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", "LoadBalancer", "app/oncolife-alb/${ENVIRONMENT}", { "stat": "Sum", "color": "#d62728" } ]
-                ],
-                "period": 60,
-                "region": "${AWS_REGION}",
-                "stat": "Sum"
             }
         },
         {
@@ -228,10 +305,12 @@ DASHBOARD_BODY=$(cat <<EOF
             "width": 12,
             "height": 6,
             "properties": {
-                "title": "RDS Metrics",
+                "title": "ALB Healthy/Unhealthy Hosts",
                 "metrics": [
-                    [ "AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", "oncolife-db", { "label": "CPU %" } ],
-                    [ ".", "DatabaseConnections", ".", ".", { "label": "Connections", "yAxis": "right" } ]
+                    [ "AWS/ApplicationELB", "HealthyHostCount", "LoadBalancer", "${PATIENT_ALB_ARN_SUFFIX:-app/oncolife-patient-alb/placeholder}", "TargetGroup", "targetgroup/patient-api-tg/placeholder", { "label": "Patient Healthy" } ],
+                    [ ".", "UnHealthyHostCount", ".", ".", ".", ".", { "label": "Patient Unhealthy", "color": "#d62728" } ],
+                    [ ".", "HealthyHostCount", ".", "${DOCTOR_ALB_ARN_SUFFIX:-app/oncolife-doctor-alb/placeholder}", ".", "targetgroup/doctor-api-tg/placeholder", { "label": "Doctor Healthy" } ],
+                    [ ".", "UnHealthyHostCount", ".", ".", ".", ".", { "label": "Doctor Unhealthy", "color": "#ff7f0e" } ]
                 ],
                 "period": 60,
                 "region": "${AWS_REGION}"
@@ -244,28 +323,14 @@ DASHBOARD_BODY=$(cat <<EOF
             "width": 12,
             "height": 6,
             "properties": {
-                "title": "Application Alerts",
+                "title": "ECS Running Task Count",
                 "metrics": [
-                    [ "OncoLife/PatientAPI", "Alert_Error", "Environment", "${ENVIRONMENT}", { "label": "Errors", "color": "#d62728" } ],
-                    [ ".", "Alert_Warning", ".", ".", { "label": "Warnings", "color": "#ff7f0e" } ],
-                    [ ".", "AuthenticationFailure", ".", ".", { "label": "Auth Failures", "color": "#9467bd" } ]
+                    [ "AWS/ECS", "RunningTaskCount", "ClusterName", "${PROJECT_NAME}-${ENVIRONMENT}", "ServiceName", "patient-api-service", { "label": "Patient API Tasks" } ],
+                    [ ".", ".", ".", ".", ".", "doctor-api-service", { "label": "Doctor API Tasks" } ]
                 ],
                 "period": 60,
                 "region": "${AWS_REGION}",
-                "stat": "Sum"
-            }
-        },
-        {
-            "type": "alarm",
-            "x": 0,
-            "y": 19,
-            "width": 24,
-            "height": 3,
-            "properties": {
-                "title": "Active Alarms",
-                "alarms": [
-                    "arn:aws:cloudwatch:${AWS_REGION}:*:alarm:OncoLife-${ENVIRONMENT}-*"
-                ]
+                "stat": "Average"
             }
         }
     ]
@@ -278,28 +343,35 @@ aws cloudwatch put-dashboard \
     --dashboard-body "$DASHBOARD_BODY" \
     --region "$AWS_REGION" 2>/dev/null || true
 
-echo -e "${GREEN}✓ Dashboard created: ${DASHBOARD_NAME}${NC}"
+echo -e "${GREEN}[OK] Dashboard created: ${DASHBOARD_NAME}${NC}"
 
 # =============================================================================
 # Summary
 # =============================================================================
 
-echo -e "\n${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║                 Monitoring Setup Complete!                    ║${NC}"
-echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${GREEN}+==============================================================+${NC}"
+echo -e "${GREEN}|                 Monitoring Setup Complete!                   |${NC}"
+echo -e "${GREEN}+==============================================================+${NC}"
 
-echo -e "\n${BLUE}Created Resources:${NC}"
-echo -e "  • SNS Alerts Topic: ${ALERTS_TOPIC_ARN}"
-echo -e "  • SNS Critical Topic: ${CRITICAL_TOPIC_ARN}"
-echo -e "  • Log Groups: ${#LOG_GROUPS[@]} created"
-echo -e "  • Dashboard: ${DASHBOARD_NAME}"
+echo ""
+echo -e "${CYAN}Created Resources:${NC}"
+echo "  - SNS Alerts Topic: ${ALERTS_TOPIC_ARN}"
+echo "  - SNS Critical Topic: ${CRITICAL_TOPIC_ARN}"
+echo "  - Log Groups: ${#LOG_GROUPS[@]} created/verified"
+echo "  - Dashboard: ${DASHBOARD_NAME}"
 
-echo -e "\n${YELLOW}Next Steps:${NC}"
-echo -e "  1. Confirm email subscription (check inbox)"
-echo -e "  2. Apply CloudWatch alarms: cd scripts/aws && terraform apply"
-echo -e "  3. Configure Slack webhook (optional)"
-echo -e "  4. View dashboard: https://${AWS_REGION}.console.aws.amazon.com/cloudwatch/home?region=${AWS_REGION}#dashboards:name=${DASHBOARD_NAME}"
+echo ""
+echo -e "${CYAN}View Dashboard:${NC}"
+echo "  https://${AWS_REGION}.console.aws.amazon.com/cloudwatch/home?region=${AWS_REGION}#dashboards:name=${DASHBOARD_NAME}"
 
-echo -e "\n${BLUE}Environment Variables to Set:${NC}"
-echo -e "  export SNS_ALERT_TOPIC_ARN=\"${ALERTS_TOPIC_ARN}\""
-echo -e "  export CLOUDWATCH_NAMESPACE=\"OncoLife/PatientAPI\""
+if [ -n "$ALERT_EMAIL" ]; then
+    echo ""
+    echo -e "${YELLOW}IMPORTANT: Check your email ($ALERT_EMAIL) and confirm the subscription!${NC}"
+fi
+
+echo ""
+echo -e "${CYAN}Environment Variables to Set:${NC}"
+echo "  export SNS_ALERT_TOPIC_ARN=\"${ALERTS_TOPIC_ARN}\""
+echo "  export CLOUDWATCH_NAMESPACE=\"OncoLife/PatientAPI\""
+echo ""
