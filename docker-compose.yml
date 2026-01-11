@@ -166,42 +166,41 @@ services:
   # FRONTENDS (Optional - run locally with npm for hot reload)
   # ===========================================================================
 
+  # NOTE: For development, run frontends locally with `npm run dev` for hot reload
+  # Docker builds are for production testing only
   patient-web:
     build:
-      context: ./apps/patient-platform/patient-web
-      dockerfile: Dockerfile
+      # Context must be monorepo root for shared packages (file: references)
+      context: .
+      dockerfile: apps/patient-platform/patient-web/Dockerfile
+      args:
+        - VITE_API_BASE_URL=http://localhost:8000
+        - VITE_WS_BASE_URL=ws://localhost:8000
     container_name: oncolife-patient-web
     environment:
-      - NODE_ENV=development
-      - VITE_API_URL=http://localhost:8000
-      - VITE_WS_URL=ws://localhost:8000
+      - NODE_ENV=production
     ports:
-      - "5173:5173"
+      - "5173:80"
     depends_on:
       - patient-api
-    volumes:
-      - ./apps/patient-platform/patient-web:/app:cached
-      - /app/node_modules
-    command: npm run dev -- --host 0.0.0.0
     networks:
       - oncolife-network
 
   doctor-web:
     build:
-      context: ./apps/doctor-platform/doctor-web
-      dockerfile: Dockerfile
+      # Context must be monorepo root for shared packages (file: references)
+      context: .
+      dockerfile: apps/doctor-platform/doctor-web/Dockerfile
+      args:
+        - VITE_API_BASE_URL=http://localhost:8001
+        - VITE_PATIENT_API_URL=http://localhost:8000
     container_name: oncolife-doctor-web
     environment:
-      - NODE_ENV=development
-      - VITE_API_URL=http://localhost:8001
+      - NODE_ENV=production
     ports:
-      - "5174:5174"
+      - "5174:80"
     depends_on:
       - doctor-api
-    volumes:
-      - ./apps/doctor-platform/doctor-web:/app:cached
-      - /app/node_modules
-    command: npm run dev -- --host 0.0.0.0 --port 5174
     networks:
       - oncolife-network
 
