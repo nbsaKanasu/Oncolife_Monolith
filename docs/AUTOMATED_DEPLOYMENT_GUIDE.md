@@ -12,7 +12,18 @@
 
 ## Overview
 
-This guide walks you through deploying the complete OncoLife platform to AWS using our **automated deployment script**. The script handles everything from VPC creation to running services.
+This guide walks you through deploying the complete OncoLife platform to AWS using our **automated deployment scripts**. The scripts handle everything from VPC creation to running services.
+
+### Available Scripts
+
+| Script | Purpose | When to Use |
+|--------|---------|-------------|
+| **`full-deploy.ps1`** | Full initial deployment | First-time setup (PowerShell) |
+| **`full-deploy.sh`** | Full initial deployment | First-time setup (Bash) |
+| **`deploy.sh`** | Update existing services | After initial deployment |
+| **`cleanup-all.sh`** | Delete all resources | Fresh start or teardown |
+| **`setup-monitoring.sh`** | Set up CloudWatch & alerts | After deployment |
+| **`create-education-bucket.sh`** | Create S3 bucket | If not using full-deploy |
 
 | What | Details |
 |------|---------|
@@ -111,13 +122,23 @@ cd Oncolife_Monolith
 
 ## Step 3: Run the Automated Deployment
 
-> ⚠️ **IMPORTANT**: Use **PowerShell** on Windows, not Git Bash!
-
 ### 3.1 Start the Deployment
+
+**Choose your platform:**
+
+#### Option A: PowerShell (Windows - Recommended)
 
 ```powershell
 .\scripts\aws\full-deploy.ps1
 ```
+
+#### Option B: Bash (Linux, macOS, or Git Bash on Windows)
+
+```bash
+./scripts/aws/full-deploy.sh
+```
+
+> 💡 **Windows Users**: We recommend PowerShell. Git Bash works but PowerShell is more reliable.
 
 ### 3.2 When Prompted, Enter Database Password
 
@@ -565,6 +586,33 @@ See [STEP_BY_STEP_DEPLOYMENT.md](STEP_BY_STEP_DEPLOYMENT.md) Section 11 for deta
 
 ---
 
+## Re-Deploying After Code Changes
+
+After your initial deployment, use **`deploy.sh`** for updates (NOT `full-deploy.sh`):
+
+```bash
+# Re-deploy all services with latest code
+./scripts/aws/deploy.sh
+
+# Re-deploy only Patient API
+./scripts/aws/deploy.sh patient-api
+
+# Re-deploy only Doctor API
+./scripts/aws/deploy.sh doctor-api
+
+# Check infrastructure status
+./scripts/aws/deploy.sh check
+```
+
+**Why two scripts?**
+
+| Script | Use When | What It Does |
+|--------|----------|--------------|
+| `full-deploy.sh/ps1` | First-time deployment | Creates VPC, RDS, ECS, everything from scratch |
+| `deploy.sh` | Updates after initial deployment | Rebuilds Docker images and updates ECS services |
+
+---
+
 ## Step 7: Set Up CI/CD (Automated Future Deployments)
 
 After your initial deployment, set up CI/CD so future code changes deploy automatically.
@@ -611,7 +659,21 @@ Go to: **GitHub Repo** → **Settings** → **Secrets** → **Actions** → **Ne
 
 ## Cleanup (Delete Everything)
 
-To delete all created resources:
+### Option A: Automated Cleanup Script (Recommended)
+
+Use the cleanup script to delete all OncoLife resources:
+
+```bash
+# Bash (Git Bash on Windows, Linux, macOS)
+./scripts/aws/cleanup-all.sh
+
+# With specific region
+./scripts/aws/cleanup-all.sh --region us-east-1
+```
+
+This script deletes: VPC, ECS, ALB, RDS, ECR, Cognito, S3 buckets, Secrets, and more.
+
+### Option B: Manual Cleanup (PowerShell)
 
 ```powershell
 # Delete ECS Services
@@ -633,15 +695,49 @@ aws rds delete-db-instance --db-instance-identifier oncolife-db --skip-final-sna
 
 ---
 
-## Quick Reference
+## Quick Reference - All Scripts
 
-| Command | Purpose |
-|---------|---------|
-| `.\scripts\aws\full-deploy.ps1` | Deploy everything |
-| `.\scripts\aws\full-deploy.ps1 -SkipVPC` | Use existing VPC |
-| `.\scripts\aws\full-deploy.ps1 -SkipRDS` | Use existing RDS |
-| `.\scripts\aws\full-deploy.ps1 -SkipBuild` | Use existing Docker images |
-| `.\scripts\aws\full-deploy.ps1 -Region us-east-1` | Deploy to different region |
+### Initial Deployment (First Time)
+
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `.\scripts\aws\full-deploy.ps1` | PowerShell (Windows) | Deploy everything - creates all infrastructure |
+| `./scripts/aws/full-deploy.sh` | Bash (Linux/Mac/Git Bash) | Deploy everything - creates all infrastructure |
+
+**Options for full-deploy scripts:**
+| Option | Purpose |
+|--------|---------|
+| `-SkipVPC` / `--skip-vpc` | Use existing VPC |
+| `-SkipRDS` / `--skip-rds` | Use existing RDS |
+| `-SkipCognito` / `--skip-cognito` | Use existing Cognito |
+| `-SkipBuild` / `--skip-build` | Use existing Docker images |
+| `-Region` / `--region` | Deploy to different region |
+
+### Re-Deployment (Update Existing Services)
+
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `./scripts/aws/deploy.sh` | Bash | Rebuild and redeploy to existing ECS services |
+| `./scripts/aws/deploy.sh check` | Bash | Check infrastructure status |
+
+### Cleanup
+
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `./scripts/aws/cleanup-all.sh` | Bash | Delete ALL OncoLife AWS resources |
+
+### Monitoring
+
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `./scripts/aws/setup-monitoring.sh email@example.com` | Bash | Create SNS topics, CloudWatch dashboard |
+
+### Other Utilities
+
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `./scripts/aws/create-education-bucket.sh` | Bash | Create S3 bucket for education content |
+| `./scripts/aws/upload-education-pdfs.sh` | Bash | Upload PDF files to education bucket |
 
 ---
 
