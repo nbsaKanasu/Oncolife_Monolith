@@ -8,19 +8,24 @@ A comprehensive healthcare platform for cancer patient symptom tracking and care
 
 ## 📚 Documentation
 
+> **📖 [MASTER DOCUMENTATION INDEX](docs/MASTER_DOCUMENTATION_INDEX.md)** - Start here to find the right guide!
+
+### Quick Links
+
 | Document | Description |
 |----------|-------------|
 | [**🚀 AUTOMATED DEPLOYMENT**](docs/AUTOMATED_DEPLOYMENT_GUIDE.md) | ⭐ **ONE-COMMAND AWS deployment - START HERE!** |
+| [**📖 Master Doc Index**](docs/MASTER_DOCUMENTATION_INDEX.md) | Find the right document for any task |
 | [Step-by-Step Deployment](docs/STEP_BY_STEP_DEPLOYMENT.md) | Manual AWS deployment walkthrough |
 | [**🔄 CI/CD Pipeline Guide**](docs/CI_CD_PIPELINE_GUIDE.md) | GitHub Actions integration for automated deployments |
 | [Deployment Troubleshooting](docs/DEPLOYMENT_TROUBLESHOOTING.md) | 🔧 Fix common deployment errors |
 | [Architecture Guide](docs/ARCHITECTURE.md) | System architecture, design patterns, code organization |
 | [Developer Guide](docs/DEVELOPER_GUIDE.md) | Getting started, development environment, code patterns |
+| [**📨 Sinch/Fax Webhook Setup**](apps/patient-platform/patient-api/docs/DEPLOYMENT.md#step-5-configure-fax-provider-webhook) | Configure fax receiving webhook |
 | [Patient Onboarding](apps/patient-platform/patient-api/docs/ONBOARDING.md) | Fax/OCR → Cognito → Welcome flow |
 | [Patient Education](apps/patient-platform/patient-api/docs/EDUCATION.md) | Post-session education delivery |
 | [**Diary & Dashboard**](docs/PATIENT_DIARY_DOCTOR_DASHBOARD.md) | 🆕 Patient questions, doctor analytics dashboard |
 | [Patient API Features](apps/patient-platform/patient-api/docs/FEATURES.md) | Complete feature documentation (27 symptom modules) |
-| [Patient API Deployment](apps/patient-platform/patient-api/docs/DEPLOYMENT.md) | AWS deployment details |
 | [Doctor API Docs](apps/doctor-platform/doctor-api/docs/README.md) | Doctor API endpoints and usage |
 
 ---

@@ -636,21 +636,84 @@ echo "IAM role created: $ROLE_NAME"
 
 ### Step 5: Configure Fax Provider Webhook
 
-For **Sinch**:
-1. Log into Sinch Dashboard
-2. Navigate to Fax → Numbers
+> 📍 **This section configures Sinch (or alternative provider) to send faxes to your OncoLife API.**
+
+#### Required Environment Variables
+
+First, ensure these are set in your Patient API environment:
+
+```bash
+# Fax Service Settings (add to .env or Secrets Manager)
+FAX_INBOUND_NUMBER=+1-555-YOUR-FAX-NUMBER
+FAX_WEBHOOK_SECRET=your_secure_webhook_secret_here
+S3_REFERRAL_BUCKET=oncolife-referrals-YOUR_ACCOUNT_ID
+```
+
+#### Option A: Sinch (Recommended)
+
+1. **Log into Sinch Dashboard** at https://dashboard.sinch.com
+2. Navigate to **Fax → Numbers**
 3. Select your dedicated fax number
 4. Configure webhook:
-   - URL: `https://api.oncolife.com/api/v1/onboarding/webhook/fax/sinch`
-   - Events: `fax.received`
-   - Secret: Same as `FAX_WEBHOOK_SECRET` in your `.env`
 
-For **Twilio**:
-1. Log into Twilio Console
-2. Navigate to Fax → Manage → Fax Numbers
+| Setting | Value |
+|---------|-------|
+| **Webhook URL** | `https://YOUR_PATIENT_ALB_URL/api/v1/onboarding/webhook/fax/sinch` |
+| **Events** | `fax.received` |
+| **Secret** | Same as `FAX_WEBHOOK_SECRET` in your environment |
+| **Method** | POST |
+| **Content-Type** | application/json |
+
+5. **Test the webhook** by sending a test fax to your Sinch number
+
+#### Option B: Twilio
+
+1. Log into **Twilio Console** at https://console.twilio.com
+2. Navigate to **Fax → Manage → Fax Numbers**
 3. Configure incoming webhook:
-   - URL: `https://api.oncolife.com/api/v1/onboarding/webhook/fax/twilio`
-   - Method: POST
+
+| Setting | Value |
+|---------|-------|
+| **Webhook URL** | `https://YOUR_PATIENT_ALB_URL/api/v1/onboarding/webhook/fax/twilio` |
+| **Method** | POST |
+
+#### Option C: Phaxio
+
+1. Log into **Phaxio Dashboard**
+2. Navigate to **Webhooks**
+3. Configure:
+
+| Setting | Value |
+|---------|-------|
+| **Webhook URL** | `https://YOUR_PATIENT_ALB_URL/api/v1/onboarding/webhook/fax/phaxio` |
+| **Events** | `fax.received` |
+
+#### Option D: RingCentral
+
+1. Log into **RingCentral Developer Portal**
+2. Create a webhook subscription for fax events
+3. Set URL: `https://YOUR_PATIENT_ALB_URL/api/v1/onboarding/webhook/fax/ringcentral`
+
+#### Verifying Fax Webhook is Working
+
+```bash
+# Check health endpoint
+curl https://YOUR_PATIENT_ALB_URL/api/v1/health
+
+# Check CloudWatch Logs for fax processing
+aws logs filter-log-events \
+    --log-group-name /ecs/oncolife-patient-api \
+    --filter-pattern "fax webhook"
+```
+
+#### Troubleshooting Fax Webhooks
+
+| Issue | Solution |
+|-------|----------|
+| Webhook not received | Check ALB security group allows HTTPS from internet |
+| Signature validation failed | Verify `FAX_WEBHOOK_SECRET` matches Sinch dashboard |
+| Document not uploaded to S3 | Check `S3_REFERRAL_BUCKET` and IAM permissions |
+| OCR not processing | Verify AWS Textract permissions in task role |
 
 ---
 
