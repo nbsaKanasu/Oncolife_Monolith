@@ -483,10 +483,62 @@ aws ecs update-service `
 
 ---
 
+---
+
+## 📊 Monitoring & Alerts Integration
+
+### Production Monitoring Features
+
+The deployment includes comprehensive monitoring:
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Health Endpoints** | ✅ | `/health`, `/api/v1/health/ready`, `/api/v1/health/live`, `/api/v1/health/detailed` |
+| **Rate Limiting** | ✅ | Auth endpoints limited (5/min login, 3/min password reset) |
+| **CloudWatch Alarms** | ✅ | CPU, Memory, 5xx errors, DB health |
+| **Slack Notifications** | ✅ | Error and critical alerts |
+| **Email Alerts** | ✅ | Via AWS SNS |
+
+### Slack Notifications from CI/CD
+
+Uncomment this in `deploy.yml` to enable Slack notifications:
+
+```yaml
+- name: Send Slack notification
+  uses: 8398a7/action-slack@v3
+  with:
+    status: ${{ job.status }}
+    fields: repo,message,commit,author,action,eventName,ref,workflow
+  env:
+    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+Add `SLACK_WEBHOOK_URL` to your GitHub Secrets.
+
+### Monitoring After Deployment
+
+```bash
+# View deployment status
+aws ecs describe-services \
+    --cluster oncolife-production \
+    --services patient-api-service doctor-api-service \
+    --query 'services[*].{name:serviceName,running:runningCount,status:status}'
+
+# Check health endpoints
+curl http://$PATIENT_ALB/api/v1/health/ready
+curl http://$DOCTOR_ALB/api/v1/health/ready
+
+# View CloudWatch logs
+aws logs tail /ecs/oncolife-patient-api --follow
+```
+
+---
+
 ## 📚 Related Documentation
 
 - [Automated Deployment Guide](AUTOMATED_DEPLOYMENT_GUIDE.md) - One-script AWS deployment
 - [Step-by-Step Deployment Guide](STEP_BY_STEP_DEPLOYMENT.md) - Manual AWS deployment
+- [Deployment Status](DEPLOYMENT_STATUS.md) - Feature completion checklist
 - [Deployment Troubleshooting](DEPLOYMENT_TROUBLESHOOTING.md) - Common deployment issues
 - [Developer Guide](DEVELOPER_GUIDE.md) - Local development setup
 - [Architecture Guide](ARCHITECTURE.md) - System architecture overview

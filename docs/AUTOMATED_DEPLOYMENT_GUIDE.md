@@ -444,10 +444,71 @@ This contains all resource IDs. **Keep this file safe!**
 2. **✅ Run Migrations** - See Step 6 above
 3. **⬜ Set Up CI/CD** - See [CI/CD Pipeline Guide](CI_CD_PIPELINE_GUIDE.md) for automated deployments
 4. **⬜ Deploy Frontend** - Use S3 + CloudFront or ECS
-5. **⬜ (Optional) Set Up Custom Domains** - See [STEP_BY_STEP_DEPLOYMENT.md](STEP_BY_STEP_DEPLOYMENT.md) Section 11
-6. **⬜ (Optional) Configure HTTPS** - Request ACM certificates and add HTTPS listeners
+5. **⬜ Set Up Monitoring** - See "Monitoring Setup" section below
+6. **⬜ (Optional) Set Up Custom Domains** - See [STEP_BY_STEP_DEPLOYMENT.md](STEP_BY_STEP_DEPLOYMENT.md) Section 11
+7. **⬜ (Optional) Configure HTTPS** - Request ACM certificates and add HTTPS listeners
 
 > 💡 **Tip**: Custom domains are **OPTIONAL**! You can use the ALB DNS names directly for testing and development. See the next section.
+
+---
+
+## Step 8: Set Up Monitoring (Recommended)
+
+### 8.1 Run Monitoring Setup Script
+
+This creates SNS topics, CloudWatch log groups, and a dashboard:
+
+```bash
+# Bash
+./scripts/aws/setup-monitoring.sh production your-email@company.com
+
+# PowerShell
+# (Use AWS Console or Bash script)
+```
+
+### 8.2 Configure Slack Notifications (Optional)
+
+1. Create a Slack Incoming Webhook in your workspace
+2. Add to environment variables:
+
+```bash
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/xxx/yyy/zzz"
+```
+
+### 8.3 Apply CloudWatch Alarms (Requires Terraform)
+
+```bash
+cd scripts/aws
+
+# Initialize Terraform
+terraform init
+
+# Review what will be created
+terraform plan -var="sns_alert_topic_arn=arn:aws:sns:us-west-2:ACCOUNT:oncolife-production-alerts"
+
+# Apply alarms
+terraform apply
+```
+
+This creates alarms for:
+- ECS CPU/Memory > 80%
+- No running tasks (critical)
+- ALB 5xx errors > 10/min
+- RDS CPU > 80%, storage < 5GB
+- Authentication failures > 50/min
+
+### 8.4 Test Health Endpoints
+
+```bash
+# Basic health (for ALB)
+curl http://$PATIENT_ALB/health
+
+# Readiness (checks database connection)
+curl http://$PATIENT_ALB/api/v1/health/ready
+
+# Detailed (includes system metrics)
+curl http://$PATIENT_ALB/api/v1/health/detailed
+```
 
 ---
 
