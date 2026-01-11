@@ -26,7 +26,7 @@ from fastapi import APIRouter
 
 from .endpoints import (
     auth, chat, patients, profile, health, 
-    chemo, diary, summaries, onboarding, education, questions
+    chemo, diary, summaries, onboarding, education, questions, docs
 )
 
 # Create main v1 router
@@ -95,5 +95,12 @@ router.include_router(
     questions.router,
     prefix="/questions",
     tags=["Questions to Ask Doctor"]
+)
+
+router.include_router(
+    docs.router,
+    prefix="/docs",
+    tags=["API Documentation"],
+    include_in_schema=False,  # Don't show docs endpoints in docs
 )
 

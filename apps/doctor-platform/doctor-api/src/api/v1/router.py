@@ -25,6 +25,7 @@ from .endpoints import (
     patients,
     dashboard,
     registration,
+    docs,
 )
 
 # Create the main API router for v1
@@ -81,6 +82,14 @@ api_router.include_router(
     registration.router,
     prefix="/registration",
     tags=["Registration"],
+)
+
+# Secured API Documentation (production)
+api_router.include_router(
+    docs.router,
+    prefix="/docs",
+    tags=["API Documentation"],
+    include_in_schema=False,
 )
 
 

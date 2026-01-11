@@ -10,25 +10,29 @@ Endpoints:
 - chat: Symptom checker chat (REST + WebSocket)
 - chemo: Chemotherapy date management
 - diary: Patient diary entries
+- docs: Secured API documentation (production)
 - education: Patient education resources and summaries
 - health: Health check
 - patients: Patient management
 - profile: Patient profile and configuration
+- questions: Questions to ask doctor
 - summaries: Conversation summaries
 """
 
-from . import auth, chat, chemo, diary, education, health, onboarding, patients, profile, summaries
+from . import auth, chat, chemo, diary, docs, education, health, onboarding, patients, profile, questions, summaries
 
 __all__ = [
     "auth",
     "chat",
     "chemo",
     "diary",
+    "docs",
     "education",
     "health",
     "onboarding",
     "patients",
     "profile",
+    "questions",
     "summaries",
 ]
 

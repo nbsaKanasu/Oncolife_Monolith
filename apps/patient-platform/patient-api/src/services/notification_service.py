@@ -1,605 +1,544 @@
 """
-Notification Service - AWS SES & SNS Integration.
+Notification Service for OncoLife Patient API.
 
-This service handles all patient communications during onboarding:
-- Welcome emails with temporary credentials
-- SMS notifications
-- Onboarding reminder emails
-- Password reset notifications
+This service handles sending notifications via:
+- Slack webhooks (for team alerts)
+- AWS SNS (for email/SMS)
+- CloudWatch metrics (for dashboards)
 
-Features:
-- Email via AWS SES
-- SMS via AWS SNS
-- Template support
-- Delivery tracking
-- Retry logic
+Used for:
+- Application errors and exceptions
+- Health check failures
+- Security alerts (rate limiting, auth failures)
+- Business metrics
 
-Usage:
-    from services import NotificationService
-    
-    notification_service = NotificationService()
-    await notification_service.send_welcome_email(
-        email="patient@example.com",
-        first_name="John",
-        temp_password="abc123",
-    )
+Configuration:
+    Set the following environment variables:
+    - SLACK_WEBHOOK_URL: Slack incoming webhook URL
+    - SNS_ALERT_TOPIC_ARN: AWS SNS topic for email/SMS alerts
+    - CLOUDWATCH_NAMESPACE: Custom CloudWatch namespace
 """
 
-import os
-from typing import Optional, Dict, Any, List
+import json
+import time
 from datetime import datetime
-
+from typing import Optional, Dict, Any, List
+from enum import Enum
+import httpx
 import boto3
 from botocore.exceptions import ClientError
 
 from core.config import settings
 from core.logging import get_logger
-from core.exceptions import ExternalServiceError
 
 logger = get_logger(__name__)
 
 
-class NotificationService:
+class AlertSeverity(Enum):
+    """Alert severity levels."""
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
+
+
+class NotificationChannel(Enum):
+    """Available notification channels."""
+    SLACK = "slack"
+    EMAIL = "email"  # via SNS
+    SMS = "sms"  # via SNS
+    CLOUDWATCH = "cloudwatch"
+
+
+# =============================================================================
+# SLACK NOTIFICATIONS
+# =============================================================================
+
+class SlackNotifier:
     """
-    AWS SES/SNS notification service.
+    Send notifications to Slack via webhooks.
     
-    Provides:
-    - Welcome email with login credentials
-    - Welcome SMS with app link
-    - Onboarding reminder notifications
-    - General email/SMS sending
+    Formats messages with rich attachments including:
+    - Severity-colored sidebar
+    - Environment and service info
+    - Error details and stack traces
+    - Action buttons for quick access
     """
     
-    def __init__(
+    SEVERITY_COLORS = {
+        AlertSeverity.INFO: "#36a64f",      # Green
+        AlertSeverity.WARNING: "#f2c744",   # Yellow
+        AlertSeverity.ERROR: "#e01e5a",     # Red
+        AlertSeverity.CRITICAL: "#8b0000",  # Dark Red
+    }
+    
+    SEVERITY_EMOJIS = {
+        AlertSeverity.INFO: ":information_source:",
+        AlertSeverity.WARNING: ":warning:",
+        AlertSeverity.ERROR: ":x:",
+        AlertSeverity.CRITICAL: ":rotating_light:",
+    }
+    
+    def __init__(self, webhook_url: Optional[str] = None):
+        self.webhook_url = webhook_url or getattr(settings, 'slack_webhook_url', None)
+        self.service_name = settings.app_name
+        self.environment = settings.environment
+    
+    async def send_alert(
         self,
-        ses_client: Optional[Any] = None,
-        sns_client: Optional[Any] = None,
-    ):
-        """
-        Initialize the notification service.
-        
-        Args:
-            ses_client: AWS SES client (optional)
-            sns_client: AWS SNS client (optional)
-        """
-        self._ses_client = ses_client
-        self._sns_client = sns_client
-        self.aws_region = settings.aws_region
-        self.sender_email = settings.ses_sender_email
-        self.sender_name = settings.ses_sender_name
-    
-    @property
-    def ses_client(self):
-        """Get or create SES client."""
-        if self._ses_client is None:
-            self._ses_client = boto3.client(
-                "ses",
-                region_name=self.aws_region,
-            )
-        return self._ses_client
-    
-    @property
-    def sns_client(self):
-        """Get or create SNS client."""
-        if self._sns_client is None:
-            self._sns_client = boto3.client(
-                "sns",
-                region_name=self.aws_region,
-            )
-        return self._sns_client
-    
-    # =========================================================================
-    # WELCOME NOTIFICATIONS
-    # =========================================================================
-    
-    async def send_welcome_email(
-        self,
-        email: str,
-        first_name: str,
-        temp_password: str,
-        physician_name: Optional[str] = None,
-        login_url: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Send welcome email to new patient.
-        
-        Args:
-            email: Patient's email address
-            first_name: Patient's first name
-            temp_password: Temporary password
-            physician_name: Referring physician's name
-            login_url: URL to login page
-            
-        Returns:
-            Dict with message_id and status
-        """
-        logger.info(f"Sending welcome email to: {email}")
-        
-        login_url = login_url or "https://app.oncolife.com/login"
-        
-        subject = "Welcome to OncoLife - Your Personal Health Companion"
-        
-        html_body = self._get_welcome_email_html(
-            first_name=first_name,
-            email=email,
-            temp_password=temp_password,
-            physician_name=physician_name,
-            login_url=login_url,
-        )
-        
-        text_body = self._get_welcome_email_text(
-            first_name=first_name,
-            email=email,
-            temp_password=temp_password,
-            physician_name=physician_name,
-            login_url=login_url,
-        )
-        
-        return await self._send_email(
-            to_address=email,
-            subject=subject,
-            html_body=html_body,
-            text_body=text_body,
-        )
-    
-    async def send_welcome_sms(
-        self,
-        phone_number: str,
-        first_name: str,
-        login_url: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Send welcome SMS to new patient.
-        
-        Args:
-            phone_number: Patient's phone number
-            first_name: Patient's first name
-            login_url: URL to login page
-            
-        Returns:
-            Dict with message_id and status
-        """
-        logger.info(f"Sending welcome SMS to: {phone_number}")
-        
-        login_url = login_url or "https://app.oncolife.com"
-        
-        message = (
-            f"Hi {first_name}, welcome to OncoLife! "
-            f"Your doctor has enrolled you in our care program. "
-            f"Check your email for login details. "
-            f"Questions? Reply to this message."
-        )
-        
-        return await self._send_sms(
-            phone_number=phone_number,
-            message=message,
-        )
-    
-    # =========================================================================
-    # REMINDER NOTIFICATIONS
-    # =========================================================================
-    
-    async def send_onboarding_reminder(
-        self,
-        email: str,
-        first_name: str,
-        days_since_registration: int,
-        login_url: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Send reminder to complete onboarding.
-        
-        Args:
-            email: Patient's email
-            first_name: Patient's first name
-            days_since_registration: Days since account was created
-            login_url: URL to login page
-            
-        Returns:
-            Dict with message_id and status
-        """
-        logger.info(f"Sending onboarding reminder to: {email}")
-        
-        login_url = login_url or "https://app.oncolife.com/login"
-        
-        subject = f"Complete Your OncoLife Setup, {first_name}"
-        
-        html_body = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background-color: #6B46C1; color: white; padding: 20px; text-align: center; }}
-                .content {{ padding: 30px 20px; }}
-                .button {{ 
-                    display: inline-block; 
-                    background-color: #6B46C1; 
-                    color: white !important; 
-                    padding: 12px 30px; 
-                    text-decoration: none; 
-                    border-radius: 5px; 
-                    margin: 20px 0;
-                }}
-                .footer {{ font-size: 12px; color: #666; padding: 20px; border-top: 1px solid #eee; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>OncoLife</h1>
-                </div>
-                <div class="content">
-                    <h2>Hi {first_name},</h2>
-                    <p>We noticed you haven't completed your OncoLife setup yet.</p>
-                    <p>Your care team is waiting to help you track your symptoms and stay connected during your treatment. It only takes a few minutes to complete!</p>
-                    <p style="text-align: center;">
-                        <a href="{login_url}" class="button">Complete Setup Now</a>
-                    </p>
-                    <p>What you'll set up:</p>
-                    <ul>
-                        <li>✓ Your secure password</li>
-                        <li>✓ Review important health information</li>
-                        <li>✓ Set your reminder preferences</li>
-                    </ul>
-                    <p>If you need help, just reply to this email or call us at 1-855-ONCOLIFE.</p>
-                </div>
-                <div class="footer">
-                    <p>OncoLife Care Team</p>
-                    <p>This message was sent because your doctor enrolled you in OncoLife.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
-        text_body = f"""
-Hi {first_name},
-
-We noticed you haven't completed your OncoLife setup yet.
-
-Your care team is waiting to help you track your symptoms and stay connected during your treatment. It only takes a few minutes to complete!
-
-Click here to complete your setup: {login_url}
-
-What you'll set up:
-- Your secure password
-- Review important health information  
-- Set your reminder preferences
-
-If you need help, just reply to this email or call us at 1-855-ONCOLIFE.
-
-OncoLife Care Team
-        """
-        
-        return await self._send_email(
-            to_address=email,
-            subject=subject,
-            html_body=html_body,
-            text_body=text_body,
-        )
-    
-    # =========================================================================
-    # EMAIL TEMPLATES
-    # =========================================================================
-    
-    def _get_welcome_email_html(
-        self,
-        first_name: str,
-        email: str,
-        temp_password: str,
-        physician_name: Optional[str],
-        login_url: str,
-    ) -> str:
-        """Generate HTML body for welcome email."""
-        physician_text = f" referred by Dr. {physician_name}" if physician_name else ""
-        
-        return f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background-color: #6B46C1; color: white; padding: 30px; text-align: center; }}
-                .header h1 {{ margin: 0; font-size: 28px; }}
-                .content {{ padding: 30px 20px; background: #fff; }}
-                .credentials {{ 
-                    background-color: #f7f7f7; 
-                    padding: 20px; 
-                    border-radius: 8px; 
-                    margin: 20px 0;
-                    border-left: 4px solid #6B46C1;
-                }}
-                .credentials p {{ margin: 5px 0; }}
-                .credentials strong {{ color: #333; }}
-                .button {{ 
-                    display: inline-block; 
-                    background-color: #6B46C1; 
-                    color: white !important; 
-                    padding: 15px 40px; 
-                    text-decoration: none; 
-                    border-radius: 5px; 
-                    margin: 20px 0;
-                    font-weight: bold;
-                }}
-                .steps {{ background: #f9f9f9; padding: 20px; border-radius: 8px; }}
-                .steps h3 {{ color: #6B46C1; margin-top: 0; }}
-                .steps ol {{ padding-left: 20px; }}
-                .steps li {{ margin: 10px 0; }}
-                .footer {{ 
-                    font-size: 12px; 
-                    color: #666; 
-                    padding: 20px; 
-                    border-top: 1px solid #eee;
-                    text-align: center;
-                }}
-                .warning {{ 
-                    background: #fff3cd; 
-                    border: 1px solid #ffc107; 
-                    padding: 15px; 
-                    border-radius: 5px; 
-                    margin: 15px 0;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🏥 Welcome to OncoLife</h1>
-                    <p style="margin: 10px 0 0 0; opacity: 0.9;">Your Personal Health Companion</p>
-                </div>
-                
-                <div class="content">
-                    <h2>Hi {first_name},</h2>
-                    
-                    <p>Your healthcare team{physician_text} has enrolled you in <strong>OncoLife</strong> — a personal health companion designed to help you track symptoms and stay connected with your care team during your treatment.</p>
-                    
-                    <div class="credentials">
-                        <h3 style="margin-top: 0; color: #6B46C1;">🔐 Your Login Credentials</h3>
-                        <p><strong>Username:</strong> {email}</p>
-                        <p><strong>Temporary Password:</strong> {temp_password}</p>
-                    </div>
-                    
-                    <div class="warning">
-                        ⚠️ <strong>Important:</strong> You will be asked to create a new password when you first log in.
-                    </div>
-                    
-                    <p style="text-align: center;">
-                        <a href="{login_url}" class="button">Log In to OncoLife →</a>
-                    </p>
-                    
-                    <div class="steps">
-                        <h3>📋 First-Time Setup (Takes ~3 minutes)</h3>
-                        <ol>
-                            <li><strong>Create Your Password</strong> — Set a secure password you'll remember</li>
-                            <li><strong>Read Important Information</strong> — Understand how OncoLife helps (not replaces) your care team</li>
-                            <li><strong>Accept Terms</strong> — Review and accept our terms and privacy policy</li>
-                            <li><strong>Set Reminders</strong> — Choose how and when you'd like to be reminded to check in</li>
-                        </ol>
-                    </div>
-                    
-                    <h3 style="margin-top: 30px;">What is OncoLife?</h3>
-                    <p>OncoLife is a simple tool that lets you:</p>
-                    <ul>
-                        <li>📝 Report how you're feeling each day</li>
-                        <li>🔔 Get smart alerts if symptoms need attention</li>
-                        <li>📊 Share updates with your care team automatically</li>
-                        <li>📅 Track your treatment journey</li>
-                    </ul>
-                    
-                    <p><strong>Questions?</strong> Reply to this email or call us at <strong>1-855-ONCOLIFE</strong>.</p>
-                </div>
-                
-                <div class="footer">
-                    <p>OncoLife Care Team</p>
-                    <p>You received this email because your healthcare provider enrolled you in OncoLife.</p>
-                    <p>© 2026 OncoLife Health, Inc. All rights reserved.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-    
-    def _get_welcome_email_text(
-        self,
-        first_name: str,
-        email: str,
-        temp_password: str,
-        physician_name: Optional[str],
-        login_url: str,
-    ) -> str:
-        """Generate plain text body for welcome email."""
-        physician_text = f" referred by Dr. {physician_name}" if physician_name else ""
-        
-        return f"""
-Welcome to OncoLife!
-====================
-
-Hi {first_name},
-
-Your healthcare team{physician_text} has enrolled you in OncoLife — a personal health companion designed to help you track symptoms and stay connected with your care team during your treatment.
-
-YOUR LOGIN CREDENTIALS
------------------------
-Username: {email}
-Temporary Password: {temp_password}
-
-IMPORTANT: You will be asked to create a new password when you first log in.
-
-Log in here: {login_url}
-
-FIRST-TIME SETUP (Takes ~3 minutes)
-------------------------------------
-1. Create Your Password — Set a secure password you'll remember
-2. Read Important Information — Understand how OncoLife helps (not replaces) your care team
-3. Accept Terms — Review and accept our terms and privacy policy
-4. Set Reminders — Choose how and when you'd like to be reminded to check in
-
-WHAT IS ONCOLIFE?
------------------
-OncoLife is a simple tool that lets you:
-• Report how you're feeling each day
-• Get smart alerts if symptoms need attention
-• Share updates with your care team automatically
-• Track your treatment journey
-
-Questions? Reply to this email or call us at 1-855-ONCOLIFE.
-
-OncoLife Care Team
-
----
-You received this email because your healthcare provider enrolled you in OncoLife.
-© 2026 OncoLife Health, Inc. All rights reserved.
-        """
-    
-    # =========================================================================
-    # CORE EMAIL/SMS SENDING
-    # =========================================================================
-    
-    async def _send_email(
-        self,
-        to_address: str,
-        subject: str,
-        html_body: str,
-        text_body: str,
-    ) -> Dict[str, Any]:
-        """
-        Send an email via AWS SES.
-        
-        Args:
-            to_address: Recipient email address
-            subject: Email subject
-            html_body: HTML content
-            text_body: Plain text content
-            
-        Returns:
-            Dict with message_id and status
-        """
-        try:
-            response = self.ses_client.send_email(
-                Source=f"{self.sender_name} <{self.sender_email}>",
-                Destination={"ToAddresses": [to_address]},
-                Message={
-                    "Subject": {"Data": subject, "Charset": "UTF-8"},
-                    "Body": {
-                        "Text": {"Data": text_body, "Charset": "UTF-8"},
-                        "Html": {"Data": html_body, "Charset": "UTF-8"},
-                    },
-                },
-            )
-            
-            message_id = response["MessageId"]
-            logger.info(f"Email sent: {to_address} (MessageId: {message_id})")
-            
-            return {
-                "success": True,
-                "message_id": message_id,
-                "recipient": to_address,
-            }
-            
-        except ClientError as e:
-            error_code = e.response["Error"]["Code"]
-            error_message = e.response["Error"]["Message"]
-            logger.error(f"SES error: {error_code} - {error_message}")
-            
-            raise ExternalServiceError(
-                message=f"Failed to send email: {error_message}",
-                service_name="AWS SES",
-            )
-    
-    async def _send_sms(
-        self,
-        phone_number: str,
+        title: str,
         message: str,
-    ) -> Dict[str, Any]:
+        severity: AlertSeverity = AlertSeverity.ERROR,
+        details: Optional[Dict[str, Any]] = None,
+        error: Optional[Exception] = None,
+    ) -> bool:
         """
-        Send an SMS via AWS SNS.
+        Send an alert to Slack.
         
         Args:
-            phone_number: Recipient phone number (E.164 format preferred)
-            message: SMS message content
-            
-        Returns:
-            Dict with message_id and status
-        """
-        # Ensure E.164 format
-        if not phone_number.startswith("+"):
-            phone_number = f"+1{phone_number.replace('-', '').replace(' ', '')}"
+            title: Alert title
+            message: Alert description
+            severity: Alert severity level
+            details: Additional context (request info, metrics, etc.)
+            error: Exception object if applicable
         
-        try:
-            response = self.sns_client.publish(
-                PhoneNumber=phone_number,
-                Message=message,
-                MessageAttributes={
-                    "AWS.SNS.SMS.SenderID": {
-                        "DataType": "String",
-                        "StringValue": "OncoLife",
-                    },
-                    "AWS.SNS.SMS.SMSType": {
-                        "DataType": "String",
-                        "StringValue": "Transactional",
-                    },
-                },
-            )
-            
-            message_id = response["MessageId"]
-            logger.info(f"SMS sent: {phone_number} (MessageId: {message_id})")
-            
-            return {
-                "success": True,
-                "message_id": message_id,
-                "recipient": phone_number,
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        if not self.webhook_url:
+            logger.debug("Slack webhook URL not configured, skipping notification")
+            return False
+        
+        emoji = self.SEVERITY_EMOJIS[severity]
+        color = self.SEVERITY_COLORS[severity]
+        
+        # Build the Slack message
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"{emoji} {title}",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": message
+                }
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Service:* {self.service_name} | *Environment:* {self.environment} | *Time:* {datetime.utcnow().isoformat()}Z"
+                    }
+                ]
             }
-            
-        except ClientError as e:
-            error_code = e.response["Error"]["Code"]
-            error_message = e.response["Error"]["Message"]
-            logger.error(f"SNS error: {error_code} - {error_message}")
-            
-            raise ExternalServiceError(
-                message=f"Failed to send SMS: {error_message}",
-                service_name="AWS SNS",
-            )
-    
-    # =========================================================================
-    # BULK SENDING
-    # =========================================================================
-    
-    async def send_bulk_emails(
-        self,
-        emails: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
-        """
-        Send multiple emails.
+        ]
         
-        Args:
-            emails: List of email configs with keys:
-                - to_address
-                - subject
-                - html_body
-                - text_body
-                
-        Returns:
-            List of results for each email
-        """
-        results = []
-        
-        for email_config in emails:
-            try:
-                result = await self._send_email(**email_config)
-                results.append(result)
-            except Exception as e:
-                results.append({
-                    "success": False,
-                    "recipient": email_config.get("to_address"),
-                    "error": str(e),
+        # Add details if provided
+        if details:
+            fields = []
+            for key, value in details.items():
+                fields.append({
+                    "type": "mrkdwn",
+                    "text": f"*{key}:*\n{value}"
+                })
+            
+            if fields:
+                blocks.append({
+                    "type": "section",
+                    "fields": fields[:10]  # Slack limits to 10 fields
                 })
         
+        # Add error traceback if provided
+        if error:
+            import traceback
+            tb = traceback.format_exception(type(error), error, error.__traceback__)
+            error_text = "".join(tb)[-2000:]  # Limit size
+            
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"```{error_text}```"
+                }
+            })
+        
+        payload = {
+            "attachments": [
+                {
+                    "color": color,
+                    "blocks": blocks
+                }
+            ]
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    self.webhook_url,
+                    json=payload,
+                    headers={"Content-Type": "application/json"}
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"Slack notification sent: {title}")
+                    return True
+                else:
+                    logger.error(f"Slack notification failed: {response.status_code}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Failed to send Slack notification: {e}")
+            return False
+
+
+# =============================================================================
+# AWS SNS NOTIFICATIONS (Email/SMS)
+# =============================================================================
+
+class SNSNotifier:
+    """
+    Send notifications via AWS SNS for email and SMS.
+    
+    Prerequisites:
+    - SNS topic created with email/SMS subscriptions
+    - IAM role with sns:Publish permission
+    """
+    
+    def __init__(self, topic_arn: Optional[str] = None):
+        self.topic_arn = topic_arn or getattr(settings, 'sns_alert_topic_arn', None)
+        self.client = boto3.client('sns', region_name=getattr(settings, 'aws_region', 'eu-west-2'))
+        self.service_name = settings.app_name
+        self.environment = settings.environment
+    
+    def send_alert(
+        self,
+        title: str,
+        message: str,
+        severity: AlertSeverity = AlertSeverity.ERROR,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """
+        Send an alert via SNS.
+        
+        Args:
+            title: Alert title (used as email subject)
+            message: Alert description
+            severity: Alert severity level
+            details: Additional context
+        
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        if not self.topic_arn:
+            logger.debug("SNS topic ARN not configured, skipping notification")
+            return False
+        
+        # Build the message
+        full_message = f"""
+[{severity.value.upper()}] {title}
+
+Service: {self.service_name}
+Environment: {self.environment}
+Time: {datetime.utcnow().isoformat()}Z
+
+Message:
+{message}
+"""
+        
+        if details:
+            full_message += "\nDetails:\n"
+            for key, value in details.items():
+                full_message += f"  - {key}: {value}\n"
+        
+        try:
+            response = self.client.publish(
+                TopicArn=self.topic_arn,
+                Subject=f"[{self.environment.upper()}] {severity.value.upper()}: {title}"[:100],
+                Message=full_message,
+                MessageAttributes={
+                    'severity': {
+                        'DataType': 'String',
+                        'StringValue': severity.value
+                    },
+                    'service': {
+                        'DataType': 'String',
+                        'StringValue': self.service_name
+                    },
+                    'environment': {
+                        'DataType': 'String',
+                        'StringValue': self.environment
+                    }
+                }
+            )
+            
+            logger.info(f"SNS notification sent: {response['MessageId']}")
+            return True
+            
+        except ClientError as e:
+            logger.error(f"Failed to send SNS notification: {e}")
+            return False
+
+
+# =============================================================================
+# CLOUDWATCH METRICS
+# =============================================================================
+
+class CloudWatchMetrics:
+    """
+    Send custom metrics to CloudWatch for dashboards and alarms.
+    
+    Metrics:
+    - API error counts by type
+    - Authentication failures
+    - Rate limit hits
+    - Database connection failures
+    - Response latencies
+    """
+    
+    def __init__(self, namespace: Optional[str] = None):
+        self.namespace = namespace or getattr(settings, 'cloudwatch_namespace', 'OncoLife/PatientAPI')
+        self.client = boto3.client('cloudwatch', region_name=getattr(settings, 'aws_region', 'eu-west-2'))
+        self.environment = settings.environment
+    
+    def put_metric(
+        self,
+        metric_name: str,
+        value: float,
+        unit: str = "Count",
+        dimensions: Optional[Dict[str, str]] = None,
+    ) -> bool:
+        """
+        Put a custom metric to CloudWatch.
+        
+        Args:
+            metric_name: Name of the metric
+            value: Metric value
+            unit: Unit type (Count, Seconds, Milliseconds, etc.)
+            dimensions: Additional dimensions for the metric
+        
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        metric_dimensions = [
+            {'Name': 'Environment', 'Value': self.environment},
+        ]
+        
+        if dimensions:
+            for name, value_str in dimensions.items():
+                metric_dimensions.append({'Name': name, 'Value': value_str})
+        
+        try:
+            self.client.put_metric_data(
+                Namespace=self.namespace,
+                MetricData=[
+                    {
+                        'MetricName': metric_name,
+                        'Dimensions': metric_dimensions,
+                        'Value': value,
+                        'Unit': unit,
+                        'Timestamp': datetime.utcnow()
+                    }
+                ]
+            )
+            return True
+            
+        except ClientError as e:
+            logger.error(f"Failed to put CloudWatch metric: {e}")
+            return False
+    
+    def increment_counter(
+        self,
+        metric_name: str,
+        dimensions: Optional[Dict[str, str]] = None,
+    ) -> bool:
+        """Increment a counter metric by 1."""
+        return self.put_metric(metric_name, 1.0, "Count", dimensions)
+    
+    def record_latency(
+        self,
+        metric_name: str,
+        latency_ms: float,
+        dimensions: Optional[Dict[str, str]] = None,
+    ) -> bool:
+        """Record a latency metric in milliseconds."""
+        return self.put_metric(metric_name, latency_ms, "Milliseconds", dimensions)
+
+
+# =============================================================================
+# UNIFIED NOTIFICATION SERVICE
+# =============================================================================
+
+class NotificationService:
+    """
+    Unified notification service that routes alerts to appropriate channels.
+    
+    Channel selection based on severity:
+    - CRITICAL: Slack + SNS (Email/SMS) + CloudWatch
+    - ERROR: Slack + CloudWatch
+    - WARNING: Slack (optional) + CloudWatch
+    - INFO: CloudWatch only
+    
+    Usage:
+        notification_service = NotificationService()
+        
+        await notification_service.send_alert(
+            title="Database Connection Failed",
+            message="Unable to connect to patient database",
+            severity=AlertSeverity.CRITICAL,
+            details={"host": "db.example.com", "port": 5432}
+        )
+    """
+    
+    def __init__(self):
+        self.slack = SlackNotifier()
+        self.sns = SNSNotifier()
+        self.cloudwatch = CloudWatchMetrics()
+    
+    async def send_alert(
+        self,
+        title: str,
+        message: str,
+        severity: AlertSeverity = AlertSeverity.ERROR,
+        details: Optional[Dict[str, Any]] = None,
+        error: Optional[Exception] = None,
+        channels: Optional[List[NotificationChannel]] = None,
+    ) -> Dict[str, bool]:
+        """
+        Send an alert to appropriate notification channels.
+        
+        Args:
+            title: Alert title
+            message: Alert description
+            severity: Alert severity level
+            details: Additional context
+            error: Exception object if applicable
+            channels: Override default channel selection
+        
+        Returns:
+            Dict with success status for each channel
+        """
+        results = {}
+        
+        # Determine channels based on severity if not specified
+        if channels is None:
+            if severity == AlertSeverity.CRITICAL:
+                channels = [NotificationChannel.SLACK, NotificationChannel.EMAIL, NotificationChannel.CLOUDWATCH]
+            elif severity == AlertSeverity.ERROR:
+                channels = [NotificationChannel.SLACK, NotificationChannel.CLOUDWATCH]
+            elif severity == AlertSeverity.WARNING:
+                channels = [NotificationChannel.CLOUDWATCH]
+            else:
+                channels = [NotificationChannel.CLOUDWATCH]
+        
+        # Send to each channel
+        if NotificationChannel.SLACK in channels:
+            results["slack"] = await self.slack.send_alert(
+                title=title,
+                message=message,
+                severity=severity,
+                details=details,
+                error=error,
+            )
+        
+        if NotificationChannel.EMAIL in channels or NotificationChannel.SMS in channels:
+            results["sns"] = self.sns.send_alert(
+                title=title,
+                message=message,
+                severity=severity,
+                details=details,
+            )
+        
+        if NotificationChannel.CLOUDWATCH in channels:
+            # Put error metric to CloudWatch
+            results["cloudwatch"] = self.cloudwatch.increment_counter(
+                metric_name=f"Alert_{severity.value.capitalize()}",
+                dimensions={"AlertType": title.replace(" ", "_")[:50]}
+            )
+        
         return results
+    
+    def record_api_error(
+        self,
+        error_type: str,
+        endpoint: str,
+        status_code: int,
+    ) -> bool:
+        """Record an API error metric."""
+        return self.cloudwatch.increment_counter(
+            metric_name="APIError",
+            dimensions={
+                "ErrorType": error_type,
+                "Endpoint": endpoint[:50],
+                "StatusCode": str(status_code),
+            }
+        )
+    
+    def record_auth_failure(self, reason: str) -> bool:
+        """Record an authentication failure metric."""
+        return self.cloudwatch.increment_counter(
+            metric_name="AuthenticationFailure",
+            dimensions={"Reason": reason}
+        )
+    
+    def record_rate_limit_hit(self, endpoint: str, client_id: str) -> bool:
+        """Record a rate limit hit metric."""
+        return self.cloudwatch.increment_counter(
+            metric_name="RateLimitHit",
+            dimensions={
+                "Endpoint": endpoint[:50],
+                "ClientType": "user" if client_id.startswith("user:") else "ip"
+            }
+        )
+    
+    def record_db_health(self, database: str, is_healthy: bool, latency_ms: float) -> bool:
+        """Record database health metrics."""
+        self.cloudwatch.increment_counter(
+            metric_name="DatabaseHealthCheck",
+            dimensions={
+                "Database": database,
+                "Status": "healthy" if is_healthy else "unhealthy"
+            }
+        )
+        
+        if is_healthy:
+            self.cloudwatch.record_latency(
+                metric_name="DatabaseLatency",
+                latency_ms=latency_ms,
+                dimensions={"Database": database}
+            )
+        
+        return True
 
 
+# =============================================================================
+# SINGLETON INSTANCE
+# =============================================================================
+
+# Create a singleton instance for easy access
+_notification_service: Optional[NotificationService] = None
 
 
+def get_notification_service() -> NotificationService:
+    """Get or create the notification service singleton."""
+    global _notification_service
+    if _notification_service is None:
+        _notification_service = NotificationService()
+    return _notification_service
 
+
+__all__ = [
+    "NotificationService",
+    "get_notification_service",
+    "AlertSeverity",
+    "NotificationChannel",
+    "SlackNotifier",
+    "SNSNotifier",
+    "CloudWatchMetrics",
+]

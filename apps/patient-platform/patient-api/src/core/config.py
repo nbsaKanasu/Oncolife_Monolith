@@ -243,6 +243,28 @@ class Settings(BaseSettings):
     )
     
     # ==========================================================================
+    # MONITORING & NOTIFICATIONS
+    # ==========================================================================
+    
+    # Slack Notifications
+    slack_webhook_url: Optional[str] = Field(
+        default=None,
+        description="Slack webhook URL for sending alerts"
+    )
+    
+    # SNS Alert Topic (for email/SMS alerts)
+    sns_alert_topic_arn: Optional[str] = Field(
+        default=None,
+        description="SNS Topic ARN for alert notifications"
+    )
+    
+    # CloudWatch Metrics
+    cloudwatch_namespace: str = Field(
+        default="OncoLife/PatientAPI",
+        description="CloudWatch namespace for custom metrics"
+    )
+    
+    # ==========================================================================
     # ONBOARDING SETTINGS
     # ==========================================================================
     
