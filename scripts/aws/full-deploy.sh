@@ -12,10 +12,6 @@
 #   3. Run from the project root directory (Oncolife_Monolith)
 #
 # Note: This script works with Git Bash on Windows (MINGW64)
-
-# Prevent Git Bash from converting Unix paths to Windows paths
-export MSYS_NO_PATHCONV=1
-export MSYS2_ARG_CONV_EXCL="*"
 #
 # Options:
 #   --region REGION      AWS region (default: us-west-2)
@@ -30,6 +26,10 @@ export MSYS2_ARG_CONV_EXCL="*"
 #   ./scripts/aws/full-deploy.sh --skip-vpc --skip-rds --skip-cognito
 #
 # =============================================================================
+
+# Prevent Git Bash from converting Unix paths to Windows paths
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
 
 set -e
 
@@ -67,14 +67,24 @@ SKIP_BUILD=false
 SKIP_SECURITY_GROUPS=false
 SKIP_COGNITO=false
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m'
+# Colors (with fallback for Windows)
+if [[ "$TERM" == "dumb" ]] || [[ -z "$TERM" ]]; then
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    CYAN=''
+    MAGENTA=''
+    NC=''
+else
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    MAGENTA='\033[0;35m'
+    NC='\033[0m'
+fi
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -88,19 +98,19 @@ log_step() {
 }
 
 log_info() {
-    echo -e "${BLUE}  → $1${NC}"
+    echo -e "${BLUE}  -> $1${NC}"
 }
 
 log_success() {
-    echo -e "${GREEN}  ✓ $1${NC}"
+    echo -e "${GREEN}  [OK] $1${NC}"
 }
 
 log_warning() {
-    echo -e "${YELLOW}  ⚠ $1${NC}"
+    echo -e "${YELLOW}  [WARN] $1${NC}"
 }
 
 log_error() {
-    echo -e "${RED}  ✗ $1${NC}"
+    echo -e "${RED}  [ERROR] $1${NC}"
 }
 
 get_password() {
@@ -109,6 +119,12 @@ get_password() {
     echo -e "${YELLOW}  Requirements: 8+ chars, letters, numbers, no @/\"/spaces${NC}"
     read -sp "  Database Password: " DB_PASSWORD
     echo ""
+    
+    # Validate password length
+    if [ ${#DB_PASSWORD} -lt 8 ]; then
+        log_error "Password must be at least 8 characters!"
+        get_password
+    fi
 }
 
 wait_for_resource() {
@@ -131,9 +147,18 @@ wait_for_resource() {
         elapsed=$((elapsed + interval))
     done
     
+    echo ""
     log_error "Timeout waiting for $type '$name'"
     return 1
 }
+
+# Cleanup function for temp files
+cleanup_temp_files() {
+    rm -f ./patient-task-def.json ./doctor-task-def.json 2>/dev/null || true
+}
+
+# Set trap to cleanup on exit
+trap cleanup_temp_files EXIT
 
 # =============================================================================
 # PARSE ARGUMENTS
@@ -194,9 +219,12 @@ check_prerequisites() {
     # Check AWS CLI
     if ! command -v aws &> /dev/null; then
         log_error "AWS CLI not found. Please install it first."
+        log_info "Install from: https://aws.amazon.com/cli/"
         exit 1
     fi
+    log_success "AWS CLI found"
     
+    # Test AWS credentials
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
     if [ -z "$ACCOUNT_ID" ]; then
         log_error "AWS CLI not configured. Run 'aws configure' first."
@@ -206,22 +234,28 @@ check_prerequisites() {
     
     # Check Docker
     if ! command -v docker &> /dev/null; then
-        log_error "Docker not found. Please install it first."
+        log_error "Docker not found. Please install Docker Desktop."
         exit 1
     fi
     
-    if ! docker info &> /dev/null; then
-        log_error "Docker daemon is not running. Please start Docker."
+    if ! docker info &> /dev/null 2>&1; then
+        log_error "Docker daemon is not running. Please start Docker Desktop."
         exit 1
     fi
     log_success "Docker is running"
     
     # Check we're in the right directory
     if [ ! -f "apps/patient-platform/patient-api/Dockerfile" ]; then
-        log_error "Not in project root. cd to Oncolife_Monolith first."
+        log_error "Not in project root. Please cd to Oncolife_Monolith first."
+        log_info "Current directory: $(pwd)"
         exit 1
     fi
     log_success "Project directory verified"
+    
+    # Check curl (needed for health checks)
+    if ! command -v curl &> /dev/null; then
+        log_warning "curl not found - health checks will be skipped"
+    fi
     
     # Set region
     export AWS_REGION
@@ -229,8 +263,13 @@ check_prerequisites() {
     log_success "Region: $AWS_REGION"
     
     # Get availability zones
-    AZ1=$(aws ec2 describe-availability-zones --region $AWS_REGION --query 'AvailabilityZones[0].ZoneName' --output text)
-    AZ2=$(aws ec2 describe-availability-zones --region $AWS_REGION --query 'AvailabilityZones[1].ZoneName' --output text)
+    AZ1=$(aws ec2 describe-availability-zones --region $AWS_REGION --query 'AvailabilityZones[0].ZoneName' --output text 2>/dev/null)
+    AZ2=$(aws ec2 describe-availability-zones --region $AWS_REGION --query 'AvailabilityZones[1].ZoneName' --output text 2>/dev/null)
+    
+    if [ -z "$AZ1" ] || [ -z "$AZ2" ]; then
+        log_error "Could not get availability zones. Check your AWS region."
+        exit 1
+    fi
     log_success "Availability Zones: $AZ1, $AZ2"
 }
 
@@ -244,7 +283,7 @@ create_ecs_service_role() {
     if aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com 2>/dev/null; then
         log_success "ECS service-linked role created"
     else
-        log_success "ECS service-linked role already exists"
+        log_success "ECS service-linked role already exists (OK)"
     fi
 }
 
@@ -278,6 +317,11 @@ create_vpc_infrastructure() {
         --tag-specifications "ResourceType=vpc,Tags=[{Key=Name,Value=$PROJECT_NAME-vpc}]" \
         --query 'Vpc.VpcId' \
         --output text)
+    
+    if [ -z "$VPC_ID" ]; then
+        log_error "Failed to create VPC"
+        exit 1
+    fi
     log_success "VPC created: $VPC_ID"
     
     # Enable DNS hostnames
@@ -527,7 +571,7 @@ create_cognito_user_pool() {
         --output text)
     log_success "User Pool ID: $COGNITO_POOL_ID"
     
-    # Create App Client
+    # Create App Client with correct auth flow names
     log_info "Creating App Client..."
     COGNITO_CLIENT_ID=$(aws cognito-idp create-user-pool-client \
         --user-pool-id $COGNITO_POOL_ID \
@@ -582,19 +626,10 @@ create_s3_buckets() {
 create_secrets() {
     log_step "STEP 7: Creating Secrets Manager Secrets"
     
-    # Database secret
+    # Database secret - using printf for better JSON handling
     log_info "Creating database secret..."
-    DB_SECRET=$(cat <<EOF
-{
-    "host": "$RDS_ENDPOINT",
-    "port": "5432",
-    "username": "$DB_USERNAME",
-    "password": "$DB_PASSWORD",
-    "patient_db": "oncolife_patient",
-    "doctor_db": "oncolife_doctor"
-}
-EOF
-)
+    DB_SECRET=$(printf '{"host":"%s","port":"5432","username":"%s","password":"%s","patient_db":"oncolife_patient","doctor_db":"oncolife_doctor"}' \
+        "$RDS_ENDPOINT" "$DB_USERNAME" "$DB_PASSWORD")
     
     if aws secretsmanager create-secret --name "$PROJECT_NAME/db" --secret-string "$DB_SECRET" 2>/dev/null; then
         log_success "Database secret created"
@@ -605,14 +640,8 @@ EOF
     
     # Cognito secret
     log_info "Creating Cognito secret..."
-    COGNITO_SECRET=$(cat <<EOF
-{
-    "user_pool_id": "$COGNITO_POOL_ID",
-    "client_id": "$COGNITO_CLIENT_ID",
-    "client_secret": "$COGNITO_CLIENT_SECRET"
-}
-EOF
-)
+    COGNITO_SECRET=$(printf '{"user_pool_id":"%s","client_id":"%s","client_secret":"%s"}' \
+        "$COGNITO_POOL_ID" "$COGNITO_CLIENT_ID" "$COGNITO_CLIENT_SECRET")
     
     if aws secretsmanager create-secret --name "$PROJECT_NAME/cognito" --secret-string "$COGNITO_SECRET" 2>/dev/null; then
         log_success "Cognito secret created"
@@ -653,9 +682,13 @@ create_ecr_repositories() {
 create_cloudwatch_log_groups() {
     log_step "STEP 9: Creating CloudWatch Log Groups"
     
-    for lg in "/ecs/$PROJECT_NAME-patient-api" "/ecs/$PROJECT_NAME-doctor-api"; do
-        if aws logs create-log-group --log-group-name $lg 2>/dev/null; then
-            aws logs put-retention-policy --log-group-name $lg --retention-in-days 30
+    # Note: Using explicit string to avoid Git Bash path conversion
+    local log_group_patient="/ecs/${PROJECT_NAME}-patient-api"
+    local log_group_doctor="/ecs/${PROJECT_NAME}-doctor-api"
+    
+    for lg in "$log_group_patient" "$log_group_doctor"; do
+        if aws logs create-log-group --log-group-name "$lg" 2>/dev/null; then
+            aws logs put-retention-policy --log-group-name "$lg" --retention-in-days 30
             log_success "Created: $lg"
         else
             log_success "$lg already exists"
@@ -681,18 +714,18 @@ build_docker_images() {
     log_success "Logged in to ECR"
     
     # Build Patient API
-    log_info "Building patient-api..."
+    log_info "Building patient-api (this may take a few minutes)..."
     docker build -t "$PROJECT_NAME-patient-api:latest" -f "apps/patient-platform/patient-api/Dockerfile" "apps/patient-platform/patient-api/"
     docker tag "$PROJECT_NAME-patient-api:latest" "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME-patient-api:latest"
     docker push "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME-patient-api:latest"
-    log_success "patient-api pushed"
+    log_success "patient-api pushed to ECR"
     
     # Build Doctor API
-    log_info "Building doctor-api..."
+    log_info "Building doctor-api (this may take a few minutes)..."
     docker build -t "$PROJECT_NAME-doctor-api:latest" -f "apps/doctor-platform/doctor-api/Dockerfile" "apps/doctor-platform/doctor-api/"
     docker tag "$PROJECT_NAME-doctor-api:latest" "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME-doctor-api:latest"
     docker push "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME-doctor-api:latest"
-    log_success "doctor-api pushed"
+    log_success "doctor-api pushed to ECR"
 }
 
 # =============================================================================
@@ -702,27 +735,15 @@ build_docker_images() {
 create_iam_roles() {
     log_step "STEP 11: Creating IAM Roles"
     
-    # Trust policy
-    TRUST_POLICY=$(cat <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": {"Service": "ecs-tasks.amazonaws.com"},
-            "Action": "sts:AssumeRole"
-        }
-    ]
-}
-EOF
-)
+    # Trust policy as a single line JSON
+    TRUST_POLICY='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ecs-tasks.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
     
     # Create execution role
     log_info "Creating Task Execution Role..."
     if aws iam create-role --role-name "ecsTaskExecutionRole" --assume-role-policy-document "$TRUST_POLICY" 2>/dev/null; then
         log_success "Created ecsTaskExecutionRole"
     else
-        log_info "Role may already exist"
+        log_info "ecsTaskExecutionRole already exists (OK)"
     fi
     
     aws iam attach-role-policy --role-name "ecsTaskExecutionRole" \
@@ -736,27 +757,11 @@ EOF
     if aws iam create-role --role-name "${PROJECT_NAME}TaskRole" --assume-role-policy-document "$TRUST_POLICY" 2>/dev/null; then
         log_success "Created ${PROJECT_NAME}TaskRole"
     else
-        log_info "Role may already exist"
+        log_info "${PROJECT_NAME}TaskRole already exists (OK)"
     fi
     
-    TASK_POLICY=$(cat <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
-            "Resource": ["arn:aws:s3:::$PROJECT_NAME-*", "arn:aws:s3:::$PROJECT_NAME-*/*"]
-        },
-        {
-            "Effect": "Allow",
-            "Action": ["cognito-idp:AdminCreateUser", "cognito-idp:AdminDeleteUser", "cognito-idp:AdminInitiateAuth", "cognito-idp:AdminRespondToAuthChallenge", "cognito-idp:AdminGetUser"],
-            "Resource": "*"
-        }
-    ]
-}
-EOF
-)
+    # Task policy as single line
+    TASK_POLICY=$(printf '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:ListBucket"],"Resource":["arn:aws:s3:::%s-*","arn:aws:s3:::%s-*/*"]},{"Effect":"Allow","Action":["cognito-idp:AdminCreateUser","cognito-idp:AdminDeleteUser","cognito-idp:AdminInitiateAuth","cognito-idp:AdminRespondToAuthChallenge","cognito-idp:AdminGetUser"],"Resource":"*"}]}' "$PROJECT_NAME" "$PROJECT_NAME")
     
     aws iam put-role-policy --role-name "${PROJECT_NAME}TaskRole" \
         --policy-name "OncolifePermissions" --policy-document "$TASK_POLICY" 2>/dev/null || true
@@ -880,14 +885,11 @@ create_alb_infrastructure() {
 register_task_definitions() {
     log_step "STEP 14: Registering Task Definitions"
     
-    # Use current directory for temp files (works on Windows Git Bash and Linux)
-    # Note: Using /tmp fails on Git Bash Windows
-    TEMP_DIR="."
-    
     # Patient API Task Definition
     log_info "Registering Patient API Task Definition..."
     
-    cat > "$TEMP_DIR/patient-task-def.json" <<EOF
+    # Create JSON file in current directory (works on Windows Git Bash)
+    cat > ./patient-task-def.json <<EOFPATIENT
 {
     "family": "$PROJECT_NAME-patient-api",
     "networkMode": "awsvpc",
@@ -934,16 +936,17 @@ register_task_definitions() {
         }
     ]
 }
-EOF
+EOFPATIENT
     
-    aws ecs register-task-definition --cli-input-json "file://$TEMP_DIR/patient-task-def.json" > /dev/null
-    rm "$TEMP_DIR/patient-task-def.json"
+    # Register using file:// with explicit path
+    aws ecs register-task-definition --cli-input-json file://patient-task-def.json > /dev/null
+    rm -f ./patient-task-def.json
     log_success "Patient API Task Definition registered"
     
     # Doctor API Task Definition
     log_info "Registering Doctor API Task Definition..."
     
-    cat > "$TEMP_DIR/doctor-task-def.json" <<EOF
+    cat > ./doctor-task-def.json <<EOFDOCTOR
 {
     "family": "$PROJECT_NAME-doctor-api",
     "networkMode": "awsvpc",
@@ -990,10 +993,10 @@ EOF
         }
     ]
 }
-EOF
+EOFDOCTOR
     
-    aws ecs register-task-definition --cli-input-json "file://$TEMP_DIR/doctor-task-def.json" > /dev/null
-    rm "$TEMP_DIR/doctor-task-def.json"
+    aws ecs register-task-definition --cli-input-json file://doctor-task-def.json > /dev/null
+    rm -f ./doctor-task-def.json
     log_success "Doctor API Task Definition registered"
 }
 
@@ -1015,7 +1018,7 @@ create_ecs_services() {
         --task-definition "$PROJECT_NAME-patient-api" \
         --desired-count $DESIRED_COUNT \
         --launch-type FARGATE \
-        --network-configuration $NETWORK_CONFIG \
+        --network-configuration "$NETWORK_CONFIG" \
         --load-balancers "targetGroupArn=$PATIENT_TG_ARN,containerName=patient-api,containerPort=8000" \
         --health-check-grace-period-seconds 120 > /dev/null
     log_success "Patient API Service created"
@@ -1028,7 +1031,7 @@ create_ecs_services() {
         --task-definition "$PROJECT_NAME-doctor-api" \
         --desired-count $DESIRED_COUNT \
         --launch-type FARGATE \
-        --network-configuration $NETWORK_CONFIG \
+        --network-configuration "$NETWORK_CONFIG" \
         --load-balancers "targetGroupArn=$DOCTOR_TG_ARN,containerName=doctor-api,containerPort=8001" \
         --health-check-grace-period-seconds 120 > /dev/null
     log_success "Doctor API Service created"
@@ -1063,7 +1066,7 @@ verify_deployment() {
         
         echo "  Patient API: $PATIENT_RUNNING running, Doctor API: $DOCTOR_RUNNING running"
         
-        if [ "$PATIENT_RUNNING" -ge 1 ] && [ "$DOCTOR_RUNNING" -ge 1 ]; then
+        if [ "$PATIENT_RUNNING" -ge 1 ] 2>/dev/null && [ "$DOCTOR_RUNNING" -ge 1 ] 2>/dev/null; then
             log_success "Services are running!"
             break
         fi
@@ -1073,20 +1076,24 @@ verify_deployment() {
     done
     
     # Test health endpoints
-    log_info "Testing health endpoints..."
-    
-    sleep 30  # Give ALB time to register targets
-    
-    if curl -sf "http://$PATIENT_ALB_DNS/health" > /dev/null 2>&1; then
-        log_success "Patient API is healthy"
+    if command -v curl &> /dev/null; then
+        log_info "Testing health endpoints..."
+        
+        sleep 30  # Give ALB time to register targets
+        
+        if curl -sf "http://$PATIENT_ALB_DNS/health" > /dev/null 2>&1; then
+            log_success "Patient API is healthy"
+        else
+            log_warning "Patient API not responding yet (may still be starting)"
+        fi
+        
+        if curl -sf "http://$DOCTOR_ALB_DNS/health" > /dev/null 2>&1; then
+            log_success "Doctor API is healthy"
+        else
+            log_warning "Doctor API not responding yet (may still be starting)"
+        fi
     else
-        log_warning "Patient API not responding yet (may still be starting)"
-    fi
-    
-    if curl -sf "http://$DOCTOR_ALB_DNS/health" > /dev/null 2>&1; then
-        log_success "Doctor API is healthy"
-    else
-        log_warning "Doctor API not responding yet (may still be starting)"
+        log_warning "curl not found - skipping health check tests"
     fi
 }
 
@@ -1098,12 +1105,12 @@ main() {
     START_TIME=$(date +%s)
     
     echo ""
-    echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${MAGENTA}║       ONCOLIFE COMPLETE AWS DEPLOYMENT SCRIPT (BASH)         ║${NC}"
-    echo -e "${MAGENTA}║                                                              ║${NC}"
-    echo -e "${MAGENTA}║  This script will deploy the complete OncoLife platform     ║${NC}"
-    echo -e "${MAGENTA}║  to AWS. Estimated time: 20-30 minutes                       ║${NC}"
-    echo -e "${MAGENTA}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${MAGENTA}+==============================================================+${NC}"
+    echo -e "${MAGENTA}|       ONCOLIFE COMPLETE AWS DEPLOYMENT SCRIPT (BASH)         |${NC}"
+    echo -e "${MAGENTA}|                                                              |${NC}"
+    echo -e "${MAGENTA}|  This script will deploy the complete OncoLife platform     |${NC}"
+    echo -e "${MAGENTA}|  to AWS. Estimated time: 20-30 minutes                       |${NC}"
+    echo -e "${MAGENTA}+==============================================================+${NC}"
     echo ""
     
     # Execute all steps
@@ -1127,12 +1134,12 @@ main() {
     
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
-    MINUTES=$((DURATION / 60))
-    SECONDS=$((DURATION % 60))
+    DURATION_MIN=$((DURATION / 60))
+    DURATION_SEC=$((DURATION % 60))
     
     # Save configuration
     CONFIG_FILE="deployment-config-$(date +%Y%m%d-%H%M%S).json"
-    cat > $CONFIG_FILE <<EOF
+    cat > $CONFIG_FILE <<EOFCONFIG
 {
     "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "region": "$AWS_REGION",
@@ -1145,15 +1152,15 @@ main() {
     "patient_alb_dns": "$PATIENT_ALB_DNS",
     "doctor_alb_dns": "$DOCTOR_ALB_DNS"
 }
-EOF
+EOFCONFIG
     
     # Final Summary
     echo ""
-    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║              DEPLOYMENT COMPLETE!                            ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}+==============================================================+${NC}"
+    echo -e "${GREEN}|              DEPLOYMENT COMPLETE!                            |${NC}"
+    echo -e "${GREEN}+==============================================================+${NC}"
     echo ""
-    echo -e "${CYAN}Duration: $MINUTES minutes $SECONDS seconds${NC}"
+    echo -e "${CYAN}Duration: $DURATION_MIN minutes $DURATION_SEC seconds${NC}"
     echo ""
     echo -e "${CYAN}ACCESS URLS:${NC}"
     echo -e "  Patient API:      http://$PATIENT_ALB_DNS"
