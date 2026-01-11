@@ -880,8 +880,9 @@ create_alb_infrastructure() {
 register_task_definitions() {
     log_step "STEP 14: Registering Task Definitions"
     
-    # Use a temp directory that works on both Windows and Linux
-    TEMP_DIR="${TEMP:-${TMP:-/tmp}}"
+    # Use current directory for temp files (works on Windows Git Bash and Linux)
+    # Note: Using /tmp fails on Git Bash Windows
+    TEMP_DIR="."
     
     # Patient API Task Definition
     log_info "Registering Patient API Task Definition..."
