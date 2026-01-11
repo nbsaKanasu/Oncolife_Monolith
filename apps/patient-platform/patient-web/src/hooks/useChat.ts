@@ -31,8 +31,8 @@ interface UseChatOptions {
 }
 
 interface UseChatReturn extends ChatState {
-  loadSession: () => Promise<void>;
-  createNewSession: () => Promise<void>;
+  loadSession: () => Promise<ChatSession | null>;
+  createNewSession: () => Promise<ChatSession | null>;
   sendMessage: (content: string, messageType?: string, structuredData?: Record<string, unknown>) => void;
   updateFeeling: (feeling: OverallFeeling) => Promise<void>;
   connect: () => void;

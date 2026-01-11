@@ -8,9 +8,14 @@ Complete authentication endpoints using AWS Cognito:
 - POST /complete-new-password: Complete password setup
 - POST /logout: Client-side logout acknowledgment
 - DELETE /delete-patient: Delete patient account
+
+Rate Limiting:
+- Login: 5 attempts per minute (prevents brute force)
+- Signup: 5 attempts per minute
+- Password reset: 3 attempts per minute
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any, List
@@ -25,6 +30,7 @@ from core.exceptions import (
     ValidationError,
     ExternalServiceError,
 )
+from core.middleware.rate_limiting import limiter, AUTH_RATE_LIMIT, PASSWORD_RESET_LIMIT
 
 logger = get_logger(__name__)
 
@@ -108,8 +114,10 @@ class LogoutResponse(BaseModel):
     summary="Register new user",
     description="Create a new user in AWS Cognito and local database."
 )
+@limiter.limit(AUTH_RATE_LIMIT)
 async def signup_user(
     request: SignupRequest,
+    http_request: Request,
     patient_db: Session = Depends(get_patient_db),
     doctor_db: Session = Depends(get_doctor_db),
 ) -> SignupResponse:
@@ -157,10 +165,12 @@ async def signup_user(
     "/login",
     response_model=LoginResponse,
     summary="User login",
-    description="Authenticate user and return JWT tokens."
+    description="Authenticate user and return JWT tokens. Rate limited to prevent brute force."
 )
+@limiter.limit(AUTH_RATE_LIMIT)
 async def login(
     request: LoginRequest,
+    http_request: Request,
     patient_db: Session = Depends(get_patient_db),
 ) -> LoginResponse:
     """
@@ -204,8 +214,10 @@ async def login(
     summary="Complete password setup",
     description="Complete new password setup for users with temporary passwords."
 )
+@limiter.limit(PASSWORD_RESET_LIMIT)
 async def complete_new_password(
     request: CompleteNewPasswordRequest,
+    http_request: Request,
     patient_db: Session = Depends(get_patient_db),
 ) -> CompleteNewPasswordResponse:
     """

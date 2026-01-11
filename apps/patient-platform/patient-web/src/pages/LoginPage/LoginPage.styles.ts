@@ -447,23 +447,33 @@ export const EyeButton = styled.button`
   padding: 0;
 `;
 
-export const StyledButton = styled.button`
+export const StyledButton = styled.button<{ variant?: 'primary' | 'secondary' }>`
   width: 100%;
-  background: linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryDark} 100%);
-  color: #fff;
-  border: none;
+  background: ${({ variant }) => 
+    variant === 'secondary' 
+      ? colors.background 
+      : `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryDark} 100%)`
+  };
+  color: ${({ variant }) => variant === 'secondary' ? colors.text : '#fff'};
+  border: ${({ variant }) => variant === 'secondary' ? `2px solid ${colors.border}` : 'none'};
   border-radius: 12px;
   padding: 0.9rem 0;
   font-size: 1.1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 4px 12px ${colors.primary}40;
+  box-shadow: ${({ variant }) => variant === 'secondary' ? 'none' : `0 4px 12px ${colors.primary}40`};
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
 
   &:hover, &:focus {
     transform: translateY(-1px);
-    box-shadow: 0 6px 20px ${colors.primary}50;
+    box-shadow: ${({ variant }) => variant === 'secondary' ? `0 2px 8px rgba(0,0,0,0.1)` : `0 6px 20px ${colors.primary}50`};
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
   }
 `;

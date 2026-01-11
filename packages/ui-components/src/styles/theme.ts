@@ -710,6 +710,16 @@ export const animations = {
   `,
 };
 
+// CSS class-based animations for use with className prop
+export const animationClasses = {
+  fadeIn: 'animate-fade-in',
+  fadeInUp: 'animate-fade-in-up',
+  slideInLeft: 'animate-slide-in-left',
+  slideInRight: 'animate-slide-in-right',
+  scaleIn: 'animate-scale-in',
+  staggered: 'animate-staggered',
+};
+
 // =============================================================================
 // LEGACY EXPORTS (backward compatibility)
 // =============================================================================

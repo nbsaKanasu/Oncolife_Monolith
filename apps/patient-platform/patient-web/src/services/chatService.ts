@@ -12,7 +12,8 @@ export const chatService = {
   },
 
   sendMessage: async (chatUuid: string, content: string) => {
-    const response = await apiClient.post(API_CONFIG.ENDPOINTS.CHAT.MESSAGE, {
+    // Use WebSocket for sending messages - this is just a fallback REST endpoint
+    const response = await apiClient.post(`/chat/${chatUuid}/message`, {
       chat_uuid: chatUuid,
       content,
     });
@@ -29,7 +30,7 @@ export const chatService = {
 
   logChemoDate: async (chemoDate: Date) => {
     const timezone = getUserTimezone();
-    const response = await apiClient.post(API_CONFIG.ENDPOINTS.CHAT.CHEMO_LOG, {
+    const response = await apiClient.post(API_CONFIG.ENDPOINTS.CHEMO.LOG, {
       chemo_date: chemoDate.toISOString().split('T')[0],
       timezone,
     });

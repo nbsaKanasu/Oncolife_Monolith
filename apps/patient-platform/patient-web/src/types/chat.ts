@@ -1,31 +1,58 @@
+export interface SymptomGroup {
+  name: string;
+  icon: string;
+  symptoms: { id: string; name: string; available?: boolean }[];
+}
+
+export interface SummaryData {
+  symptoms_assessed?: { id: string; name: string }[];
+  triage_results?: Array<{
+    symptom_name: string;
+    level: string;
+    message?: string;
+  }>;
+  highest_level?: string;
+}
+
 export interface Message {
   id: number;
   chat_uuid: string;
-  sender: 'user' | 'assistant';
+  sender: 'user' | 'assistant' | 'ruby' | 'system';
   message_type: 
     | 'text' 
     | 'button_response' 
     | 'multi_select_response' 
     | 'single-select' 
     | 'multi-select' 
+    | 'button-prompt'
     | 'button_prompt' 
     | 'feeling-select' 
     | 'feeling_response'
-    | 'symptom-select'  // New: Symptom checker selection
-    | 'yes_no'          // New: Yes/No questions
-    | 'choice'          // New: Single choice
-    | 'multiselect'     // New: Multi-select
-    | 'number'          // New: Number input
-    | 'triage_result';  // New: Triage result display
+    | 'symptom-select'
+    | 'symptom_select'
+    | 'yes_no'
+    | 'choice'
+    | 'multiselect'
+    | 'number'
+    | 'triage_result'
+    | 'disclaimer'
+    | 'emergency_check'
+    | 'emergency'
+    | 'summary';
   content: string;
   structured_data?: {
     options?: string[];
-    options_data?: Array<{ label: string; value: any; category?: string }>;
+    options_data?: Array<{ label: string; value: any; category?: string; style?: string; action?: string }>;
     selected_options?: string[];
     max_selections?: number;
     frontend_type?: string;
-    triage_level?: 'call_911' | 'notify_care_team' | 'none';
+    triage_level?: 'call_911' | 'notify_care_team' | 'urgent' | 'none';
     is_complete?: boolean;
+    // Symptom checker specific fields
+    symptom_groups?: Record<string, SymptomGroup>;
+    sender?: 'ruby' | 'system' | 'user';
+    avatar?: string;
+    summary_data?: SummaryData;
   };
   created_at: string;
 }

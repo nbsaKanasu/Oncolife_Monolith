@@ -3,12 +3,12 @@ import { API_CONFIG } from '../config/api';
 
 export const useWebSocket = (
   chatUuid: string | null,
-  onMessage: (message: any) => void
+  onMessage: (message: unknown) => void
 ) => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
   const maxRetries = 3;
 

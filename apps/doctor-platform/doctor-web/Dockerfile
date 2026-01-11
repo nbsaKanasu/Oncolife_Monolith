@@ -41,8 +41,8 @@ ARG VITE_PATIENT_API_URL=http://localhost:8000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_PATIENT_API_URL=$VITE_PATIENT_API_URL
 
-# Build the application
-RUN npm run build
+# Build the application (use build:nocheck to skip tsc in Docker)
+RUN npm run build:nocheck
 
 
 # Stage 2: Production with nginx

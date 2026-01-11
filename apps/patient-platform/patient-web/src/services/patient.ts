@@ -3,7 +3,7 @@ import { API_CONFIG } from '../config/api';
 
 export const patientService = {
   updateConsent: async () => {
-    const response = await apiClient.patch(API_CONFIG.ENDPOINTS.PATIENT.UPDATE_CONSENT, {
+    const response = await apiClient.patch(API_CONFIG.ENDPOINTS.PROFILE.CONSENT, {
       agreed_conditions: true,
       acknowledgement_done: true,
     });

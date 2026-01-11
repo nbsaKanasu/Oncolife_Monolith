@@ -6,6 +6,7 @@ This module provides FastAPI middleware for:
 - Request/Response logging
 - Correlation ID tracking
 - Request timing
+- Rate limiting
 
 Usage:
     from core.middleware import setup_middleware
@@ -18,6 +19,7 @@ from fastapi import FastAPI
 from .error_handler import setup_exception_handlers
 from .request_logging import RequestLoggingMiddleware
 from .correlation_id import CorrelationIdMiddleware
+from .rate_limiting import setup_rate_limiting, limiter
 
 
 def setup_middleware(app: FastAPI) -> None:
@@ -30,6 +32,7 @@ def setup_middleware(app: FastAPI) -> None:
     Middleware is applied in reverse order, so:
     - CorrelationIdMiddleware runs first (sets correlation ID)
     - RequestLoggingMiddleware runs second (logs with correlation ID)
+    - Rate limiting is checked
     - Exception handlers catch any errors
     
     Args:
@@ -45,6 +48,9 @@ def setup_middleware(app: FastAPI) -> None:
     # Add exception handlers
     setup_exception_handlers(app)
     
+    # Add rate limiting (must be set up before other middleware)
+    setup_rate_limiting(app)
+    
     # Add middleware (applied in reverse order)
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
@@ -55,6 +61,7 @@ __all__ = [
     "setup_exception_handlers",
     "RequestLoggingMiddleware",
     "CorrelationIdMiddleware",
+    "limiter",
 ]
 
 

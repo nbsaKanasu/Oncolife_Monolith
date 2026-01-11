@@ -23,7 +23,7 @@ Usage:
 """
 
 from typing import Generator, Optional
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
 
@@ -227,38 +227,62 @@ def get_doctor_db() -> Generator[Session, None, None]:
 # HEALTH CHECKS
 # =============================================================================
 
-def check_patient_db_health() -> bool:
+def check_patient_db_health() -> dict:
     """
     Check if patient database connection is healthy.
     
     Returns:
-        True if connection is healthy, False otherwise
+        Dict with status and latency information
     """
+    import time
+    start = time.perf_counter()
+    
     try:
         engine = _get_patient_engine()
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
-        return True
+            conn.execute(text("SELECT 1"))
+            conn.commit()
+        
+        latency_ms = (time.perf_counter() - start) * 1000
+        return {
+            "status": "ok",
+            "latency_ms": round(latency_ms, 2),
+        }
     except Exception as e:
         logger.error(f"Patient database health check failed: {e}")
-        return False
+        return {
+            "status": "error",
+            "error": str(e),
+        }
 
 
-def check_doctor_db_health() -> bool:
+def check_doctor_db_health() -> dict:
     """
     Check if doctor database connection is healthy.
     
     Returns:
-        True if connection is healthy, False otherwise
+        Dict with status and latency information
     """
+    import time
+    start = time.perf_counter()
+    
     try:
         engine = _get_doctor_engine()
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
-        return True
+            conn.execute(text("SELECT 1"))
+            conn.commit()
+        
+        latency_ms = (time.perf_counter() - start) * 1000
+        return {
+            "status": "ok",
+            "latency_ms": round(latency_ms, 2),
+        }
     except Exception as e:
         logger.error(f"Doctor database health check failed: {e}")
-        return False
+        return {
+            "status": "error",
+            "error": str(e),
+        }
 
 
 

@@ -20,7 +20,7 @@ Usage:
 """
 
 from typing import Generator, Optional
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.engine import Engine
 
@@ -190,7 +190,8 @@ def verify_database_connections() -> dict:
     if doctor_engine:
         try:
             with doctor_engine.connect() as conn:
-                conn.execute("SELECT 1")
+                conn.execute(text("SELECT 1"))
+                conn.commit()
             status["doctor_db"] = True
             logger.info("Doctor database connection verified")
         except Exception as e:
@@ -199,13 +200,76 @@ def verify_database_connections() -> dict:
     if patient_engine:
         try:
             with patient_engine.connect() as conn:
-                conn.execute("SELECT 1")
+                conn.execute(text("SELECT 1"))
+                conn.commit()
             status["patient_db"] = True
             logger.info("Patient database connection verified")
         except Exception as e:
             logger.error(f"Patient database connection failed: {e}")
     
     return status
+
+
+def check_doctor_db_health() -> dict:
+    """
+    Check doctor database connection health with latency.
+    
+    Returns:
+        Dict with status and latency information
+    """
+    import time
+    start = time.perf_counter()
+    
+    if not doctor_engine:
+        return {"status": "not_configured"}
+    
+    try:
+        with doctor_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            conn.commit()
+        
+        latency_ms = (time.perf_counter() - start) * 1000
+        return {
+            "status": "ok",
+            "latency_ms": round(latency_ms, 2),
+        }
+    except Exception as e:
+        logger.error(f"Doctor database health check failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+        }
+
+
+def check_patient_db_health() -> dict:
+    """
+    Check patient database connection health with latency.
+    
+    Returns:
+        Dict with status and latency information
+    """
+    import time
+    start = time.perf_counter()
+    
+    if not patient_engine:
+        return {"status": "not_configured"}
+    
+    try:
+        with patient_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            conn.commit()
+        
+        latency_ms = (time.perf_counter() - start) * 1000
+        return {
+            "status": "ok",
+            "latency_ms": round(latency_ms, 2),
+        }
+    except Exception as e:
+        logger.error(f"Patient database health check failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+        }
 
 
 

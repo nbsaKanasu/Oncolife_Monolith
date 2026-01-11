@@ -16,7 +16,8 @@ import styled from 'styled-components';
 import { Check, ChevronRight, Shield, Bell, FileText, Lock } from 'lucide-react';
 import { Background, WrapperStyle, Logo, Card } from '@oncolife/ui-components';
 import logo from '../../assets/logo.png';
-import { onboardingApi, OnboardingStatus } from '../../api/services';
+import { onboardingApi } from '../../api/services';
+import type { OnboardingStatus } from '../../api/services';
 
 // ============================================================================
 // STYLED COMPONENTS

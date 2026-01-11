@@ -106,7 +106,7 @@ const SymptomChatPage: React.FC = () => {
   };
 
   // Send a message
-  const sendUserMessage = (content: string, messageType: string = 'text') => {
+  const sendUserMessage = (content: string, messageType: Message['message_type'] = 'text') => {
     if (!chatSession || !isConnected) return;
 
     const userMessage: Message = {

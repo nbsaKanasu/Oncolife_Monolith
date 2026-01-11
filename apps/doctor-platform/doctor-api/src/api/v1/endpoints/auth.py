@@ -8,9 +8,14 @@ Complete authentication endpoints using AWS Cognito:
 - POST /complete-new-password: Complete password setup
 - POST /logout: Logout (client-side token removal)
 - DELETE /delete-user: Delete staff account
+
+Rate Limiting:
+- Login: 5 attempts per minute (prevents brute force)
+- Signup: 5 attempts per minute
+- Password reset: 3 attempts per minute
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -25,6 +30,7 @@ from core.exceptions import (
     ValidationError,
 )
 from core.logging import get_logger
+from core.middleware.rate_limiting import limiter, AUTH_RATE_LIMIT, PASSWORD_RESET_LIMIT
 
 logger = get_logger(__name__)
 
@@ -109,8 +115,10 @@ class LogoutResponse(BaseModel):
     summary="Register new staff member",
     description="Create a new staff member in AWS Cognito and local database.",
 )
+@limiter.limit(AUTH_RATE_LIMIT)
 async def signup_user(
     request: SignupRequest,
+    http_request: Request,
     db: Session = Depends(get_doctor_db_session),
 ):
     """
@@ -157,10 +165,12 @@ async def signup_user(
     "/login",
     response_model=LoginResponse,
     summary="Login",
-    description="Authenticate a user with email and password.",
+    description="Authenticate a user with email and password. Rate limited to prevent brute force.",
 )
+@limiter.limit(AUTH_RATE_LIMIT)
 async def login(
     request: LoginRequest,
+    http_request: Request,
     db: Session = Depends(get_doctor_db_session),
 ):
     """
@@ -205,8 +215,10 @@ async def login(
     summary="Complete Password Setup",
     description="Set a new password for a user with a temporary password.",
 )
+@limiter.limit(PASSWORD_RESET_LIMIT)
 async def complete_new_password(
     request: CompletePasswordRequest,
+    http_request: Request,
     db: Session = Depends(get_doctor_db_session),
 ):
     """
