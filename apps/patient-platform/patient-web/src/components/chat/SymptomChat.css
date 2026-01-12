@@ -1020,6 +1020,83 @@
 }
 
 /* =============================================================================
+   PATIENT CONTEXT SCREEN (Last Chemo, Physician Visit)
+   ============================================================================= */
+
+.patient-context-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  min-height: 300px;
+}
+
+.context-card {
+  background: white;
+  border-radius: 24px;
+  padding: 32px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.context-card .ruby-avatar {
+  margin: 0 auto 20px;
+}
+
+.context-message {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.context-message strong {
+  color: var(--ruby-primary);
+}
+
+.context-message h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.context-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.context-option-btn {
+  width: 100%;
+  padding: 14px 20px;
+  background: #F8FAFC;
+  border: 2px solid var(--border-light);
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.context-option-btn:hover {
+  background: var(--ruby-bg);
+  border-color: var(--ruby-primary);
+  color: var(--ruby-primary);
+  transform: translateX(4px);
+}
+
+.context-option-btn:active {
+  transform: scale(0.98);
+}
+
+/* =============================================================================
    GROUPED SYMPTOM SELECTOR
    ============================================================================= */
 
@@ -1554,11 +1631,22 @@
   /* Screens */
   .disclaimer-screen,
   .emergency-check-screen,
+  .patient-context-screen,
   .summary-screen,
   .emergency-result {
     margin: 8px;
     padding: 18px;
     border-radius: 18px;
+  }
+  
+  .context-card {
+    padding: 20px;
+    border-radius: 18px;
+  }
+  
+  .context-option-btn {
+    padding: 12px 16px;
+    font-size: 14px;
   }
   
   .disclaimer-icon,
@@ -1747,8 +1835,13 @@
   
   .disclaimer-screen,
   .emergency-check-screen,
+  .patient-context-screen,
   .summary-screen {
     max-width: 500px;
+  }
+  
+  .context-card {
+    max-width: 480px;
   }
 }
 

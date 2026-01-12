@@ -4,10 +4,11 @@ Manages the rule-based conversation flow for symptom triage.
 
 Flow:
 1. DISCLAIMER - Medical disclaimer with "I Understand" button
-2. EMERGENCY_CHECK - Urgent safety check (5 emergency symptoms)
-3. SYMPTOM_SELECTION - Grouped symptom selection
-4. SCREENING - Per-symptom questions (Ruby chat)
-5. SUMMARY - Session summary with actions
+2. PATIENT_CONTEXT - Last chemo date, scheduled physician visit (critical data)
+3. EMERGENCY_CHECK - Urgent safety check (5 emergency symptoms)
+4. SYMPTOM_SELECTION - Grouped symptom selection
+5. SCREENING - Per-symptom questions (Ruby chat)
+6. SUMMARY - Session summary with actions
 """
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
@@ -17,7 +18,9 @@ import logging
 from .constants import (
     TriageLevel, InputType, ConversationPhase,
     MEDICAL_DISCLAIMER, EMERGENCY_CHECK_MESSAGE, RUBY_GREETING,
-    EMERGENCY_SYMPTOMS, SYMPTOM_GROUPS, SUMMARY_ACTIONS
+    EMERGENCY_SYMPTOMS, SYMPTOM_GROUPS, SUMMARY_ACTIONS,
+    PATIENT_CONTEXT_MESSAGE, LAST_CHEMO_OPTIONS, PHYSICIAN_VISIT_OPTIONS,
+    validate_temperature, validate_text_input, TEMP_FEVER_THRESHOLD
 )
 from .symptom_definitions import (
     SYMPTOMS, SymptomDef, Question, LogicResult,
@@ -44,6 +47,10 @@ class ConversationState:
     chat_history: List[Dict[str, Any]] = field(default_factory=list)
     session_start: Optional[str] = None
     personal_notes: Optional[str] = None  # Patient's additional notes
+    # Patient context (critical physician data)
+    last_chemo_date: Optional[str] = None  # When was last chemotherapy
+    next_physician_visit: Optional[str] = None  # Scheduled physician visit
+    patient_context_step: int = 0  # 0=chemo, 1=physician visit
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize state to dictionary."""
@@ -61,7 +68,10 @@ class ConversationState:
             'highest_triage_level': self.highest_triage_level.value,
             'chat_history': self.chat_history,
             'session_start': self.session_start,
-            'personal_notes': self.personal_notes
+            'personal_notes': self.personal_notes,
+            'last_chemo_date': self.last_chemo_date,
+            'next_physician_visit': self.next_physician_visit,
+            'patient_context_step': self.patient_context_step
         }
 
     @classmethod
@@ -81,7 +91,10 @@ class ConversationState:
             highest_triage_level=TriageLevel(data.get('highest_triage_level', 'none')),
             chat_history=data.get('chat_history', []),
             session_start=data.get('session_start'),
-            personal_notes=data.get('personal_notes')
+            personal_notes=data.get('personal_notes'),
+            last_chemo_date=data.get('last_chemo_date'),
+            next_physician_visit=data.get('next_physician_visit'),
+            patient_context_step=data.get('patient_context_step', 0)
         )
 
 
@@ -160,6 +173,9 @@ class SymptomCheckerEngine:
         if self.state.phase == ConversationPhase.DISCLAIMER:
             return self._handle_disclaimer(user_response)
         
+        elif self.state.phase == ConversationPhase.PATIENT_CONTEXT:
+            return self._handle_patient_context(user_response)
+        
         elif self.state.phase == ConversationPhase.EMERGENCY_CHECK:
             return self._handle_emergency_check(user_response)
         
@@ -201,8 +217,10 @@ class SymptomCheckerEngine:
     def _handle_disclaimer(self, user_response: Any) -> EngineResponse:
         """Handle the disclaimer acceptance."""
         if user_response == 'accept':
-            self.state.phase = ConversationPhase.EMERGENCY_CHECK
-            return self._show_emergency_check()
+            # Move to patient context (last chemo, physician visit)
+            self.state.phase = ConversationPhase.PATIENT_CONTEXT
+            self.state.patient_context_step = 0
+            return self._show_patient_context_question()
         else:
             # User must accept to continue
             return EngineResponse(
@@ -220,7 +238,61 @@ class SymptomCheckerEngine:
             )
 
     # =========================================================================
-    # PHASE 2: EMERGENCY CHECK
+    # PHASE 2: PATIENT CONTEXT (Critical Physician Data)
+    # =========================================================================
+    def _show_patient_context_question(self) -> EngineResponse:
+        """Show patient context questions (last chemo, physician visit)."""
+        step = self.state.patient_context_step
+        
+        if step == 0:
+            # Question 1: When was your last chemotherapy?
+            return EngineResponse(
+                message=f"{PATIENT_CONTEXT_MESSAGE}\n\n"
+                        "📅 **When was your last chemotherapy session?**\n\n"
+                        "*This helps us understand your treatment timeline.*",
+                message_type='patient_context',
+                options=LAST_CHEMO_OPTIONS,
+                input_type='date_picker',  # Hint for frontend to show calendar
+                sender='ruby',
+                avatar='💎',
+                state=self.state
+            )
+        else:
+            # Question 2: When is your next scheduled physician visit?
+            return EngineResponse(
+                message="📅 **When is your next scheduled physician visit?**\n\n"
+                        "*This helps us prioritize any concerns for your upcoming appointment.*",
+                message_type='patient_context',
+                options=PHYSICIAN_VISIT_OPTIONS,
+                input_type='date_picker',  # Hint for frontend to show calendar
+                sender='ruby',
+                avatar='💎',
+                state=self.state
+            )
+
+    def _handle_patient_context(self, user_response: Any) -> EngineResponse:
+        """Handle patient context responses."""
+        step = self.state.patient_context_step
+        
+        if step == 0:
+            # Save last chemo date
+            self.state.last_chemo_date = user_response
+            self.state.answers['last_chemo_date'] = user_response
+            
+            # Move to next question
+            self.state.patient_context_step = 1
+            return self._show_patient_context_question()
+        else:
+            # Save physician visit
+            self.state.next_physician_visit = user_response
+            self.state.answers['next_physician_visit'] = user_response
+            
+            # Move to emergency check
+            self.state.phase = ConversationPhase.EMERGENCY_CHECK
+            return self._show_emergency_check()
+
+    # =========================================================================
+    # PHASE 3: EMERGENCY CHECK
     # =========================================================================
     def _show_emergency_check(self) -> EngineResponse:
         """Show the emergency safety check screen."""
@@ -479,8 +551,39 @@ class SymptomCheckerEngine:
         questions = symptom.screening_questions
         if self.state.current_question_index < len(questions):
             question = questions[self.state.current_question_index]
-            self.state.answers[question.id] = user_response
-            logger.info(f"Stored answer for {question.id}: {user_response}")
+            
+            # Validate temperature input (Fahrenheit)
+            if question.input_type == InputType.NUMBER and 'temp' in question.id.lower():
+                is_valid, temp_value, error_msg = validate_temperature(str(user_response))
+                if not is_valid:
+                    # Return error and ask again
+                    return EngineResponse(
+                        message=f"⚠️ {error_msg}\n\n{question.text}",
+                        message_type='number',
+                        options=[],
+                        sender='ruby',
+                        avatar='⚠️',
+                        state=self.state
+                    )
+                # Store validated temperature
+                self.state.answers[question.id] = temp_value
+                logger.info(f"Stored validated temp for {question.id}: {temp_value}°F")
+            else:
+                # Validate text input
+                if question.input_type == InputType.TEXT:
+                    is_valid, error_msg = validate_text_input(str(user_response))
+                    if not is_valid:
+                        return EngineResponse(
+                            message=f"⚠️ {error_msg}\n\n{question.text}",
+                            message_type='text',
+                            options=[],
+                            sender='ruby',
+                            avatar='⚠️',
+                            state=self.state
+                        )
+                
+                self.state.answers[question.id] = user_response
+                logger.info(f"Stored answer for {question.id}: {user_response}")
 
         self.state.current_question_index += 1
         return self._get_next_question(symptom)
@@ -494,8 +597,37 @@ class SymptomCheckerEngine:
         questions = symptom.follow_up_questions
         if self.state.current_question_index < len(questions):
             question = questions[self.state.current_question_index]
-            self.state.answers[question.id] = user_response
-            logger.info(f"Stored follow-up answer for {question.id}: {user_response}")
+            
+            # Validate temperature input (Fahrenheit)
+            if question.input_type == InputType.NUMBER and 'temp' in question.id.lower():
+                is_valid, temp_value, error_msg = validate_temperature(str(user_response))
+                if not is_valid:
+                    return EngineResponse(
+                        message=f"⚠️ {error_msg}\n\n{question.text}",
+                        message_type='number',
+                        options=[],
+                        sender='ruby',
+                        avatar='⚠️',
+                        state=self.state
+                    )
+                self.state.answers[question.id] = temp_value
+                logger.info(f"Stored validated temp for {question.id}: {temp_value}°F")
+            else:
+                # Validate text input
+                if question.input_type == InputType.TEXT:
+                    is_valid, error_msg = validate_text_input(str(user_response))
+                    if not is_valid:
+                        return EngineResponse(
+                            message=f"⚠️ {error_msg}\n\n{question.text}",
+                            message_type='text',
+                            options=[],
+                            sender='ruby',
+                            avatar='⚠️',
+                            state=self.state
+                        )
+                
+                self.state.answers[question.id] = user_response
+                logger.info(f"Stored follow-up answer for {question.id}: {user_response}")
 
         self.state.current_question_index += 1
         return self._get_next_question(symptom)

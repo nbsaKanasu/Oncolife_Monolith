@@ -55,6 +55,16 @@ const formatUserResponse = (content: string): string => {
     'no': 'No',
     'true': 'Yes',
     'false': 'No',
+    // Patient context (chemo dates, physician visit)
+    'today': 'Today',
+    '1d': '1 day ago',
+    '2-3d': '2-3 days ago',
+    '4-7d': '4-7 days ago',
+    '1-2w': '1-2 weeks ago',
+    '>2w': 'More than 2 weeks ago',
+    'this_week': 'This week',
+    'next_week': 'Next week',
+    'not_scheduled': 'Not scheduled yet',
   };
   
   // Remove any line breaks that might be in the content
@@ -560,6 +570,32 @@ export const SymptomMessageBubble: React.FC<SymptomMessageBubbleProps> = ({
 
   if (frontendType === 'summary' && shouldShowInteractive) {
     return renderSummary();
+  }
+
+  // Patient context (last chemo, physician visit) - card with options
+  if (frontendType === 'patient_context' && shouldShowInteractive) {
+    return (
+      <div className="patient-context-screen">
+        <div className="context-card">
+          <RubyAvatar emoji="💎" />
+          <div 
+            className="context-message"
+            dangerouslySetInnerHTML={formatContent(message.content)}
+          />
+          <div className="context-options">
+            {options.map((opt: any, index: number) => (
+              <button
+                key={index}
+                className="context-option-btn"
+                onClick={() => handleOptionClick(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Check if this is a triage result

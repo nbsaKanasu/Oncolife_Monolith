@@ -37,13 +37,14 @@ class SymptomCategory(str, Enum):
 
 class ConversationPhase(str, Enum):
     """Phases of the symptom checker conversation."""
-    DISCLAIMER = "disclaimer"                    # NEW: Medical disclaimer
-    EMERGENCY_CHECK = "emergency_check"          # NEW: Urgent safety check
+    DISCLAIMER = "disclaimer"                    # Medical disclaimer
+    PATIENT_CONTEXT = "patient_context"          # NEW: Last chemo date, physician visit
+    EMERGENCY_CHECK = "emergency_check"          # Urgent safety check
     SYMPTOM_SELECTION = "symptom_selection"      # Grouped symptom selection
     SCREENING = "screening"                      # Per-symptom questions
     FOLLOW_UP = "follow_up"                      # Follow-up questions
-    SUMMARY = "summary"                          # NEW: Session summary
-    ADDING_NOTES = "adding_notes"                # NEW: Adding personal notes
+    SUMMARY = "summary"                          # Session summary
+    ADDING_NOTES = "adding_notes"                # Adding personal notes
     COMPLETED = "completed"                      # Final state
     EMERGENCY = "emergency"                      # Emergency path
     BRANCHED = "branched"                        # Branched to another symptom
@@ -232,6 +233,84 @@ MEDS_COUGH = [
     {"label": "Other", "value": "other"},
     {"label": "None", "value": "none"}
 ]
+
+
+# =============================================================================
+# PATIENT CONTEXT QUESTIONS (Critical Physician Data)
+# =============================================================================
+
+PATIENT_CONTEXT_MESSAGE = """📋 **Quick Check-In**
+
+Before we start, I need a couple of important details to help your care team:"""
+
+LAST_CHEMO_OPTIONS = [
+    {"label": "Today", "value": "today"},
+    {"label": "Yesterday", "value": "1d"},
+    {"label": "2-3 days ago", "value": "2-3d"},
+    {"label": "4-7 days ago", "value": "4-7d"},
+    {"label": "1-2 weeks ago", "value": "1-2w"},
+    {"label": "More than 2 weeks ago", "value": ">2w"},
+    {"label": "I haven't had chemotherapy yet", "value": "none"},
+]
+
+PHYSICIAN_VISIT_OPTIONS = [
+    {"label": "Today", "value": "today"},
+    {"label": "Tomorrow", "value": "1d"},
+    {"label": "In 2-3 days", "value": "2-3d"},
+    {"label": "This week", "value": "this_week"},
+    {"label": "Next week", "value": "next_week"},
+    {"label": "In 2+ weeks", "value": ">2w"},
+    {"label": "Not scheduled yet", "value": "not_scheduled"},
+]
+
+
+# =============================================================================
+# INPUT VALIDATION
+# =============================================================================
+
+# Temperature validation (Fahrenheit)
+TEMP_MIN_F = 90.0   # Minimum valid temperature
+TEMP_MAX_F = 110.0  # Maximum valid temperature
+TEMP_FEVER_THRESHOLD = 100.3  # Fever threshold
+
+def validate_temperature(temp_value: str) -> tuple[bool, float, str]:
+    """
+    Validate temperature input in Fahrenheit.
+    
+    Returns:
+        (is_valid, parsed_value, error_message)
+    """
+    if not temp_value:
+        return False, 0.0, "Please enter your temperature."
+    
+    try:
+        temp = float(temp_value)
+    except (ValueError, TypeError):
+        return False, 0.0, "Please enter a valid number (e.g., 98.6 or 101.5)."
+    
+    if temp < TEMP_MIN_F:
+        return False, temp, f"Temperature {temp}°F seems too low. Please verify and re-enter."
+    
+    if temp > TEMP_MAX_F:
+        return False, temp, f"Temperature {temp}°F seems too high. Please verify and re-enter."
+    
+    return True, temp, ""
+
+
+def validate_text_input(text: str, min_length: int = 1, max_length: int = 500) -> tuple[bool, str]:
+    """
+    Validate text input.
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if not text or len(text.strip()) < min_length:
+        return False, "Please provide a response."
+    
+    if len(text) > max_length:
+        return False, f"Response is too long. Please limit to {max_length} characters."
+    
+    return True, ""
 
 
 # =============================================================================
