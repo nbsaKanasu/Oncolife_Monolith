@@ -78,6 +78,13 @@ const ProfilePage: React.FC = () => {
         reminder_time: profile.reminder_time || '',
         doctor_name: profile.doctor_name || '',
         clinic_name: profile.clinic_name || '',
+        // Treatment Info
+        last_chemo_date: profile.last_chemo_date || '',
+        next_physician_visit: profile.next_physician_visit || '',
+        diagnosis: profile.diagnosis || '',
+        treatment_type: profile.treatment_type || '',
+        emergency_contact_name: profile.emergency_contact_name || '',
+        emergency_contact_phone: profile.emergency_contact_phone || '',
       });
     }
     setIsEditing(false);

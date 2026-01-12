@@ -8,6 +8,13 @@ export interface ProfileData {
   reminder_time: string | null;
   doctor_name: string;
   clinic_name: string;
+  // Treatment Info (previously in symptom checker)
+  last_chemo_date: string | null;
+  next_physician_visit: string | null;
+  diagnosis: string | null;
+  treatment_type: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
 }
 
 export interface ProfileFormData {
@@ -20,6 +27,13 @@ export interface ProfileFormData {
   reminder_time: string | null;
   doctor_name: string;
   clinic_name: string;
+  // Treatment Info (previously in symptom checker)
+  last_chemo_date: string | null;
+  next_physician_visit: string | null;
+  diagnosis: string | null;
+  treatment_type: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
 }
 
 export interface ProfilePageProps {

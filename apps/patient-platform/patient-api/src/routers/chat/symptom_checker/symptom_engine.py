@@ -1,14 +1,16 @@
 """
-Symptom Checker Engine - Version 2.0
+Symptom Checker Engine - Version 2.1
 Manages the rule-based conversation flow for symptom triage.
 
-Flow:
+Flow (Simplified - 5 phases):
 1. DISCLAIMER - Medical disclaimer with "I Understand" button
-2. PATIENT_CONTEXT - Last chemo date, scheduled physician visit (critical data)
-3. EMERGENCY_CHECK - Urgent safety check (5 emergency symptoms)
-4. SYMPTOM_SELECTION - Grouped symptom selection
-5. SCREENING - Per-symptom questions (Ruby chat)
-6. SUMMARY - Session summary with actions
+2. EMERGENCY_CHECK - Urgent safety check (5 emergency symptoms)
+3. SYMPTOM_SELECTION - Grouped symptom selection
+4. SCREENING - Per-symptom questions (Ruby chat)
+5. SUMMARY - Session summary with actions
+
+Note: Patient context (chemo dates, physician visits) is now stored in
+the Patient Profile page, not collected during symptom check.
 """
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
@@ -178,8 +180,12 @@ class SymptomCheckerEngine:
         if self.state.phase == ConversationPhase.DISCLAIMER:
             return self._handle_disclaimer(user_response)
         
+        # DEPRECATED: Patient context is now in Profile page, not symptom checker
+        # Kept for backwards compatibility with old sessions
         elif self.state.phase == ConversationPhase.PATIENT_CONTEXT:
-            return self._handle_patient_context(user_response)
+            # Redirect to emergency check for any legacy sessions
+            self.state.phase = ConversationPhase.EMERGENCY_CHECK
+            return self._show_emergency_check()
         
         elif self.state.phase == ConversationPhase.EMERGENCY_CHECK:
             return self._handle_emergency_check(user_response)
@@ -222,10 +228,10 @@ class SymptomCheckerEngine:
     def _handle_disclaimer(self, user_response: Any) -> EngineResponse:
         """Handle the disclaimer acceptance."""
         if user_response == 'accept':
-            # Move to patient context (last chemo, physician visit)
-            self.state.phase = ConversationPhase.PATIENT_CONTEXT
-            self.state.patient_context_step = 0
-            return self._show_patient_context_question()
+            # Skip patient context - now stored in Profile page
+            # Go directly to emergency check
+            self.state.phase = ConversationPhase.EMERGENCY_CHECK
+            return self._show_emergency_check()
         else:
             # User must accept to continue
             return EngineResponse(
