@@ -296,6 +296,57 @@ create_vpc_infrastructure() {
     
     if [ "$SKIP_VPC" = true ]; then
         log_info "Skipping VPC creation (--skip-vpc flag)"
+        
+        # Try to auto-detect existing VPC and resources
+        log_info "Attempting to auto-detect existing resources..."
+        
+        VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=$PROJECT_NAME-vpc" \
+            --query 'Vpcs[0].VpcId' \
+            --output text 2>/dev/null || echo "")
+        
+        if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+            log_success "Found VPC: $VPC_ID"
+            
+            # Auto-detect subnets
+            PUBLIC_SUBNET_1=$(aws ec2 describe-subnets \
+                --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$PROJECT_NAME-public-1" \
+                --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            PUBLIC_SUBNET_2=$(aws ec2 describe-subnets \
+                --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$PROJECT_NAME-public-2" \
+                --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            PRIVATE_SUBNET_1=$(aws ec2 describe-subnets \
+                --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$PROJECT_NAME-private-1" \
+                --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            PRIVATE_SUBNET_2=$(aws ec2 describe-subnets \
+                --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$PROJECT_NAME-private-2" \
+                --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "")
+            
+            log_success "Found subnets: $PUBLIC_SUBNET_1, $PUBLIC_SUBNET_2, $PRIVATE_SUBNET_1, $PRIVATE_SUBNET_2"
+            
+            # Auto-detect security groups
+            SG_ALB=$(aws ec2 describe-security-groups \
+                --filters "Name=group-name,Values=$PROJECT_NAME-alb-sg" "Name=vpc-id,Values=$VPC_ID" \
+                --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+            SG_ECS=$(aws ec2 describe-security-groups \
+                --filters "Name=group-name,Values=$PROJECT_NAME-ecs-sg" "Name=vpc-id,Values=$VPC_ID" \
+                --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+            SG_RDS=$(aws ec2 describe-security-groups \
+                --filters "Name=group-name,Values=$PROJECT_NAME-rds-sg" "Name=vpc-id,Values=$VPC_ID" \
+                --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+            
+            if [ -n "$SG_ALB" ] && [ "$SG_ALB" != "None" ]; then
+                log_success "Found security groups: ALB=$SG_ALB, ECS=$SG_ECS, RDS=$SG_RDS"
+                SKIP_SECURITY_GROUPS=true
+            else
+                log_info "Security groups not found, will create them"
+            fi
+            
+            return
+        fi
+        
+        # Fallback to manual input if auto-detect fails
+        log_warning "Could not auto-detect resources. Please enter manually:"
         echo ""
         echo "  Enter your existing AWS resource IDs:"
         read -p "  VPC ID (vpc-xxxxxxxx): " VPC_ID
@@ -307,6 +358,33 @@ create_vpc_infrastructure() {
         read -p "  ECS Security Group ID (sg-xxx): " SG_ECS
         read -p "  RDS Security Group ID (sg-xxx): " SG_RDS
         SKIP_SECURITY_GROUPS=true
+        return
+    fi
+    
+    # Check if VPC already exists
+    VPC_ID=$(aws ec2 describe-vpcs \
+        --filters "Name=tag:Name,Values=$PROJECT_NAME-vpc" \
+        --query 'Vpcs[0].VpcId' \
+        --output text 2>/dev/null || echo "")
+    
+    if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+        log_success "VPC already exists (reusing): $VPC_ID"
+        
+        # Get existing subnets
+        PUBLIC_SUBNET_1=$(aws ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$PROJECT_NAME-public-1" \
+            --query 'Subnets[0].SubnetId' --output text)
+        PUBLIC_SUBNET_2=$(aws ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$PROJECT_NAME-public-2" \
+            --query 'Subnets[0].SubnetId' --output text)
+        PRIVATE_SUBNET_1=$(aws ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$PROJECT_NAME-private-1" \
+            --query 'Subnets[0].SubnetId' --output text)
+        PRIVATE_SUBNET_2=$(aws ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=$PROJECT_NAME-private-2" \
+            --query 'Subnets[0].SubnetId' --output text)
+        
+        log_success "Subnets: $PUBLIC_SUBNET_1, $PUBLIC_SUBNET_2, $PRIVATE_SUBNET_1, $PRIVATE_SUBNET_2"
         return
     fi
     
@@ -439,46 +517,79 @@ create_security_groups() {
         return
     fi
     
-    # ALB Security Group
+    # -------------------------------------------------------------------------
+    # ALB Security Group - Check if exists first
+    # -------------------------------------------------------------------------
     log_info "Creating ALB Security Group..."
-    SG_ALB=$(aws ec2 create-security-group \
-        --group-name "$PROJECT_NAME-alb-sg" \
-        --description "OncoLife ALB Security Group" \
-        --vpc-id $VPC_ID \
-        --query 'GroupId' \
-        --output text)
+    SG_ALB=$(aws ec2 describe-security-groups \
+        --filters "Name=group-name,Values=$PROJECT_NAME-alb-sg" "Name=vpc-id,Values=$VPC_ID" \
+        --query 'SecurityGroups[0].GroupId' \
+        --output text 2>/dev/null || echo "")
     
-    aws ec2 authorize-security-group-ingress --group-id $SG_ALB --protocol tcp --port 443 --cidr "0.0.0.0/0" > /dev/null
-    aws ec2 authorize-security-group-ingress --group-id $SG_ALB --protocol tcp --port 80 --cidr "0.0.0.0/0" > /dev/null
-    aws ec2 create-tags --resources $SG_ALB --tags "Key=Name,Value=$PROJECT_NAME-alb-sg" > /dev/null
-    log_success "ALB SG: $SG_ALB"
+    if [ -z "$SG_ALB" ] || [ "$SG_ALB" = "None" ]; then
+        SG_ALB=$(aws ec2 create-security-group \
+            --group-name "$PROJECT_NAME-alb-sg" \
+            --description "OncoLife ALB Security Group" \
+            --vpc-id $VPC_ID \
+            --query 'GroupId' \
+            --output text)
+        
+        aws ec2 authorize-security-group-ingress --group-id $SG_ALB --protocol tcp --port 443 --cidr "0.0.0.0/0" > /dev/null 2>&1 || true
+        aws ec2 authorize-security-group-ingress --group-id $SG_ALB --protocol tcp --port 80 --cidr "0.0.0.0/0" > /dev/null 2>&1 || true
+        aws ec2 create-tags --resources $SG_ALB --tags "Key=Name,Value=$PROJECT_NAME-alb-sg" > /dev/null
+        log_success "ALB SG created: $SG_ALB"
+    else
+        log_success "ALB SG already exists (reusing): $SG_ALB"
+    fi
     
-    # ECS Security Group
+    # -------------------------------------------------------------------------
+    # ECS Security Group - Check if exists first
+    # -------------------------------------------------------------------------
     log_info "Creating ECS Security Group..."
-    SG_ECS=$(aws ec2 create-security-group \
-        --group-name "$PROJECT_NAME-ecs-sg" \
-        --description "OncoLife ECS Security Group" \
-        --vpc-id $VPC_ID \
-        --query 'GroupId' \
-        --output text)
+    SG_ECS=$(aws ec2 describe-security-groups \
+        --filters "Name=group-name,Values=$PROJECT_NAME-ecs-sg" "Name=vpc-id,Values=$VPC_ID" \
+        --query 'SecurityGroups[0].GroupId' \
+        --output text 2>/dev/null || echo "")
     
-    aws ec2 authorize-security-group-ingress --group-id $SG_ECS --protocol tcp --port 8000 --source-group $SG_ALB > /dev/null
-    aws ec2 authorize-security-group-ingress --group-id $SG_ECS --protocol tcp --port 8001 --source-group $SG_ALB > /dev/null
-    aws ec2 create-tags --resources $SG_ECS --tags "Key=Name,Value=$PROJECT_NAME-ecs-sg" > /dev/null
-    log_success "ECS SG: $SG_ECS"
+    if [ -z "$SG_ECS" ] || [ "$SG_ECS" = "None" ]; then
+        SG_ECS=$(aws ec2 create-security-group \
+            --group-name "$PROJECT_NAME-ecs-sg" \
+            --description "OncoLife ECS Security Group" \
+            --vpc-id $VPC_ID \
+            --query 'GroupId' \
+            --output text)
+        
+        aws ec2 authorize-security-group-ingress --group-id $SG_ECS --protocol tcp --port 8000 --source-group $SG_ALB > /dev/null 2>&1 || true
+        aws ec2 authorize-security-group-ingress --group-id $SG_ECS --protocol tcp --port 8001 --source-group $SG_ALB > /dev/null 2>&1 || true
+        aws ec2 create-tags --resources $SG_ECS --tags "Key=Name,Value=$PROJECT_NAME-ecs-sg" > /dev/null
+        log_success "ECS SG created: $SG_ECS"
+    else
+        log_success "ECS SG already exists (reusing): $SG_ECS"
+    fi
     
-    # RDS Security Group
+    # -------------------------------------------------------------------------
+    # RDS Security Group - Check if exists first
+    # -------------------------------------------------------------------------
     log_info "Creating RDS Security Group..."
-    SG_RDS=$(aws ec2 create-security-group \
-        --group-name "$PROJECT_NAME-rds-sg" \
-        --description "OncoLife RDS Security Group" \
-        --vpc-id $VPC_ID \
-        --query 'GroupId' \
-        --output text)
+    SG_RDS=$(aws ec2 describe-security-groups \
+        --filters "Name=group-name,Values=$PROJECT_NAME-rds-sg" "Name=vpc-id,Values=$VPC_ID" \
+        --query 'SecurityGroups[0].GroupId' \
+        --output text 2>/dev/null || echo "")
     
-    aws ec2 authorize-security-group-ingress --group-id $SG_RDS --protocol tcp --port 5432 --source-group $SG_ECS > /dev/null
-    aws ec2 create-tags --resources $SG_RDS --tags "Key=Name,Value=$PROJECT_NAME-rds-sg" > /dev/null
-    log_success "RDS SG: $SG_RDS"
+    if [ -z "$SG_RDS" ] || [ "$SG_RDS" = "None" ]; then
+        SG_RDS=$(aws ec2 create-security-group \
+            --group-name "$PROJECT_NAME-rds-sg" \
+            --description "OncoLife RDS Security Group" \
+            --vpc-id $VPC_ID \
+            --query 'GroupId' \
+            --output text)
+        
+        aws ec2 authorize-security-group-ingress --group-id $SG_RDS --protocol tcp --port 5432 --source-group $SG_ECS > /dev/null 2>&1 || true
+        aws ec2 create-tags --resources $SG_RDS --tags "Key=Name,Value=$PROJECT_NAME-rds-sg" > /dev/null
+        log_success "RDS SG created: $SG_RDS"
+    else
+        log_success "RDS SG already exists (reusing): $SG_RDS"
+    fi
 }
 
 # =============================================================================
@@ -490,24 +601,77 @@ create_rds_database() {
     
     if [ "$SKIP_RDS" = true ]; then
         log_info "Skipping RDS creation (--skip-rds flag)"
-        read -p "  Enter existing RDS endpoint (xxx.rds.amazonaws.com): " RDS_ENDPOINT
-        read -p "  Enter DB username (default: oncolife_admin): " DB_USERNAME
-        DB_USERNAME="${DB_USERNAME:-oncolife_admin}"
-        get_password
+        
+        # Try to auto-detect existing RDS
+        RDS_ENDPOINT=$(aws rds describe-db-instances \
+            --db-instance-identifier "$PROJECT_NAME-db" \
+            --query 'DBInstances[0].Endpoint.Address' \
+            --output text 2>/dev/null || echo "")
+        
+        if [ -n "$RDS_ENDPOINT" ] && [ "$RDS_ENDPOINT" != "None" ]; then
+            log_success "Found existing RDS: $RDS_ENDPOINT"
+            DB_USERNAME="oncolife_admin"
+            log_warning "Using existing RDS. Please enter the DB password you set during initial creation."
+            get_password
+        else
+            read -p "  Enter existing RDS endpoint (xxx.rds.amazonaws.com): " RDS_ENDPOINT
+            read -p "  Enter DB username (default: oncolife_admin): " DB_USERNAME
+            DB_USERNAME="${DB_USERNAME:-oncolife_admin}"
+            get_password
+        fi
         return
     fi
     
-    # Get database password
+    # Check if RDS already exists
+    RDS_STATUS=$(aws rds describe-db-instances \
+        --db-instance-identifier "$PROJECT_NAME-db" \
+        --query 'DBInstances[0].DBInstanceStatus' \
+        --output text 2>/dev/null || echo "")
+    
+    if [ -n "$RDS_STATUS" ] && [ "$RDS_STATUS" != "None" ]; then
+        log_success "RDS instance already exists (status: $RDS_STATUS)"
+        
+        if [ "$RDS_STATUS" = "available" ]; then
+            RDS_ENDPOINT=$(aws rds describe-db-instances \
+                --db-instance-identifier "$PROJECT_NAME-db" \
+                --query 'DBInstances[0].Endpoint.Address' \
+                --output text)
+            log_success "RDS Endpoint: $RDS_ENDPOINT"
+            DB_USERNAME="oncolife_admin"
+            log_warning "Using existing RDS. Please enter the DB password you set during initial creation."
+            get_password
+            return
+        else
+            log_info "Waiting for RDS to become available..."
+            wait_for_resource "RDS Instance" "$PROJECT_NAME-db" \
+                "aws rds describe-db-instances --db-instance-identifier $PROJECT_NAME-db --query 'DBInstances[0].DBInstanceStatus' --output text | grep -q available" \
+                1200 30
+            RDS_ENDPOINT=$(aws rds describe-db-instances \
+                --db-instance-identifier "$PROJECT_NAME-db" \
+                --query 'DBInstances[0].Endpoint.Address' \
+                --output text)
+            DB_USERNAME="oncolife_admin"
+            log_warning "Using existing RDS. Please enter the DB password you set during initial creation."
+            get_password
+            return
+        fi
+    fi
+    
+    # Get database password for new instance
     get_password
     DB_USERNAME="oncolife_admin"
     
-    # Create DB Subnet Group
+    # Create DB Subnet Group - check if exists first
     log_info "Creating DB Subnet Group..."
-    aws rds create-db-subnet-group \
-        --db-subnet-group-name "$PROJECT_NAME-db-subnet" \
-        --db-subnet-group-description "OncoLife Database Subnets" \
-        --subnet-ids $PRIVATE_SUBNET_1 $PRIVATE_SUBNET_2 > /dev/null
-    log_success "DB Subnet Group created"
+    if aws rds describe-db-subnet-groups --db-subnet-group-name "$PROJECT_NAME-db-subnet" 2>/dev/null > /dev/null; then
+        log_success "DB Subnet Group already exists (reusing)"
+    else
+        aws rds create-db-subnet-group \
+            --db-subnet-group-name "$PROJECT_NAME-db-subnet" \
+            --db-subnet-group-description "OncoLife Database Subnets" \
+            --subnet-ids $PRIVATE_SUBNET_1 $PRIVATE_SUBNET_2 > /dev/null
+        log_success "DB Subnet Group created"
+    fi
     
     # Create RDS Instance
     log_info "Creating RDS instance (this takes 10-15 minutes)..."
@@ -550,6 +714,33 @@ create_cognito_user_pool() {
     
     if [ "$SKIP_COGNITO" = true ]; then
         log_info "Skipping Cognito creation (--skip-cognito flag)"
+        
+        # Try to auto-detect existing Cognito
+        COGNITO_POOL_ID=$(aws cognito-idp list-user-pools --max-results 50 \
+            --query "UserPools[?Name=='$PROJECT_NAME-patients'].Id | [0]" \
+            --output text 2>/dev/null || echo "")
+        
+        if [ -n "$COGNITO_POOL_ID" ] && [ "$COGNITO_POOL_ID" != "None" ]; then
+            log_success "Found existing User Pool: $COGNITO_POOL_ID"
+            
+            # Try to get existing client
+            COGNITO_CLIENT_ID=$(aws cognito-idp list-user-pool-clients \
+                --user-pool-id $COGNITO_POOL_ID \
+                --query "UserPoolClients[?ClientName=='$PROJECT_NAME-api-client'].ClientId | [0]" \
+                --output text 2>/dev/null || echo "")
+            
+            if [ -n "$COGNITO_CLIENT_ID" ] && [ "$COGNITO_CLIENT_ID" != "None" ]; then
+                COGNITO_CLIENT_SECRET=$(aws cognito-idp describe-user-pool-client \
+                    --user-pool-id $COGNITO_POOL_ID \
+                    --client-id $COGNITO_CLIENT_ID \
+                    --query 'UserPoolClient.ClientSecret' \
+                    --output text)
+                log_success "Found existing Client: $COGNITO_CLIENT_ID"
+                return
+            fi
+        fi
+        
+        # Fallback to manual input
         read -p "  Enter existing User Pool ID (us-west-2_xxxxxxxx): " COGNITO_POOL_ID
         read -p "  Enter existing Client ID: " COGNITO_CLIENT_ID
         read -sp "  Enter existing Client Secret: " COGNITO_CLIENT_SECRET
@@ -559,19 +750,44 @@ create_cognito_user_pool() {
         return
     fi
     
-    log_info "Creating User Pool..."
-    COGNITO_POOL_ID=$(aws cognito-idp create-user-pool \
-        --pool-name "$PROJECT_NAME-patients" \
-        --auto-verified-attributes email \
-        --username-attributes email \
-        --mfa-configuration OFF \
-        --policies '{"PasswordPolicy":{"MinimumLength":8,"RequireUppercase":true,"RequireLowercase":true,"RequireNumbers":true,"RequireSymbols":true}}' \
-        --admin-create-user-config '{"AllowAdminCreateUserOnly":true}' \
-        --query 'UserPool.Id' \
-        --output text)
-    log_success "User Pool ID: $COGNITO_POOL_ID"
+    # Check if User Pool already exists
+    COGNITO_POOL_ID=$(aws cognito-idp list-user-pools --max-results 50 \
+        --query "UserPools[?Name=='$PROJECT_NAME-patients'].Id | [0]" \
+        --output text 2>/dev/null || echo "")
     
-    # Create App Client with correct auth flow names
+    if [ -n "$COGNITO_POOL_ID" ] && [ "$COGNITO_POOL_ID" != "None" ]; then
+        log_success "User Pool already exists (reusing): $COGNITO_POOL_ID"
+        
+        # Check if client exists
+        COGNITO_CLIENT_ID=$(aws cognito-idp list-user-pool-clients \
+            --user-pool-id $COGNITO_POOL_ID \
+            --query "UserPoolClients[?ClientName=='$PROJECT_NAME-api-client'].ClientId | [0]" \
+            --output text 2>/dev/null || echo "")
+        
+        if [ -n "$COGNITO_CLIENT_ID" ] && [ "$COGNITO_CLIENT_ID" != "None" ]; then
+            COGNITO_CLIENT_SECRET=$(aws cognito-idp describe-user-pool-client \
+                --user-pool-id $COGNITO_POOL_ID \
+                --client-id $COGNITO_CLIENT_ID \
+                --query 'UserPoolClient.ClientSecret' \
+                --output text)
+            log_success "App Client already exists (reusing): $COGNITO_CLIENT_ID"
+            return
+        fi
+    else
+        log_info "Creating User Pool..."
+        COGNITO_POOL_ID=$(aws cognito-idp create-user-pool \
+            --pool-name "$PROJECT_NAME-patients" \
+            --auto-verified-attributes email \
+            --username-attributes email \
+            --mfa-configuration OFF \
+            --policies '{"PasswordPolicy":{"MinimumLength":8,"RequireUppercase":true,"RequireLowercase":true,"RequireNumbers":true,"RequireSymbols":true}}' \
+            --admin-create-user-config '{"AllowAdminCreateUserOnly":true}' \
+            --query 'UserPool.Id' \
+            --output text)
+        log_success "User Pool created: $COGNITO_POOL_ID"
+    fi
+    
+    # Create App Client if it doesn't exist
     log_info "Creating App Client..."
     COGNITO_CLIENT_ID=$(aws cognito-idp create-user-pool-client \
         --user-pool-id $COGNITO_POOL_ID \
@@ -587,7 +803,7 @@ create_cognito_user_pool() {
         --client-id $COGNITO_CLIENT_ID \
         --query 'UserPoolClient.ClientSecret' \
         --output text)
-    log_success "Client ID: $COGNITO_CLIENT_ID"
+    log_success "App Client created: $COGNITO_CLIENT_ID"
 }
 
 # =============================================================================
@@ -777,9 +993,22 @@ create_ecs_cluster() {
     
     CLUSTER_NAME="$PROJECT_NAME-$ENVIRONMENT"
     
-    if aws ecs describe-clusters --clusters $CLUSTER_NAME 2>/dev/null | grep -q "ACTIVE"; then
-        log_success "Cluster already exists"
+    # Check cluster status
+    CLUSTER_STATUS=$(aws ecs describe-clusters \
+        --clusters $CLUSTER_NAME \
+        --query 'clusters[0].status' \
+        --output text 2>/dev/null || echo "")
+    
+    if [ "$CLUSTER_STATUS" = "ACTIVE" ]; then
+        log_success "Cluster already exists and is ACTIVE (reusing)"
         return
+    fi
+    
+    # If cluster exists but is INACTIVE, delete it first
+    if [ "$CLUSTER_STATUS" = "INACTIVE" ]; then
+        log_warning "Cluster exists but is INACTIVE, deleting and recreating..."
+        aws ecs delete-cluster --cluster $CLUSTER_NAME > /dev/null 2>&1 || true
+        sleep 3
     fi
     
     aws ecs create-cluster \
@@ -797,16 +1026,28 @@ create_ecs_cluster() {
 create_alb_infrastructure() {
     log_step "STEP 13: Creating ALB and Target Groups"
     
-    # Patient API ALB
+    # -------------------------------------------------------------------------
+    # Patient API ALB - Check if exists first
+    # -------------------------------------------------------------------------
     log_info "Creating Patient API ALB..."
-    PATIENT_ALB_ARN=$(aws elbv2 create-load-balancer \
-        --name "$PROJECT_NAME-patient-alb" \
-        --subnets $PUBLIC_SUBNET_1 $PUBLIC_SUBNET_2 \
-        --security-groups $SG_ALB \
-        --scheme internet-facing \
-        --type application \
+    PATIENT_ALB_ARN=$(aws elbv2 describe-load-balancers \
+        --names "$PROJECT_NAME-patient-alb" \
         --query 'LoadBalancers[0].LoadBalancerArn' \
-        --output text)
+        --output text 2>/dev/null || echo "")
+    
+    if [ -z "$PATIENT_ALB_ARN" ] || [ "$PATIENT_ALB_ARN" = "None" ]; then
+        PATIENT_ALB_ARN=$(aws elbv2 create-load-balancer \
+            --name "$PROJECT_NAME-patient-alb" \
+            --subnets $PUBLIC_SUBNET_1 $PUBLIC_SUBNET_2 \
+            --security-groups $SG_ALB \
+            --scheme internet-facing \
+            --type application \
+            --query 'LoadBalancers[0].LoadBalancerArn' \
+            --output text)
+        log_success "Patient ALB created"
+    else
+        log_success "Patient ALB already exists (reusing)"
+    fi
     
     PATIENT_ALB_DNS=$(aws elbv2 describe-load-balancers \
         --load-balancer-arns $PATIENT_ALB_ARN \
@@ -814,39 +1055,73 @@ create_alb_infrastructure() {
         --output text)
     log_success "Patient ALB: $PATIENT_ALB_DNS"
     
-    # Patient Target Group
-    PATIENT_TG_ARN=$(aws elbv2 create-target-group \
-        --name "patient-api-tg" \
-        --protocol HTTP \
-        --port 8000 \
-        --vpc-id $VPC_ID \
-        --target-type ip \
-        --health-check-path "/health" \
-        --health-check-interval-seconds 30 \
-        --healthy-threshold-count 2 \
-        --unhealthy-threshold-count 3 \
+    # -------------------------------------------------------------------------
+    # Patient Target Group - Check if exists first
+    # -------------------------------------------------------------------------
+    PATIENT_TG_ARN=$(aws elbv2 describe-target-groups \
+        --names "patient-api-tg" \
         --query 'TargetGroups[0].TargetGroupArn' \
-        --output text)
-    log_success "Patient Target Group created"
+        --output text 2>/dev/null || echo "")
     
-    # Patient HTTP Listener
-    aws elbv2 create-listener \
+    if [ -z "$PATIENT_TG_ARN" ] || [ "$PATIENT_TG_ARN" = "None" ]; then
+        PATIENT_TG_ARN=$(aws elbv2 create-target-group \
+            --name "patient-api-tg" \
+            --protocol HTTP \
+            --port 8000 \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-path "/health" \
+            --health-check-interval-seconds 30 \
+            --healthy-threshold-count 2 \
+            --unhealthy-threshold-count 3 \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+        log_success "Patient Target Group created"
+    else
+        log_success "Patient Target Group already exists (reusing)"
+    fi
+    
+    # -------------------------------------------------------------------------
+    # Patient HTTP Listener - Check if exists first
+    # -------------------------------------------------------------------------
+    PATIENT_LISTENER_ARN=$(aws elbv2 describe-listeners \
         --load-balancer-arn $PATIENT_ALB_ARN \
-        --protocol HTTP \
-        --port 80 \
-        --default-actions "Type=forward,TargetGroupArn=$PATIENT_TG_ARN" > /dev/null
-    log_success "Patient HTTP Listener created"
+        --query 'Listeners[?Port==`80`].ListenerArn' \
+        --output text 2>/dev/null || echo "")
     
-    # Doctor API ALB
+    if [ -z "$PATIENT_LISTENER_ARN" ] || [ "$PATIENT_LISTENER_ARN" = "None" ]; then
+        aws elbv2 create-listener \
+            --load-balancer-arn $PATIENT_ALB_ARN \
+            --protocol HTTP \
+            --port 80 \
+            --default-actions "Type=forward,TargetGroupArn=$PATIENT_TG_ARN" > /dev/null
+        log_success "Patient HTTP Listener created"
+    else
+        log_success "Patient HTTP Listener already exists (reusing)"
+    fi
+    
+    # -------------------------------------------------------------------------
+    # Doctor API ALB - Check if exists first
+    # -------------------------------------------------------------------------
     log_info "Creating Doctor API ALB..."
-    DOCTOR_ALB_ARN=$(aws elbv2 create-load-balancer \
-        --name "$PROJECT_NAME-doctor-alb" \
-        --subnets $PUBLIC_SUBNET_1 $PUBLIC_SUBNET_2 \
-        --security-groups $SG_ALB \
-        --scheme internet-facing \
-        --type application \
+    DOCTOR_ALB_ARN=$(aws elbv2 describe-load-balancers \
+        --names "$PROJECT_NAME-doctor-alb" \
         --query 'LoadBalancers[0].LoadBalancerArn' \
-        --output text)
+        --output text 2>/dev/null || echo "")
+    
+    if [ -z "$DOCTOR_ALB_ARN" ] || [ "$DOCTOR_ALB_ARN" = "None" ]; then
+        DOCTOR_ALB_ARN=$(aws elbv2 create-load-balancer \
+            --name "$PROJECT_NAME-doctor-alb" \
+            --subnets $PUBLIC_SUBNET_1 $PUBLIC_SUBNET_2 \
+            --security-groups $SG_ALB \
+            --scheme internet-facing \
+            --type application \
+            --query 'LoadBalancers[0].LoadBalancerArn' \
+            --output text)
+        log_success "Doctor ALB created"
+    else
+        log_success "Doctor ALB already exists (reusing)"
+    fi
     
     DOCTOR_ALB_DNS=$(aws elbv2 describe-load-balancers \
         --load-balancer-arns $DOCTOR_ALB_ARN \
@@ -854,28 +1129,50 @@ create_alb_infrastructure() {
         --output text)
     log_success "Doctor ALB: $DOCTOR_ALB_DNS"
     
-    # Doctor Target Group
-    DOCTOR_TG_ARN=$(aws elbv2 create-target-group \
-        --name "doctor-api-tg" \
-        --protocol HTTP \
-        --port 8001 \
-        --vpc-id $VPC_ID \
-        --target-type ip \
-        --health-check-path "/health" \
-        --health-check-interval-seconds 30 \
-        --healthy-threshold-count 2 \
-        --unhealthy-threshold-count 3 \
+    # -------------------------------------------------------------------------
+    # Doctor Target Group - Check if exists first
+    # -------------------------------------------------------------------------
+    DOCTOR_TG_ARN=$(aws elbv2 describe-target-groups \
+        --names "doctor-api-tg" \
         --query 'TargetGroups[0].TargetGroupArn' \
-        --output text)
-    log_success "Doctor Target Group created"
+        --output text 2>/dev/null || echo "")
     
-    # Doctor HTTP Listener
-    aws elbv2 create-listener \
+    if [ -z "$DOCTOR_TG_ARN" ] || [ "$DOCTOR_TG_ARN" = "None" ]; then
+        DOCTOR_TG_ARN=$(aws elbv2 create-target-group \
+            --name "doctor-api-tg" \
+            --protocol HTTP \
+            --port 8001 \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --health-check-path "/health" \
+            --health-check-interval-seconds 30 \
+            --healthy-threshold-count 2 \
+            --unhealthy-threshold-count 3 \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+        log_success "Doctor Target Group created"
+    else
+        log_success "Doctor Target Group already exists (reusing)"
+    fi
+    
+    # -------------------------------------------------------------------------
+    # Doctor HTTP Listener - Check if exists first
+    # -------------------------------------------------------------------------
+    DOCTOR_LISTENER_ARN=$(aws elbv2 describe-listeners \
         --load-balancer-arn $DOCTOR_ALB_ARN \
-        --protocol HTTP \
-        --port 80 \
-        --default-actions "Type=forward,TargetGroupArn=$DOCTOR_TG_ARN" > /dev/null
-    log_success "Doctor HTTP Listener created"
+        --query 'Listeners[?Port==`80`].ListenerArn' \
+        --output text 2>/dev/null || echo "")
+    
+    if [ -z "$DOCTOR_LISTENER_ARN" ] || [ "$DOCTOR_LISTENER_ARN" = "None" ]; then
+        aws elbv2 create-listener \
+            --load-balancer-arn $DOCTOR_ALB_ARN \
+            --protocol HTTP \
+            --port 80 \
+            --default-actions "Type=forward,TargetGroupArn=$DOCTOR_TG_ARN" > /dev/null
+        log_success "Doctor HTTP Listener created"
+    else
+        log_success "Doctor HTTP Listener already exists (reusing)"
+    fi
 }
 
 # =============================================================================
@@ -1010,31 +1307,83 @@ create_ecs_services() {
     CLUSTER_NAME="$PROJECT_NAME-$ENVIRONMENT"
     NETWORK_CONFIG="awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_1,$PRIVATE_SUBNET_2],securityGroups=[$SG_ECS],assignPublicIp=DISABLED}"
     
-    # Patient API Service
+    # -------------------------------------------------------------------------
+    # Patient API Service - Check if exists first
+    # -------------------------------------------------------------------------
     log_info "Creating Patient API Service..."
-    aws ecs create-service \
+    PATIENT_SERVICE_STATUS=$(aws ecs describe-services \
         --cluster $CLUSTER_NAME \
-        --service-name "patient-api-service" \
-        --task-definition "$PROJECT_NAME-patient-api" \
-        --desired-count $DESIRED_COUNT \
-        --launch-type FARGATE \
-        --network-configuration "$NETWORK_CONFIG" \
-        --load-balancers "targetGroupArn=$PATIENT_TG_ARN,containerName=patient-api,containerPort=8000" \
-        --health-check-grace-period-seconds 120 > /dev/null
-    log_success "Patient API Service created"
+        --services "patient-api-service" \
+        --query 'services[0].status' \
+        --output text 2>/dev/null || echo "")
     
-    # Doctor API Service
+    if [ "$PATIENT_SERVICE_STATUS" = "ACTIVE" ]; then
+        log_info "Patient API Service exists, updating..."
+        aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service "patient-api-service" \
+            --task-definition "$PROJECT_NAME-patient-api" \
+            --desired-count $DESIRED_COUNT \
+            --force-new-deployment > /dev/null
+        log_success "Patient API Service updated"
+    else
+        # Delete inactive service if exists
+        if [ -n "$PATIENT_SERVICE_STATUS" ] && [ "$PATIENT_SERVICE_STATUS" != "None" ]; then
+            log_info "Removing inactive Patient API Service..."
+            aws ecs delete-service --cluster $CLUSTER_NAME --service "patient-api-service" --force 2>/dev/null || true
+            sleep 5
+        fi
+        
+        aws ecs create-service \
+            --cluster $CLUSTER_NAME \
+            --service-name "patient-api-service" \
+            --task-definition "$PROJECT_NAME-patient-api" \
+            --desired-count $DESIRED_COUNT \
+            --launch-type FARGATE \
+            --network-configuration "$NETWORK_CONFIG" \
+            --load-balancers "targetGroupArn=$PATIENT_TG_ARN,containerName=patient-api,containerPort=8000" \
+            --health-check-grace-period-seconds 120 > /dev/null
+        log_success "Patient API Service created"
+    fi
+    
+    # -------------------------------------------------------------------------
+    # Doctor API Service - Check if exists first
+    # -------------------------------------------------------------------------
     log_info "Creating Doctor API Service..."
-    aws ecs create-service \
+    DOCTOR_SERVICE_STATUS=$(aws ecs describe-services \
         --cluster $CLUSTER_NAME \
-        --service-name "doctor-api-service" \
-        --task-definition "$PROJECT_NAME-doctor-api" \
-        --desired-count $DESIRED_COUNT \
-        --launch-type FARGATE \
-        --network-configuration "$NETWORK_CONFIG" \
-        --load-balancers "targetGroupArn=$DOCTOR_TG_ARN,containerName=doctor-api,containerPort=8001" \
-        --health-check-grace-period-seconds 120 > /dev/null
-    log_success "Doctor API Service created"
+        --services "doctor-api-service" \
+        --query 'services[0].status' \
+        --output text 2>/dev/null || echo "")
+    
+    if [ "$DOCTOR_SERVICE_STATUS" = "ACTIVE" ]; then
+        log_info "Doctor API Service exists, updating..."
+        aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service "doctor-api-service" \
+            --task-definition "$PROJECT_NAME-doctor-api" \
+            --desired-count $DESIRED_COUNT \
+            --force-new-deployment > /dev/null
+        log_success "Doctor API Service updated"
+    else
+        # Delete inactive service if exists
+        if [ -n "$DOCTOR_SERVICE_STATUS" ] && [ "$DOCTOR_SERVICE_STATUS" != "None" ]; then
+            log_info "Removing inactive Doctor API Service..."
+            aws ecs delete-service --cluster $CLUSTER_NAME --service "doctor-api-service" --force 2>/dev/null || true
+            sleep 5
+        fi
+        
+        aws ecs create-service \
+            --cluster $CLUSTER_NAME \
+            --service-name "doctor-api-service" \
+            --task-definition "$PROJECT_NAME-doctor-api" \
+            --desired-count $DESIRED_COUNT \
+            --launch-type FARGATE \
+            --network-configuration "$NETWORK_CONFIG" \
+            --load-balancers "targetGroupArn=$DOCTOR_TG_ARN,containerName=doctor-api,containerPort=8001" \
+            --health-check-grace-period-seconds 120 > /dev/null
+        log_success "Doctor API Service created"
+    fi
 }
 
 # =============================================================================
