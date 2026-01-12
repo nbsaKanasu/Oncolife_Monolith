@@ -38,6 +38,40 @@ const SystemAvatar: React.FC = () => (
   <div className="system-avatar">⚕️</div>
 );
 
+// Format user response for better display
+const formatUserResponse = (content: string): string => {
+  const friendlyLabels: Record<string, string> = {
+    'accept': '✓ I Understand',
+    'none': '✓ None of these',
+    'acknowledge': '✓ I Understand',
+    'call_911': '📞 Calling 911',
+    'save_diary': '📔 Save to Diary',
+    'download': '📥 Download Summary',
+    'report_another': '🔄 Report Another Symptom',
+    'done': '✅ Done',
+    'go_diary': '📔 Go to Diary',
+    'continue': '➡️ Continue',
+    'yes': '✓ Yes',
+    'no': '✗ No',
+  };
+  
+  // Check for exact match
+  if (friendlyLabels[content.toLowerCase()]) {
+    return friendlyLabels[content.toLowerCase()];
+  }
+  
+  // Check for comma-separated symptom selections
+  if (content.includes(',')) {
+    const symptoms = content.split(',').map(s => s.trim());
+    if (symptoms.length > 1) {
+      return `Selected: ${symptoms.join(', ')}`;
+    }
+  }
+  
+  // Return as-is for other content
+  return content;
+};
+
 export const SymptomMessageBubble: React.FC<SymptomMessageBubbleProps> = ({
   message,
   onOptionSelect,
@@ -556,7 +590,7 @@ export const SymptomMessageBubble: React.FC<SymptomMessageBubbleProps> = ({
       {isUser && (
         <div className="user-message-container">
           <div className="message-bubble user-bubble">
-            <div className="message-content">{message.content}</div>
+            <div className="message-content">{formatUserResponse(message.content)}</div>
           </div>
           <div className="message-time">
             {formatTimeForDisplay(message.created_at)}
