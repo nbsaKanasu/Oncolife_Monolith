@@ -106,13 +106,17 @@ services:
       - LOG_FORMAT=text
       - LOCAL_DEV_MODE=true
       # Doctor Database (primary)
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=oncolife_admin
-      - POSTGRES_PASSWORD=oncolife_dev_password
-      - POSTGRES_DOCTOR_DB=oncolife_doctor
+      - DOCTOR_DB_HOST=postgres
+      - DOCTOR_DB_PORT=5432
+      - DOCTOR_DB_USER=oncolife_admin
+      - DOCTOR_DB_PASSWORD=oncolife_dev_password
+      - DOCTOR_DB_NAME=oncolife_doctor
       # Patient Database (read-only)
-      - POSTGRES_PATIENT_DB=oncolife_patient
+      - PATIENT_DB_HOST=postgres
+      - PATIENT_DB_PORT=5432
+      - PATIENT_DB_USER=oncolife_admin
+      - PATIENT_DB_PASSWORD=oncolife_dev_password
+      - PATIENT_DB_NAME=oncolife_patient
       # AWS
       - AWS_REGION=${AWS_REGION:-us-west-2}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
