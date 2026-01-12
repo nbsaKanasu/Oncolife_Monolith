@@ -20,10 +20,25 @@ from api.deps import get_patient_db
 from services import SummaryService
 from core.logging import get_logger
 from core.exceptions import NotFoundError, ValidationError
+from core import settings
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+# Local dev mode test patient UUID
+LOCAL_DEV_PATIENT_UUID = "11111111-1111-1111-1111-111111111111"
+
+def get_patient_uuid_with_fallback(patient_uuid: Optional[str]) -> str:
+    """Get patient UUID, falling back to test UUID in local dev mode."""
+    if patient_uuid:
+        return patient_uuid
+    if settings.local_dev_mode:
+        return LOCAL_DEV_PATIENT_UUID
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="patient_uuid is required"
+    )
 
 
 # =============================================================================
@@ -77,7 +92,7 @@ async def get_summaries_by_month(
     year: int,
     month: int,
     db: Session = Depends(get_patient_db),
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
     timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
 ):
     """
@@ -86,6 +101,8 @@ async def get_summaries_by_month(
     Only returns conversations that have been processed
     (have a bulleted_summary).
     """
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    
     if month < 1 or month > 12:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -112,13 +129,14 @@ async def get_summaries_by_month(
 async def get_conversation_details(
     conversation_uuid: str,
     db: Session = Depends(get_patient_db),
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
     timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
 ):
     """
     Get detailed information about a specific conversation
     that has been processed.
     """
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
     logger.info(f"Get summary details: conversation={conversation_uuid}")
     
     summary_service = SummaryService(db)
@@ -140,13 +158,14 @@ async def get_conversation_details(
 )
 async def get_recent_summaries(
     db: Session = Depends(get_patient_db),
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
     timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
     limit: int = Query(default=10, le=50),
 ):
     """
     Get recent conversation summaries.
     """
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
     logger.info(f"Get recent summaries: patient={patient_uuid} limit={limit}")
     
     summary_service = SummaryService(db)
@@ -162,11 +181,12 @@ async def get_recent_summaries(
 )
 async def count_conversations(
     db: Session = Depends(get_patient_db),
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
 ):
     """
     Get count of completed conversations.
     """
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
     summary_service = SummaryService(db)
     count = summary_service.count_conversations(UUID(patient_uuid))
     
