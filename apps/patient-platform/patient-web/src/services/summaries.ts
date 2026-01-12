@@ -14,11 +14,12 @@ export interface Summary {
   // Add other fields as needed
 }
 
-const fetchSummaries = async (year: number, month: number): Promise<{data:Summary[]}> => {
-  const response = await apiClient.get<{data:Summary[]}>(
-    `${API_CONFIG.ENDPOINTS.SUMMARIES}/${year}/${month}`
+const fetchSummaries = async (year: number, month: number): Promise<{ data: Summary[] }> => {
+  const response = await apiClient.get<Summary[]>(
+    API_CONFIG.ENDPOINTS.SUMMARIES.BY_MONTH(year, month)
   );
-  return response.data;
+  // Wrap the array in { data: [] } to match component expectations
+  return { data: response.data || [] };
 };
 
 export const useSummaries = (year: number, month: number) => {
@@ -32,13 +33,10 @@ export const useSummaries = (year: number, month: number) => {
 
 const fetchSummaryDetails = async (summaryId: string): Promise<Summary> => {
   try {
-    // The API client returns { data: { data: Summary } }, so we need to access the nested data
-    const response = await apiClient.get<{ data: Summary }>(
-    `${API_CONFIG.ENDPOINTS.SUMMARIES}/${summaryId}`
-  );
-    
-    // Return the nested data
-    return response.data.data;
+    const response = await apiClient.get<Summary>(
+      API_CONFIG.ENDPOINTS.SUMMARIES.DETAIL(summaryId)
+    );
+    return response.data;
   } catch (error) {
     console.error('Summary Details API Error:', error);
     throw error;
