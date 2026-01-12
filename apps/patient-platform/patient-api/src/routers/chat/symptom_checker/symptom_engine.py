@@ -961,44 +961,51 @@ class SymptomCheckerEngine:
                     'name': symptom.name
                 })
 
-        # Build summary message based on triage level
+        # Build concise summary (2-3 sentences as requested)
+        symptoms_list = ", ".join([s['name'] for s in summary_data['symptoms_assessed']])
+        
         if self.state.highest_triage_level == TriageLevel.CALL_911:
             return self._generate_emergency_response()
         
         elif self.state.highest_triage_level in [TriageLevel.NOTIFY_CARE_TEAM, TriageLevel.URGENT]:
             alerts = [r for r in self.state.triage_results 
                      if r['level'] in ['notify_care_team', 'urgent']]
-            alert_items = [f"• **{r['symptom_name']}**: {r['message']}" for r in alerts]
-            alert_text = "\n".join(alert_items)
+            
+            # Generate concise 2-3 sentence summary
+            concise_summary = f"You reported {symptoms_list}. "
+            if alerts:
+                alert_names = [r['symptom_name'] for r in alerts]
+                concise_summary += f"Your care team has been notified about: {', '.join(alert_names)}. "
+            concise_summary += "They will follow up with you soon."
             
             summary_message = (
-                "---\n\n"
                 "📋 **Assessment Complete**\n\n"
-                "⚠️ **Concerns Identified:**\n"
-                f"{alert_text}\n\n"
+                f"**Summary:** {concise_summary}\n\n"
                 "---\n\n"
-                "**Your care team has been notified** and will follow up with you.\n\n"
-                "If your symptoms worsen or you develop new concerning symptoms, "
-                "please call your care team or seek emergency care.\n\n"
-                "---\n\n"
+                "⚠️ **Care team notified** - they will review and follow up.\n\n"
+                "💬 **Want to add anything?** You can add personal notes before saving.\n\n"
                 "What would you like to do?"
             )
             triage_level = TriageLevel.NOTIFY_CARE_TEAM
         
         else:
-            symptoms_list = ", ".join([s['name'] for s in summary_data['symptoms_assessed']])
+            # Generate concise 2-3 sentence summary for no concerns
+            concise_summary = f"You reported {symptoms_list}. "
+            concise_summary += "No urgent concerns were identified. "
+            concise_summary += "Continue monitoring and reach out if symptoms change."
             
             summary_message = (
-                "---\n\n"
                 "📋 **Assessment Complete**\n\n"
-                f"**Symptoms Assessed:** {symptoms_list}\n\n"
-                "✅ **Good news!** Based on your responses, no urgent concerns were identified.\n\n"
-                "Your responses have been recorded and your care team will review them.\n\n"
-                "Continue to monitor your symptoms and reach out if anything changes.\n\n"
+                f"**Summary:** {concise_summary}\n\n"
                 "---\n\n"
+                "✅ **Good news!** No urgent concerns identified.\n\n"
+                "💬 **Want to add anything?** You can add personal notes before saving.\n\n"
                 "What would you like to do?"
             )
             triage_level = TriageLevel.NONE
+        
+        # Store the concise summary for later use
+        summary_data['concise_summary'] = concise_summary
 
         self._add_to_chat_history('ruby', summary_message)
 

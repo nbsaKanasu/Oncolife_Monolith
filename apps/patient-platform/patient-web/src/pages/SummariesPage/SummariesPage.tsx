@@ -99,7 +99,7 @@ const SummariesPage: React.FC = () => {
           </LoadingContainer>
         ) : (
           <SummaryGrid 
-            summaries={data as { data: Summary[] } || [] } 
+            summaries={data || { data: [] }} 
             onViewDetails={handleViewDetails} 
           />
         )}

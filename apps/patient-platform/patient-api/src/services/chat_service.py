@@ -504,51 +504,50 @@ class ChatService:
         triage_results = engine_state.get('triage_results', [])
         triage_display = triage_level.replace('_', ' ').title() if triage_level else 'None'
         
-        # Generate bulleted summary
-        bulleted_lines = [
-            f"• Symptoms reported: {symptoms_str}",
-            f"• Assessment level: {triage_display}",
-        ]
+        # Generate CONCISE bulleted summary (2-3 sentences as per requirement)
+        # This is what shows in the Summaries page
+        bulleted_lines = []
         
-        if triage_results:
-            for result in triage_results:
-                symptom_name = result.get('symptom_name', 'Unknown')
-                level = result.get('level', 'unknown').replace('_', ' ').title()
-                bulleted_lines.append(f"• {symptom_name}: {level}")
+        # Line 1: Symptoms reported
+        bulleted_lines.append(f"Symptoms: {symptoms_str}")
         
-        bulleted_summary = "\n".join(bulleted_lines)
-        
-        # Generate longer narrative summary
+        # Line 2: Assessment level with context
         if triage_level == 'call_911':
-            severity = "requires immediate emergency attention"
-        elif triage_level in ['urgent', 'same_day']:
-            severity = "requires prompt medical attention"
-        elif triage_level == 'notify_care_team':
-            severity = "should be reviewed by the care team"
+            bulleted_lines.append("Assessment: Emergency - Immediate attention required")
+        elif triage_level in ['urgent', 'notify_care_team']:
+            bulleted_lines.append(f"Assessment: {triage_display} - Care team notified")
         else:
-            severity = "does not require immediate attention"
+            bulleted_lines.append("Assessment: No urgent concerns identified")
         
-        longer_summary = (
-            f"The patient reported experiencing {symptoms_str}. "
-            f"Based on the symptom assessment, the overall triage level was {triage_display}, "
-            f"which {severity}. "
-        )
-        
+        # Line 3: Specific alerts if any
         if triage_results:
-            result_summaries = [
-                f"{r.get('symptom_name', 'Unknown')} ({r.get('level', 'unknown').replace('_', ' ').title()})"
-                for r in triage_results
-            ]
-            longer_summary += f"Individual symptom assessments: {', '.join(result_summaries)}."
+            alert_items = [f"{r.get('symptom_name', 'Unknown')}" for r in triage_results]
+            bulleted_lines.append(f"Flagged: {', '.join(alert_items)}")
         
-        # Add personal notes if available
+        # Add personal notes if available (important for diary)
         personal_notes = engine_state.get('personal_notes')
         if personal_notes:
-            bulleted_lines.append(f"• Patient notes: {personal_notes[:100]}{'...' if len(personal_notes) > 100 else ''}")
-            longer_summary += f" Patient added: {personal_notes}"
+            # Truncate to keep concise
+            notes_preview = personal_notes[:80] + '...' if len(personal_notes) > 80 else personal_notes
+            bulleted_lines.append(f"Notes: {notes_preview}")
         
-        # Rebuild bulleted summary with notes
-        bulleted_summary = "\n".join(bulleted_lines)
+        bulleted_summary = " | ".join(bulleted_lines)
+        
+        # Generate longer narrative summary (2-3 sentences)
+        longer_summary = f"You reported {symptoms_str}. "
+        
+        if triage_level == 'call_911':
+            longer_summary += "This requires immediate emergency attention. Please call 911."
+        elif triage_level in ['urgent', 'notify_care_team']:
+            longer_summary += f"Your care team has been notified and will follow up with you."
+            if triage_results:
+                flagged = [r.get('symptom_name', '') for r in triage_results]
+                longer_summary += f" Concerns flagged: {', '.join(flagged)}."
+        else:
+            longer_summary += "No urgent concerns were identified. Continue monitoring your symptoms."
+        
+        if personal_notes:
+            longer_summary += f" Your notes: {personal_notes}"
         
         return {
             'bulleted': bulleted_summary,
