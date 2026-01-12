@@ -140,14 +140,15 @@ OncoLife is a healthcare platform built with a modular monorepo architecture. Th
 └──────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    SYMPTOM CHECKER ENGINE (7 Phases)                            │
+│                                    SYMPTOM CHECKER ENGINE (5 Phases)                            │
 │                                                                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐│
-│  │DISCLAIMER│─▶│ PATIENT  │─▶│EMERGENCY │─▶│ SYMPTOM  │─▶│  RUBY    │─▶│ TRIAGE   │─▶│SUMMARY ││
-│  │  Phase   │  │ CONTEXT  │  │  CHECK   │  │ SELECTION│  │  CHAT    │  │ RESULT   │  │ PHASE  ││
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └────────┘│
-│                 │ Last Chemo                                    │                               │
-│                 │ Physician Visit                               ▼                               │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐                          │
+│  │DISCLAIMER│─▶│EMERGENCY │─▶│ SYMPTOM  │─▶│  RUBY    │─▶│ SUMMARY  │                          │
+│  │  Phase   │  │  CHECK   │  │ SELECTION│  │  CHAT    │  │  PHASE   │                          │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘                          │
+│                                                    │                                            │
+│  Note: Patient context (chemo dates, physician    ▼                                            │
+│  visit) is now stored in Profile page, not here.                                               │
 │                        ┌─────────────────────────────────────────────────────────────────────┐ │
 │                        │                    27 SYMPTOM MODULES with INPUT VALIDATION          │ │
 │                        │  FEV-202  NAU-203  DIA-205  CON-210  SKI-212  ...                    │ │
@@ -631,7 +632,7 @@ patient-web/src/
 │       └── SymptomMessageBubble.tsx
 │
 ├── pages/                       # Page components (React Router routes)
-│   ├── ChatsPage/               # /chat - Symptom checker (7-phase flow)
+│   ├── ChatsPage/               # /chat - Symptom checker (5-phase flow)
 │   │   ├── ChatsPage.tsx
 │   │   └── SymptomChatPage.tsx
 │   ├── SummariesPage/           # /summaries - Past triage results
