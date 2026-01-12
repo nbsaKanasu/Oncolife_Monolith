@@ -123,6 +123,9 @@ class ChatService:
                 "options": initial_question.get("options", []),
                 "options_data": initial_question.get("options_data", []),
                 "frontend_type": initial_question.get("frontend_type", "text"),
+                "symptom_groups": initial_question.get("symptom_groups"),
+                "summary_data": initial_question.get("summary_data"),
+                "sender": initial_question.get("sender"),
             },
         )
         
@@ -172,6 +175,9 @@ class ChatService:
             "frontend_type": response.message_type,
             "options": [opt['label'] for opt in response.options] if response.options else [],
             "options_data": response.options,
+            "symptom_groups": response.symptom_groups,
+            "summary_data": response.summary_data,
+            "sender": response.sender,
         }
         
         return new_chat, initial_message
@@ -360,6 +366,12 @@ class ChatService:
                 "frontend_type": engine_response.message_type,
                 "triage_level": engine_response.triage_level.value if engine_response.triage_level else None,
                 "is_complete": engine_response.is_complete,
+                # Include symptom groups for grouped symptom selection
+                "symptom_groups": engine_response.symptom_groups,
+                # Include summary data for assessment complete screen
+                "summary_data": engine_response.summary_data,
+                # Include sender info (ruby or system)
+                "sender": engine_response.sender,
             },
         )
         self.db.add(assistant_msg)
