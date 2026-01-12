@@ -1001,6 +1001,7 @@ class SymptomCheckerEngine:
             message_type='summary',
             options=SUMMARY_ACTIONS,
             triage_level=triage_level,
+            is_complete=True,  # Mark as complete so bulleted_summary is saved
             summary_data=summary_data,
             sender='ruby',
             avatar='📋',
