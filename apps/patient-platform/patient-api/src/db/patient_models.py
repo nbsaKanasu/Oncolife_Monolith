@@ -34,6 +34,11 @@ class Conversations(Base):
     
     # Symptom Checker engine state (stores the rule-based engine conversation state)
     engine_state = Column(JSONB, nullable=True)
+    
+    # Completion status
+    triage_level = Column(String, nullable=True)
+    is_complete = Column(String, nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationship to the Messages table
     messages = relationship(
