@@ -474,9 +474,10 @@ class ChatService:
         """Get the human-readable name for a symptom ID."""
         from routers.chat.symptom_checker.symptom_definitions import SYMPTOMS
         
-        for symptom in SYMPTOMS:
-            if symptom.id == symptom_id:
-                return symptom.name
+        # SYMPTOMS is a dict with symptom_id as key, SymptomDef as value
+        symptom = SYMPTOMS.get(symptom_id)
+        if symptom:
+            return symptom.name
         return symptom_id  # Fallback to ID if not found
     
     def _generate_conversation_summaries(
