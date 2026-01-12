@@ -267,6 +267,7 @@ const SymptomChatPage: React.FC = () => {
             onOptionSelect={handleOptionSelect}
             onMultiSelectSubmit={handleMultiSelectSubmit}
             onSymptomSelect={handleSymptomSelect}
+            onDisclaimerAccept={() => handleOptionSelect('accept')}
             shouldShowInteractive={shouldShowInteractive(message, index)}
           />
         ))}
