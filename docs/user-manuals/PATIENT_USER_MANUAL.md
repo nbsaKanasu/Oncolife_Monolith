@@ -148,7 +148,7 @@ When you open OncoLife, you'll see your home screen with these main sections:
 ### Starting Your Check-In
 
 1. From the home screen, tap **"Start Daily Check-In"**
-2. You'll begin the guided 6-step symptom assessment
+2. You'll begin the guided 7-step symptom assessment
 
 ### Step 1: Medical Disclaimer
 
@@ -167,7 +167,25 @@ call 911 immediately.
 
 ✅ Tap **"I Understand - Start Triage"** to continue.
 
-### Step 2: Emergency Safety Check
+### Step 2: Quick Check-In (Treatment Timeline)
+
+**Ruby needs a couple of important details to help your care team:**
+
+**Question 1: Last Chemotherapy**
+```
+📅 When was your last chemotherapy session?
+```
+Options: Today, Yesterday, 2-3 days ago, 4-7 days ago, 1-2 weeks ago, More than 2 weeks ago, or "I haven't had chemotherapy yet"
+
+**Question 2: Next Physician Visit**
+```
+📅 When is your next scheduled physician visit?
+```
+Options: Today, Tomorrow, In 2-3 days, This week, Next week, In 2+ weeks, or "Not scheduled yet"
+
+**Why does this matter?** This information helps your care team understand your treatment timeline and prioritize any concerns.
+
+### Step 3: Emergency Safety Check
 
 **This is a quick safety check for urgent symptoms.**
 
@@ -182,7 +200,7 @@ You'll see a list of emergency symptoms:
 
 **If you don't have any:** Tap **"None of these - Continue"**
 
-### Step 3: Select Your Symptoms
+### Step 4: Select Your Symptoms
 
 Symptoms are organized into helpful groups:
 
@@ -207,7 +225,7 @@ Symptoms are organized into helpful groups:
 
 **If you feel fine:** Tap "I feel okay today" for a quick check-in.
 
-### Step 4: Chat with Ruby 💎
+### Step 5: Chat with Ruby 💎
 
 Ruby is your friendly health assistant! She'll ask you questions about each symptom you selected.
 
@@ -233,11 +251,11 @@ Ruby is your friendly health assistant! She'll ask you questions about each symp
 - Your answers appear on the right side (purple bubbles)
 - Ruby's questions appear on the left
 
-### Step 5: View Your Results
+### Step 6: View Your Results
 
 After answering all questions, you'll see your triage result (see next section).
 
-### Step 6: Summary & Actions
+### Step 7: Summary & Actions
 
 At the end, you'll see a complete summary with options:
 

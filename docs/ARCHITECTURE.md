@@ -139,27 +139,27 @@ OncoLife is a healthcare platform built with a modular monorepo architecture. Th
 │  └─────────────────────────────────────────┘  └─────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 
-┌──────────────────────────────────────────────────────────────────────────────────────┐
-│                              SYMPTOM CHECKER ENGINE                                   │
-│                                                                                       │
-│  ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐ │
-│  │ DISCLAIMER │──▶│ EMERGENCY  │──▶│  SYMPTOM   │──▶│   RUBY     │──▶│  SUMMARY   │ │
-│  │   Phase    │   │   CHECK    │   │ SELECTION  │   │   CHAT     │   │   PHASE    │ │
-│  └────────────┘   └────────────┘   └────────────┘   └────────────┘   └────────────┘ │
-│                                                            │                         │
-│                                                            ▼                         │
-│                        ┌──────────────────────────────────────────────────────────┐ │
-│                        │              27 SYMPTOM MODULES                          │ │
-│                        │  FEV-202  NAU-203  DIA-205  CON-210  SKI-212  ...        │ │
-│                        │  Each has: questions[], evaluate_screening(), alerts     │ │
-│                        └──────────────────────────────────────────────────────────┘ │
-│                                                            │                         │
-│                                                            ▼                         │
-│  ┌────────────────┐   ┌────────────────┐   ┌────────────────┐   ┌────────────────┐ │
-│  │ Triage Result  │   │ Education      │   │ Diary Entry    │   │ Patient        │ │
-│  │ (Color Badge)  │   │ Delivery       │   │ Auto-populate  │   │ Summary        │ │
-│  └────────────────┘   └────────────────┘   └────────────────┘   └────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    SYMPTOM CHECKER ENGINE (7 Phases)                            │
+│                                                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐│
+│  │DISCLAIMER│─▶│ PATIENT  │─▶│EMERGENCY │─▶│ SYMPTOM  │─▶│  RUBY    │─▶│ TRIAGE   │─▶│SUMMARY ││
+│  │  Phase   │  │ CONTEXT  │  │  CHECK   │  │ SELECTION│  │  CHAT    │  │ RESULT   │  │ PHASE  ││
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └────────┘│
+│                 │ Last Chemo                                    │                               │
+│                 │ Physician Visit                               ▼                               │
+│                        ┌─────────────────────────────────────────────────────────────────────┐ │
+│                        │                    27 SYMPTOM MODULES with INPUT VALIDATION          │ │
+│                        │  FEV-202  NAU-203  DIA-205  CON-210  SKI-212  ...                    │ │
+│                        │  Validates: Temp (°F/°C), BP (120/80), HR (BPM), O2%, Days, etc.    │ │
+│                        └─────────────────────────────────────────────────────────────────────┘ │
+│                                                            │                                    │
+│                                                            ▼                                    │
+│  ┌────────────────┐   ┌────────────────┐   ┌────────────────┐   ┌────────────────┐            │
+│  │ Triage Result  │   │ Education      │   │ Diary Entry    │   │ Patient        │            │
+│  │ (Color Badge)  │   │ Delivery       │   │ Auto-populate  │   │ Summary        │            │
+│  └────────────────┘   └────────────────┘   └────────────────┘   └────────────────┘            │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -631,7 +631,7 @@ patient-web/src/
 │       └── SymptomMessageBubble.tsx
 │
 ├── pages/                       # Page components (React Router routes)
-│   ├── ChatsPage/               # /chat - Symptom checker (6-phase flow)
+│   ├── ChatsPage/               # /chat - Symptom checker (7-phase flow)
 │   │   ├── ChatsPage.tsx
 │   │   └── SymptomChatPage.tsx
 │   ├── SummariesPage/           # /summaries - Past triage results

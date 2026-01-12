@@ -115,13 +115,13 @@ POST /api/v1/onboarding/complete/reminders
 
 ---
 
-### 2. Symptom Checker (Daily Check-In) - NEW 6-PHASE FLOW
+### 2. Symptom Checker (Daily Check-In) - 7-PHASE FLOW
 
 #### 2.1 Start New Session
 
-**NEW Screen Flow (6 Phases):**
+**Screen Flow (7 Phases):**
 ```
-Dashboard → Medical Disclaimer → Emergency Check → Grouped Symptom Selection → Ruby Chat → Summary
+Dashboard → Medical Disclaimer → Patient Context → Emergency Check → Grouped Symptom Selection → Ruby Chat → Summary
 ```
 
 **What to Test:**
@@ -139,9 +139,31 @@ Dashboard → Medical Disclaimer → Emergency Check → Grouped Symptom Selecti
   [I Understand - Start Triage]
   ```
 - Click "I Understand - Start Triage" button
+- **Expected:** Moves to Patient Context screen
+
+**Phase 2: Patient Context (Critical Physician Data) - NEW**
+- System displays quick check-in with two questions:
+
+**Question 1: Last Chemotherapy**
+```
+📋 Quick Check-In
+📅 When was your last chemotherapy session?
+This helps us understand your treatment timeline.
+```
+- **Options:** Today, Yesterday, 2-3 days ago, 4-7 days ago, 1-2 weeks ago, More than 2 weeks ago, I haven't had chemotherapy yet
+- Select one option
+- **Expected:** Moves to Question 2
+
+**Question 2: Physician Visit**
+```
+📅 When is your next scheduled physician visit?
+This helps us prioritize any concerns for your upcoming appointment.
+```
+- **Options:** Today, Tomorrow, In 2-3 days, This week, Next week, In 2+ weeks, Not scheduled yet
+- Select one option
 - **Expected:** Moves to Emergency Check screen
 
-**Phase 2: Emergency Check Screen (Urgent Safety Check)**
+**Phase 3: Emergency Check Screen (Urgent Safety Check)**
 - System displays: "Before we assess your symptoms, we need to rule out immediate emergencies."
 - **Emergency symptoms shown** (multi-select):
   - ⚠️ Trouble breathing or shortness of breath
@@ -157,7 +179,7 @@ Dashboard → Medical Disclaimer → Emergency Check → Grouped Symptom Selecti
   - Click "None of these - Continue"
   - **Expected:** Proceeds to Grouped Symptom Selection
 
-**Phase 3: Grouped Symptom Selection**
+**Phase 4: Grouped Symptom Selection**
 - System displays symptom categories in groups:
   - **Digestive Health:** Nausea, Vomiting, Diarrhea, Constipation, No Appetite, Mouth Sores
   - **Pain & Nerve:** Pain, Neuropathy (Numbness/Tingling)
@@ -167,7 +189,7 @@ Dashboard → Medical Disclaimer → Emergency Check → Grouped Symptom Selecti
 - Click "Continue"
 - **Expected:** Ruby Chat interface begins
 
-**Phase 4: Ruby Chat (Per-Symptom Questions)**
+**Phase 5: Ruby Chat (Per-Symptom Questions)**
 - **Expected:** Ruby introduces herself:
   ```
   "Hello! I am Ruby, your automated triage assistant. 
@@ -177,7 +199,8 @@ Dashboard → Medical Disclaimer → Emergency Check → Grouped Symptom Selecti
 
 **Example: Fever**
 - Ruby: "Do you have a fever?" → Select (Yes/No)
-- Ruby: "What is your temperature?" → Enter number or select range
+- Ruby: "What is your temperature?" → Enter number
+  - **Input hint:** 📝 Enter temperature in °F (e.g., 98.6 or 101.5)
 - Ruby: "How long have you had the fever?" → Select option
 - Ruby: "Any other symptoms with the fever?" → Multi-select
 
@@ -188,15 +211,16 @@ Dashboard → Medical Disclaimer → Emergency Check → Grouped Symptom Selecti
 - Ruby avatar visible on her messages
 - Smooth scrolling to new messages
 - Progress through all selected symptoms
+- **Input hints displayed for numeric fields** (temperature, days, times, etc.)
 
-**Phase 5: Triage Result**
+**Phase 6: Triage Result**
 After all questions answered:
 - **Green (Mild):** "Your symptoms are mild. Continue monitoring."
 - **Yellow (Moderate):** "Monitor closely. Contact care team if worsening."
 - **Orange (Severe):** "Contact your care team today."
 - **Red (Urgent/Emergency):** "Seek immediate medical attention. Call 911."
 
-**Phase 6: Summary Screen**
+**Phase 7: Summary Screen**
 - System displays complete summary of session
 - **Action Buttons available:**
   - 📥 **Download Summary** - Save as PDF
@@ -254,6 +278,58 @@ Your care team has been notified.
 2. 911 button is functional
 3. Care team notification logged
 4. Cannot continue regular flow until acknowledged
+
+---
+
+#### 2.3 Input Validation Tests
+
+**Temperature Validation:**
+| Test Input | Expected Result |
+|------------|-----------------|
+| `98.6` | ✅ Accepted (normal temp) |
+| `101.5` | ✅ Accepted (fever range) |
+| `37.5` | ✅ Auto-converts from Celsius → shows "🔄 Converted: 37.5°C = 99.5°F" |
+| `85` | ❌ Error: "Temperature 85°F seems too low" |
+| `115` | ❌ Error: "Temperature 115°F seems too high" |
+| `abc` | ❌ Error: "Please enter a valid number" |
+
+**Blood Pressure Validation (format: 120/80):**
+| Test Input | Expected Result |
+|------------|-----------------|
+| `120/80` | ✅ Accepted |
+| `140/90` | ✅ Accepted |
+| `120` | ❌ Error: "Invalid format. Enter as 120/80" |
+| `50/30` | ❌ Error: "Systolic should be 70-250" |
+| `120/120` | ❌ Error: "Systolic should be higher than diastolic" |
+
+**Heart Rate Validation (40-200 BPM):**
+| Test Input | Expected Result |
+|------------|-----------------|
+| `72` | ✅ Accepted |
+| `30` | ❌ Error: "Heart rate 30 BPM seems too low" |
+| `250` | ❌ Error: "Heart rate 250 BPM seems too high" |
+
+**Oxygen Saturation Validation (70-100%):**
+| Test Input | Expected Result |
+|------------|-----------------|
+| `98` | ✅ Accepted |
+| `95%` | ✅ Accepted (% sign ignored) |
+| `60` | ❌ Error: "SpO2 60% seems too low" |
+| `105` | ❌ Error: "SpO2 cannot exceed 100%" |
+
+**Days/Times Validation:**
+| Test Input | Expected Result |
+|------------|-----------------|
+| `3` | ✅ Accepted |
+| `45` | ❌ Error: "Please enter a value between 0-30 days" |
+| `-1` | ❌ Error: "Days cannot be negative" |
+
+**Blood Sugar Validation (20-600 mg/dL):**
+| Test Input | Expected Result |
+|------------|-----------------|
+| `120` | ✅ Accepted |
+| `10` | ❌ Error: "Blood sugar 10 mg/dL seems too low" |
+| `700` | ❌ Error: "Blood sugar 700 mg/dL seems too high" |
 
 ---
 
@@ -709,5 +785,5 @@ Patient 2 (Active): activepatient@test.com / TestPass123!
 ---
 
 *Last Updated: January 2026*
-*Version: 2.0 - Updated for new 6-phase symptom checker UX, dark mode, and responsive design*
+*Version: 2.1 - Updated for 7-phase symptom checker with Patient Context, input validation, and Celsius auto-conversion*
 

@@ -84,7 +84,7 @@ OncoLife_Monolith/
 │   │       ├── src/
 │   │       │   ├── components/       # Layout, Chat components
 │   │       │   ├── pages/
-│   │       │   │   ├── ChatsPage/    # Symptom checker (6-phase flow)
+│   │       │   │   ├── ChatsPage/    # Symptom checker (7-phase flow with validation)
 │   │       │   │   ├── SummariesPage/# Past triage summaries
 │   │       │   │   ├── NotesPage/    # Patient diary
 │   │       │   │   ├── QuestionsPage/# Questions for doctor ← NEW
