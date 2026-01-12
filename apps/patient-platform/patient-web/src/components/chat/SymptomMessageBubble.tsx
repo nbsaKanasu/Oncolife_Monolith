@@ -165,7 +165,8 @@ export const SymptomMessageBubble: React.FC<SymptomMessageBubbleProps> = ({
   // RENDER: Emergency Check Screen
   // =========================================================================
   const renderEmergencyCheck = () => {
-    const emergencyOptions = options.filter((o: any) => o.is_emergency);
+    // Filter for emergency options, or show all if is_emergency field doesn't exist
+    const emergencyOptions = options.filter((o: any) => o.is_emergency !== false && o.style !== 'secondary');
     
     return (
       <div className="emergency-check-screen">
@@ -509,7 +510,7 @@ export const SymptomMessageBubble: React.FC<SymptomMessageBubbleProps> = ({
     return renderDisclaimer();
   }
 
-  if (frontendType === 'emergency-check' && shouldShowInteractive) {
+  if ((frontendType === 'emergency-check' || frontendType === 'emergency_check') && shouldShowInteractive) {
     return renderEmergencyCheck();
   }
 
