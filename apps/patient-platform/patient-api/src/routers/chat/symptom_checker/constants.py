@@ -31,6 +31,7 @@ class SymptomCategory(str, Enum):
     PAIN_NERVE = "pain_nerve"
     SYSTEMIC = "systemic"
     SKIN_EXTERNAL = "skin_external"
+    COMMON = "common"
     OTHER = "other"
 
 

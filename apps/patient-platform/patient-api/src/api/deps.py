@@ -24,7 +24,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-import jwt
+from jose import jwt
 
 from db.session import get_patient_db as _get_patient_db, get_doctor_db as _get_doctor_db
 from core import settings
@@ -129,6 +129,10 @@ def get_current_user_uuid(
         return UUID(user_id)
     except ValueError:
         raise AuthenticationException("Invalid token: malformed user ID")
+
+
+# Alias for patient-specific endpoints
+get_current_patient_uuid = get_current_user_uuid
 
 
 def get_current_user(

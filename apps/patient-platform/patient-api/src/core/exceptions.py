@@ -358,6 +358,19 @@ class BusinessRuleException(AppException):
         )
 
 
+# =============================================================================
+# ALIASES FOR BACKWARD COMPATIBILITY
+# =============================================================================
+# Some code uses "Error" suffix instead of "Exception" suffix.
+# These aliases maintain backward compatibility.
 
-
+NotFoundError = NotFoundException
+ValidationError = ValidationException
+ExternalServiceError = ExternalServiceException
+AuthenticationError = AuthenticationException
+AuthorizationError = AuthorizationException
+ConflictError = ConflictException
+DatabaseError = DatabaseException
+RateLimitError = RateLimitException
+BusinessRuleError = BusinessRuleException
 
