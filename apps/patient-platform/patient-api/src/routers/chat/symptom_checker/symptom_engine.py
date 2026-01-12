@@ -105,7 +105,7 @@ class ConversationState:
 class EngineResponse:
     """Response from the symptom checker engine."""
     message: str
-    message_type: str  # 'disclaimer', 'emergency_check', 'symptom_select', 'text', 'yes_no', 'choice', 'multiselect', 'number', 'summary'
+    message_type: str  # 'disclaimer', 'emergency_check', 'symptom_select', 'text', 'yes_no', 'choice', 'multiselect', 'number', 'summary', 'patient_context'
     options: List[Dict[str, Any]] = field(default_factory=list)
     triage_level: Optional[TriageLevel] = None
     triage_message: Optional[str] = None
@@ -119,6 +119,8 @@ class EngineResponse:
     symptom_groups: Optional[Dict[str, Any]] = None
     # Summary data
     summary_data: Optional[Dict[str, Any]] = None
+    # Input type hint for frontend (optional)
+    input_type: Optional[str] = None  # 'date_picker', 'number', 'text', etc.
 
 
 class SymptomCheckerEngine:
