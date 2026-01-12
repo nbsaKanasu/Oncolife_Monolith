@@ -87,13 +87,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           );
         }
         const isHtml = /<\/?[a-z][\s\S]*>/i.test(message.content);
-        return isHtml ? (
-          <div
-            className="message-content"
-            dangerouslySetInnerHTML={{ __html: message.content }}
-          />
-        ) : (
-          <div className="message-content">{message.content}</div>
+        return (
+          <>
+            {isHtml ? (
+              <div
+                className="message-content"
+                dangerouslySetInnerHTML={{ __html: message.content }}
+              />
+            ) : (
+              <div className="message-content">{message.content}</div>
+            )}
+            {/* Show buttons if structured_data.options exists (e.g., disclaimer) */}
+            {shouldShowInteractiveElements && message.structured_data?.options && (
+              <div className="button-options">
+                {message.structured_data.options.map((option: string, index: number) => (
+                  <button
+                    key={index}
+                    onClick={() => onButtonClick?.(option)}
+                    className="option-button primary"
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         );
     }
   };
