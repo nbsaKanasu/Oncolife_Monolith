@@ -35,10 +35,26 @@ from routers.chat.models import (
 from utils.timezone_utils import utc_to_user_timezone
 from core.logging import get_logger
 from core.exceptions import NotFoundError
+from core import settings
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+# Local dev mode test patient UUID
+LOCAL_DEV_PATIENT_UUID = "11111111-1111-1111-1111-111111111111"
+
+
+def get_patient_uuid_with_fallback(patient_uuid: Optional[str]) -> str:
+    """Get patient UUID, falling back to test UUID in local dev mode."""
+    if patient_uuid:
+        return patient_uuid
+    if settings.local_dev_mode:
+        return LOCAL_DEV_PATIENT_UUID
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="patient_uuid is required"
+    )
 
 
 # =============================================================================
@@ -137,7 +153,7 @@ async def get_user_from_token(token: str) -> Optional[TokenData]:
 def get_or_create_session(
     db: Session = Depends(get_patient_db),
     # current_user: TokenData = Depends(get_current_user),  # Enable with auth
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
     timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
 ):
     """
@@ -146,6 +162,9 @@ def get_or_create_session(
     If no chat exists for today, creates a new one and returns
     its first message. If a chat exists, returns its full history.
     """
+    # Get patient UUID with local dev mode fallback
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    
     logger.info(f"Get/create session: patient={patient_uuid} tz={timezone}")
     
     chat_service = ChatService(db)
@@ -184,7 +203,7 @@ def get_or_create_session(
 )
 def force_create_new_session(
     db: Session = Depends(get_patient_db),
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
     timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
 ):
     """
@@ -193,6 +212,9 @@ def force_create_new_session(
     This deletes any existing sessions for today and creates
     a fresh conversation.
     """
+    # Get patient UUID with local dev mode fallback
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    
     logger.info(f"Force new session: patient={patient_uuid}")
     
     # Delete existing chats for today
@@ -241,13 +263,16 @@ def force_create_new_session(
 def get_full_chat(
     chat_uuid: UUID,
     db: Session = Depends(get_patient_db),
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
 ):
     """
     Fetch the entire history of a specific chat.
     
     Useful for rehydrating the UI when a user resumes a conversation.
     """
+    # Get patient UUID with local dev mode fallback
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    
     chat_service = ChatService(db)
     
     try:
@@ -266,11 +291,14 @@ def get_full_chat(
 def get_chat_state(
     chat_uuid: UUID,
     db: Session = Depends(get_patient_db),
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
 ):
     """
     Quickly retrieve the current state and key data of a chat.
     """
+    # Get patient UUID with local dev mode fallback
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    
     chat_service = ChatService(db)
     
     try:
@@ -290,11 +318,14 @@ def update_overall_feeling(
     chat_uuid: UUID,
     payload: OverallFeelingUpdate,
     db: Session = Depends(get_patient_db),
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
 ):
     """
     Update the overall feeling for a chat.
     """
+    # Get patient UUID with local dev mode fallback
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    
     chat_service = ChatService(db)
     
     try:
@@ -312,11 +343,14 @@ def update_overall_feeling(
 def delete_chat(
     chat_uuid: UUID,
     db: Session = Depends(get_patient_db),
-    patient_uuid: str = Query(..., description="Patient UUID"),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
 ):
     """
     Delete a specific conversation.
     """
+    # Get patient UUID with local dev mode fallback
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    
     chat_service = ChatService(db)
     
     try:

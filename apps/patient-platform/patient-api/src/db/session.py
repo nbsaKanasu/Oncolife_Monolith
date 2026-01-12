@@ -58,6 +58,10 @@ def create_db_engine(database_url: str, db_name: str):
         extra={"database": db_name}
     )
     
+    # Configure SSL mode based on environment
+    # In production, require SSL; in local dev, disable it
+    ssl_mode = "disable" if settings.local_dev_mode else "require"
+    
     return create_engine(
         database_url,
         # Connection pool settings
@@ -69,7 +73,7 @@ def create_db_engine(database_url: str, db_name: str):
         
         # Connection arguments for PostgreSQL
         connect_args={
-            "sslmode": "require",  # Force SSL for cloud databases
+            "sslmode": ssl_mode,
             "keepalives": 1,
             "keepalives_idle": 30,
             "keepalives_interval": 10,
