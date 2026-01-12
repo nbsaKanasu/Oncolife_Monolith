@@ -613,7 +613,8 @@ class SymptomCheckerEngine:
             triage_message=message,
             options=[
                 {'label': '📞 Call 911', 'value': 'call_911', 'style': 'emergency', 'action': 'tel:911'},
-                {'label': 'I understand', 'value': 'acknowledge', 'style': 'secondary'}
+                {'label': '📱 Call Care Team', 'value': 'call_care_team', 'style': 'warning', 'action': 'call_care_team'},
+                {'label': 'I Understand', 'value': 'acknowledge', 'style': 'secondary'}
             ],
             is_complete=True,
             sender='ruby',
@@ -626,8 +627,10 @@ class SymptomCheckerEngine:
             # User acknowledged the emergency - complete the session
             self.state.phase = ConversationPhase.COMPLETED
             return EngineResponse(
-                message="Your care team has been notified. Please seek immediate medical attention.\n\n"
-                        "Take care of yourself.",
+                message="✅ **Acknowledged**\n\n"
+                        "Your care team has been notified of this emergency.\n\n"
+                        "**Please seek immediate medical attention.**\n\n"
+                        "If your condition worsens, call 911 immediately.",
                 message_type='text',
                 is_complete=True,
                 triage_level=TriageLevel.CALL_911,
@@ -638,8 +641,27 @@ class SymptomCheckerEngine:
             # User clicked Call 911 - confirm and complete
             self.state.phase = ConversationPhase.COMPLETED
             return EngineResponse(
-                message="Calling 911... Stay on the line and follow their instructions.",
+                message="📞 **Calling 911...**\n\n"
+                        "Stay on the line and follow their instructions.\n\n"
+                        "Your care team has also been notified.",
                 message_type='text',
+                is_complete=True,
+                triage_level=TriageLevel.CALL_911,
+                sender='system',
+                state=self.state
+            )
+        elif user_response == 'call_care_team':
+            # User wants to call care team
+            self.state.phase = ConversationPhase.COMPLETED
+            return EngineResponse(
+                message="📱 **Contacting Care Team...**\n\n"
+                        "Your care team has been notified of this emergency.\n\n"
+                        "They will contact you shortly. If your condition worsens before they call, "
+                        "please call 911 immediately.",
+                message_type='text',
+                options=[
+                    {'label': '📞 Call Care Team Now', 'value': 'dial_care_team', 'style': 'primary', 'action': 'tel:care_team'},
+                ],
                 is_complete=True,
                 triage_level=TriageLevel.CALL_911,
                 sender='system',

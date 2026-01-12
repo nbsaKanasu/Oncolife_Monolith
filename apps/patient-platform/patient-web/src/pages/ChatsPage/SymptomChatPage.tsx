@@ -285,10 +285,19 @@ const SymptomChatPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <button className="new-chat-btn" onClick={handleStartNewConversation}>
-          <PlusIcon />
-          <span>New Check-in</span>
-        </button>
+        <div className="header-right">
+          <button className="new-chat-btn" onClick={handleStartNewConversation}>
+            <PlusIcon />
+            <span>New Check-in</span>
+          </button>
+          <button 
+            className="exit-chat-btn" 
+            onClick={() => window.location.href = '/'}
+            title="Exit Chat"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* Connection status */}
