@@ -173,7 +173,10 @@ class SymptomCheckerEngine:
             return self._handle_summary_action(user_response)
         
         elif self.state.phase == ConversationPhase.EMERGENCY:
-            return self._generate_emergency_response()
+            return self._handle_emergency_action(user_response)
+        
+        elif self.state.phase == ConversationPhase.COMPLETED:
+            return self._handle_completed_action(user_response)
         
         else:
             return self.start_conversation()
@@ -607,6 +610,45 @@ class SymptomCheckerEngine:
             ],
             is_complete=True,
             sender='ruby',
+            state=self.state
+        )
+
+    def _handle_emergency_action(self, user_response: Any) -> EngineResponse:
+        """Handle user action on emergency screen."""
+        if user_response == 'acknowledge':
+            # User acknowledged the emergency - complete the session
+            self.state.phase = ConversationPhase.COMPLETED
+            return EngineResponse(
+                message="Your care team has been notified. Please seek immediate medical attention.\n\n"
+                        "Take care of yourself.",
+                message_type='text',
+                is_complete=True,
+                triage_level=TriageLevel.CALL_911,
+                sender='system',
+                state=self.state
+            )
+        elif user_response == 'call_911':
+            # User clicked Call 911 - confirm and complete
+            self.state.phase = ConversationPhase.COMPLETED
+            return EngineResponse(
+                message="Calling 911... Stay on the line and follow their instructions.",
+                message_type='text',
+                is_complete=True,
+                triage_level=TriageLevel.CALL_911,
+                sender='system',
+                state=self.state
+            )
+        else:
+            # Re-show emergency for any other response
+            return self._generate_emergency_response()
+
+    def _handle_completed_action(self, user_response: Any) -> EngineResponse:
+        """Handle actions after session is completed."""
+        return EngineResponse(
+            message="This session has ended. Start a new session to continue symptom checking.",
+            message_type='text',
+            is_complete=True,
+            sender='system',
             state=self.state
         )
 

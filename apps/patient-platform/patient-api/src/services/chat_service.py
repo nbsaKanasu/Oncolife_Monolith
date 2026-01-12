@@ -32,7 +32,11 @@ from routers.chat.models import (
 )
 
 # Database models
-from db.patient_models import Conversations as ChatModel, Messages as MessageModel
+from db.patient_models import (
+    Conversations as ChatModel, 
+    Messages as MessageModel,
+    PatientDiaryEntries as DiaryEntry,
+)
 
 # Core
 from core.logging import get_logger
@@ -322,6 +326,14 @@ class ChatService:
         # 3. Parse the user's response
         user_response = self._parse_user_response(message)
         
+        # 3a. Check if this is a diary save action - handle before engine
+        if message.content == 'save_diary' or user_response == 'save_diary':
+            try:
+                self._save_chat_to_diary(chat)
+                logger.info(f"Saved chat to diary: chat={chat_uuid}")
+            except Exception as e:
+                logger.error(f"Failed to save to diary: {e}")
+        
         # 4. Process the response through the engine
         try:
             engine_response = engine.process_response(user_response)
@@ -441,6 +453,57 @@ class ChatService:
         return mapping.get(engine_type, 'text')
     
     # =========================================================================
+    # Diary Integration
+    # =========================================================================
+    
+    def _save_chat_to_diary(self, chat: ChatModel) -> DiaryEntry:
+        """
+        Save a symptom check session to the patient's diary.
+        
+        Args:
+            chat: The chat model with symptom check data
+            
+        Returns:
+            The created diary entry
+        """
+        # Get engine state for summary data
+        engine_state = getattr(chat, 'engine_state', {}) or {}
+        symptom_list = chat.symptom_list or []
+        
+        # Build diary entry text
+        symptoms_str = ", ".join(symptom_list) if symptom_list else "No symptoms reported"
+        triage_level = engine_state.get('highest_triage_level', 'none')
+        
+        # Create a summary for the diary
+        diary_text = f"Symptom Check Summary\n"
+        diary_text += f"Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}\n"
+        diary_text += f"Symptoms: {symptoms_str}\n"
+        diary_text += f"Assessment Level: {triage_level.replace('_', ' ').title()}\n"
+        
+        # Add completed symptom triage results if available
+        triage_results = engine_state.get('triage_results', [])
+        if triage_results:
+            diary_text += "\nTriage Results:\n"
+            for result in triage_results:
+                symptom_name = result.get('symptom_name', 'Unknown')
+                level = result.get('level', 'unknown')
+                diary_text += f"- {symptom_name}: {level.replace('_', ' ').title()}\n"
+        
+        # Create diary entry
+        diary_entry = DiaryEntry(
+            patient_uuid=chat.patient_uuid,
+            diary_entry=diary_text,
+            marked_for_doctor=(triage_level in ['call_911', 'urgent', 'same_day']),
+        )
+        
+        self.db.add(diary_entry)
+        self.db.commit()
+        self.db.refresh(diary_entry)
+        
+        logger.info(f"Created diary entry: {diary_entry.entry_uuid} for patient: {chat.patient_uuid}")
+        return diary_entry
+
+    # =========================================================================
     # WebSocket Helpers
     # =========================================================================
     
@@ -453,8 +516,4 @@ class ChatService:
                 "status": "connected",
             },
         )
-
-
-
-
 
