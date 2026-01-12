@@ -36,19 +36,22 @@ export const useWebSocket = (
     const base = API_CONFIG.WS_BASE || API_CONFIG.BASE_URL;
     let wsUrl: string;
 
+    // Always include /api/v1 prefix for WebSocket
+    const apiVersion = API_CONFIG.API_VERSION || '/api/v1';
+    
     if (/^wss?:\/\//i.test(base)) {
       // Absolute ws(s) base provided directly
-      wsUrl = `${base.replace(/\/$/, '')}/chat/ws/${chatUuid}?token=${token}`;
+      wsUrl = `${base.replace(/\/$/, '')}${apiVersion}/chat/ws/${chatUuid}?token=${token}`;
     } else if (/^https?:\/\//i.test(base)) {
       // Absolute API/WS base → convert http(s) → ws(s)
       const wsBase = base.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
-      wsUrl = `${wsBase.replace(/\/$/, '')}/chat/ws/${chatUuid}?token=${token}`;
+      wsUrl = `${wsBase.replace(/\/$/, '')}${apiVersion}/chat/ws/${chatUuid}?token=${token}`;
     } else {
       // Relative base → same-origin
       const { protocol, host } = window.location as any;
       const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
       const prefix = base === '/' ? '' : base.replace(/\/$/, '');
-      wsUrl = `${wsProtocol}//${host}${prefix}/chat/ws/${chatUuid}?token=${token}`;
+      wsUrl = `${wsProtocol}//${host}${prefix}${apiVersion}/chat/ws/${chatUuid}?token=${token}`;
     }
 
     console.log('Connecting to WebSocket:', wsUrl);
