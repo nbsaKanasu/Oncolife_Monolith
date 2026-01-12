@@ -33,6 +33,12 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# =============================================================================
+# LOCAL DEVELOPMENT MODE TEST USER
+# =============================================================================
+# When LOCAL_DEV_MODE=true, this UUID is used as the default test user
+LOCAL_DEV_TEST_USER_UUID = UUID("11111111-1111-1111-1111-111111111111")
+
 # Security scheme for JWT
 security = HTTPBearer(auto_error=False)
 
@@ -109,6 +115,8 @@ def get_current_user_uuid(
     """
     Get the current user's UUID from the token.
     
+    In LOCAL_DEV_MODE, returns a test user UUID without requiring authentication.
+    
     Args:
         payload: JWT token payload
     
@@ -116,8 +124,13 @@ def get_current_user_uuid(
         User UUID
     
     Raises:
-        AuthenticationException: If not authenticated
+        AuthenticationException: If not authenticated (when not in local dev mode)
     """
+    # Local development bypass - no authentication required
+    if settings.local_dev_mode:
+        logger.debug("LOCAL_DEV_MODE: Using test user UUID")
+        return LOCAL_DEV_TEST_USER_UUID
+    
     if payload is None:
         raise AuthenticationException("Authentication required")
     

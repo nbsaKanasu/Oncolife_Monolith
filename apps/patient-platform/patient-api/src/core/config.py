@@ -67,6 +67,10 @@ class Settings(BaseSettings):
         default="development",
         description="Current environment: development, staging, production"
     )
+    local_dev_mode: bool = Field(
+        default=False,
+        description="Enable local development mode (bypasses Cognito auth)"
+    )
     
     # ==========================================================================
     # API SETTINGS

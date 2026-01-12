@@ -59,6 +59,10 @@ class Settings(BaseSettings):
         default=False,
         description="Enable debug mode with verbose logging"
     )
+    local_dev_mode: bool = Field(
+        default=False,
+        description="Enable local development mode (bypasses Cognito auth)"
+    )
     
     # ==========================================================================
     # Server Settings

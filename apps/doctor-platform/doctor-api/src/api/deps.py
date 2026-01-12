@@ -40,8 +40,15 @@ logger = get_logger(__name__)
 # OAuth2 scheme for Bearer token extraction
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/v1/auth/login",
-    auto_error=True,
+    auto_error=False,  # Don't raise error if token is missing (for local dev mode)
 )
+
+# =============================================================================
+# LOCAL DEVELOPMENT MODE TEST USER
+# =============================================================================
+# When LOCAL_DEV_MODE=true, this is used as the default test doctor
+LOCAL_DEV_TEST_USER_ID = "22222222-2222-2222-2222-222222222222"
+LOCAL_DEV_TEST_EMAIL = "test.doctor@oncolife.local"
 
 
 # =============================================================================
@@ -103,10 +110,12 @@ def _get_jwks():
 # =============================================================================
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme)
+    token: Optional[str] = Depends(oauth2_scheme)
 ) -> TokenData:
     """
     Validate the JWT token and return the current user's data.
+    
+    In LOCAL_DEV_MODE, returns a test user without requiring authentication.
     
     This is the main authentication dependency that protects routes.
     
@@ -119,11 +128,22 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or expired (401)
     """
+    # Local development bypass - no authentication required
+    if settings.local_dev_mode:
+        logger.debug("LOCAL_DEV_MODE: Using test doctor user")
+        return TokenData(
+            sub=LOCAL_DEV_TEST_USER_ID,
+            email=LOCAL_DEV_TEST_EMAIL,
+        )
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    if not token:
+        raise credentials_exception
     
     try:
         # Get JWKS
