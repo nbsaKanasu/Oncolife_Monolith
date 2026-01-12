@@ -32,6 +32,9 @@ import {
   Footer,
 } from './LoginPage.styles';
 
+// Check if running in local development mode
+const isLocalDevMode = import.meta.env.DEV && window.location.hostname === 'localhost';
+
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,6 +44,14 @@ const LoginPage: React.FC = () => {
   
   const { authenticateLogin } = useAuth();
   const navigate = useNavigate();
+
+  // Dev mode auto-login function
+  const handleDevLogin = () => {
+    // Set a fake token for local development
+    localStorage.setItem('authToken', 'dev-mode-token-22222222-2222-2222-2222-222222222222');
+    navigate('/dashboard');
+    window.location.reload(); // Refresh to pick up the new token
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,6 +177,37 @@ const LoginPage: React.FC = () => {
             <Shield size={14} />
             <span>Secure, HIPAA-compliant access</span>
           </SecureNotice>
+
+          {/* Dev Mode Quick Login - Only shows in local development */}
+          {isLocalDevMode && (
+            <div style={{ 
+              marginTop: '20px', 
+              padding: '15px', 
+              background: '#d4edda', 
+              borderRadius: '8px',
+              border: '1px solid #28a745'
+            }}>
+              <div style={{ fontSize: '14px', color: '#155724', marginBottom: '10px' }}>
+                🛠️ <strong>Local Development Mode</strong>
+              </div>
+              <button
+                onClick={handleDevLogin}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: '#17a2b8',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
+                }}
+              >
+                🚀 Quick Dev Login (No Password)
+              </button>
+            </div>
+          )}
 
           <Footer>
             © 2025 HealthAI - OncoLife Physician Portal
