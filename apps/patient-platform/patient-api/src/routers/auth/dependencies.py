@@ -7,8 +7,14 @@ from pydantic import BaseModel
 import logging
 import boto3
 
+from core import settings
+
 # This will require the client to send a header: "Authorization: Bearer <token>"
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# auto_error=False allows us to handle missing tokens gracefully in local dev mode
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+
+# Local dev mode test user UUID
+LOCAL_DEV_USER_UUID = "11111111-1111-1111-1111-111111111111"
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -57,12 +63,23 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
     """
     Validates the Cognito JWT token and returns the user's data.
     This is the dependency that will protect our routes.
+    
+    In local dev mode, returns a test user without validating the token.
     """
+    # Local dev mode - bypass authentication
+    if settings.local_dev_mode:
+        logger.info(f"[LOCAL DEV MODE] Bypassing auth, using test user: {LOCAL_DEV_USER_UUID}")
+        return TokenData(sub=LOCAL_DEV_USER_UUID, email="test@oncolife.local")
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    # Token is required in production
+    if not token:
+        raise credentials_exception
 
     try:
         jwks = _get_jwks()
@@ -101,4 +118,4 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
         raise credentials_exception
     except Exception as e:
         logger.error(f"An unexpected error occurred during token validation: {e}")
-        raise credentials_exception 
+        raise credentials_exception
