@@ -361,6 +361,20 @@ class ChatService:
                     chat.conversation_state = "EMERGENCY"
                 else:
                     chat.conversation_state = "COMPLETED"
+                
+                # Set triage level and summaries for completed conversations
+                chat.triage_level = engine_response.triage_level.value if engine_response.triage_level else 'none'
+                chat.is_complete = "true"
+                chat.completed_at = datetime.utcnow()
+                
+                # Generate summaries for the conversation
+                summaries = self._generate_conversation_summaries(
+                    chat=chat,
+                    engine_state=engine_response.state.to_dict(),
+                    triage_level=chat.triage_level
+                )
+                chat.bulleted_summary = summaries['bulleted']
+                chat.longer_summary = summaries['longer']
             else:
                 chat.conversation_state = engine_response.state.phase.value
         
@@ -453,6 +467,94 @@ class ChatService:
         return mapping.get(engine_type, 'text')
     
     # =========================================================================
+    # Summary Generation
+    # =========================================================================
+    
+    def _get_symptom_name(self, symptom_id: str) -> str:
+        """Get the human-readable name for a symptom ID."""
+        from routers.chat.symptom_checker.symptom_definitions import SYMPTOMS
+        
+        for symptom in SYMPTOMS:
+            if symptom.id == symptom_id:
+                return symptom.name
+        return symptom_id  # Fallback to ID if not found
+    
+    def _generate_conversation_summaries(
+        self, 
+        chat: ChatModel, 
+        engine_state: Dict[str, Any],
+        triage_level: str
+    ) -> Dict[str, str]:
+        """
+        Generate bulleted and longer summaries for a completed conversation.
+        
+        Args:
+            chat: The chat model
+            engine_state: The engine state dictionary
+            triage_level: The final triage level
+            
+        Returns:
+            Dictionary with 'bulleted' and 'longer' summaries
+        """
+        symptom_list = chat.symptom_list or []
+        symptom_names = [self._get_symptom_name(s) for s in symptom_list]
+        symptoms_str = ", ".join(symptom_names) if symptom_names else "No symptoms reported"
+        
+        triage_results = engine_state.get('triage_results', [])
+        triage_display = triage_level.replace('_', ' ').title() if triage_level else 'None'
+        
+        # Generate bulleted summary
+        bulleted_lines = [
+            f"• Symptoms reported: {symptoms_str}",
+            f"• Assessment level: {triage_display}",
+        ]
+        
+        if triage_results:
+            for result in triage_results:
+                symptom_name = result.get('symptom_name', 'Unknown')
+                level = result.get('level', 'unknown').replace('_', ' ').title()
+                bulleted_lines.append(f"• {symptom_name}: {level}")
+        
+        bulleted_summary = "\n".join(bulleted_lines)
+        
+        # Generate longer narrative summary
+        if triage_level == 'call_911':
+            severity = "requires immediate emergency attention"
+        elif triage_level in ['urgent', 'same_day']:
+            severity = "requires prompt medical attention"
+        elif triage_level == 'notify_care_team':
+            severity = "should be reviewed by the care team"
+        else:
+            severity = "does not require immediate attention"
+        
+        longer_summary = (
+            f"The patient reported experiencing {symptoms_str}. "
+            f"Based on the symptom assessment, the overall triage level was {triage_display}, "
+            f"which {severity}. "
+        )
+        
+        if triage_results:
+            result_summaries = [
+                f"{r.get('symptom_name', 'Unknown')} ({r.get('level', 'unknown').replace('_', ' ').title()})"
+                for r in triage_results
+            ]
+            longer_summary += f"Individual symptom assessments: {', '.join(result_summaries)}."
+        
+        # Add personal notes if available
+        personal_notes = engine_state.get('personal_notes')
+        if personal_notes:
+            bulleted_lines.append(f"• Patient notes: {personal_notes[:100]}{'...' if len(personal_notes) > 100 else ''}")
+            longer_summary += f" Patient added: {personal_notes}"
+        
+        # Rebuild bulleted summary with notes
+        bulleted_summary = "\n".join(bulleted_lines)
+        
+        return {
+            'bulleted': bulleted_summary,
+            'longer': longer_summary
+        }
+    
+    # =========================================================================
     # Diary Integration
     # =========================================================================
     
@@ -470,15 +572,19 @@ class ChatService:
         engine_state = getattr(chat, 'engine_state', {}) or {}
         symptom_list = chat.symptom_list or []
         
-        # Build diary entry text
-        symptoms_str = ", ".join(symptom_list) if symptom_list else "No symptoms reported"
-        triage_level = engine_state.get('highest_triage_level', 'none')
+        # Use proper symptom names
+        symptom_names = [self._get_symptom_name(s) for s in symptom_list]
+        symptoms_str = ", ".join(symptom_names) if symptom_names else "No symptoms reported"
+        
+        # Use the triage level from chat model (set when conversation completes)
+        triage_level = chat.triage_level or engine_state.get('highest_triage_level', 'none')
+        triage_display = triage_level.replace('_', ' ').title() if triage_level else 'None'
         
         # Create a summary for the diary
         diary_text = f"Symptom Check Summary\n"
         diary_text += f"Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}\n"
         diary_text += f"Symptoms: {symptoms_str}\n"
-        diary_text += f"Assessment Level: {triage_level.replace('_', ' ').title()}\n"
+        diary_text += f"Assessment Level: {triage_display}\n"
         
         # Add completed symptom triage results if available
         triage_results = engine_state.get('triage_results', [])
@@ -489,11 +595,16 @@ class ChatService:
                 level = result.get('level', 'unknown')
                 diary_text += f"- {symptom_name}: {level.replace('_', ' ').title()}\n"
         
+        # Add personal notes if available
+        personal_notes = engine_state.get('personal_notes')
+        if personal_notes:
+            diary_text += f"\nPatient Notes:\n{personal_notes}\n"
+        
         # Create diary entry
         diary_entry = DiaryEntry(
             patient_uuid=chat.patient_uuid,
             diary_entry=diary_text,
-            marked_for_doctor=(triage_level in ['call_911', 'urgent', 'same_day']),
+            marked_for_doctor=(triage_level in ['call_911', 'urgent', 'same_day', 'notify_care_team']),
         )
         
         self.db.add(diary_entry)

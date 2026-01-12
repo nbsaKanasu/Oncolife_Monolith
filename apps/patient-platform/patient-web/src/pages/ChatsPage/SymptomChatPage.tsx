@@ -163,8 +163,8 @@ const SymptomChatPage: React.FC = () => {
     
     const frontendType = lastMessage.structured_data?.frontend_type || lastMessage.message_type;
     
-    // Show text input only for text or number type questions
-    return frontendType === 'text' || frontendType === 'number';
+    // Show text input for text, number, or text_input (notes) type questions
+    return frontendType === 'text' || frontendType === 'number' || frontendType === 'text_input';
   };
 
   // Download summary as text file

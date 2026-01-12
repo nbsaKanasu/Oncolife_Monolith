@@ -1815,5 +1815,87 @@
   /* Placeholder for dark mode - can be enabled when needed */
 }
 
+/* =============================================================================
+   SYMPTOM HEADER - "Let's talk about [symptom]"
+   ============================================================================= */
+
+.symptom-header-intro {
+  text-align: center;
+  padding: 20px 16px;
+  margin: 16px 0;
+  background: linear-gradient(135deg, var(--ruby-bg) 0%, #B2DFDB 100%);
+  border-radius: 16px;
+  border: 2px solid var(--ruby-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.symptom-header-intro .intro-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.symptom-header-intro .symptom-name {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--ruby-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.symptom-header-intro .symptom-name::before {
+  content: '💊';
+  font-size: 32px;
+}
+
+/* Alternative styling using markdown headers in messages */
+.message-bubble h2 {
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  color: var(--ruby-primary) !important;
+  margin: 12px 0 !important;
+  padding: 16px !important;
+  background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%) !important;
+  border-radius: 12px !important;
+  text-align: center !important;
+  border: 2px solid var(--ruby-primary) !important;
+}
+
+/* Notes Input Section */
+.notes-input-container {
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  margin: 8px 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.notes-input-container textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 2px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 16px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.notes-input-container textarea:focus {
+  outline: none;
+  border-color: var(--ruby-primary);
+  box-shadow: 0 0 0 3px rgba(0, 137, 123, 0.1);
+}
+
+.notes-input-container .notes-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
 
 

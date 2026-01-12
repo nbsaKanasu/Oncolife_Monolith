@@ -43,6 +43,7 @@ class ConversationState:
     highest_triage_level: TriageLevel = TriageLevel.NONE
     chat_history: List[Dict[str, Any]] = field(default_factory=list)
     session_start: Optional[str] = None
+    personal_notes: Optional[str] = None  # Patient's additional notes
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize state to dictionary."""
@@ -59,7 +60,8 @@ class ConversationState:
             'branch_stack': self.branch_stack,
             'highest_triage_level': self.highest_triage_level.value,
             'chat_history': self.chat_history,
-            'session_start': self.session_start
+            'session_start': self.session_start,
+            'personal_notes': self.personal_notes
         }
 
     @classmethod
@@ -78,7 +80,8 @@ class ConversationState:
             branch_stack=data.get('branch_stack', []),
             highest_triage_level=TriageLevel(data.get('highest_triage_level', 'none')),
             chat_history=data.get('chat_history', []),
-            session_start=data.get('session_start')
+            session_start=data.get('session_start'),
+            personal_notes=data.get('personal_notes')
         )
 
 
@@ -171,6 +174,9 @@ class SymptomCheckerEngine:
         
         elif self.state.phase == ConversationPhase.SUMMARY:
             return self._handle_summary_action(user_response)
+        
+        elif self.state.phase == ConversationPhase.ADDING_NOTES:
+            return self._handle_notes_input(user_response)
         
         elif self.state.phase == ConversationPhase.EMERGENCY:
             return self._handle_emergency_action(user_response)
@@ -445,7 +451,8 @@ class SymptomCheckerEngine:
             message_parts.append(prefix)
         
         if self.state.current_question_index == 0 and not self.state.is_follow_up:
-            message_parts.append(f"\n\n---\n\n💊 **Assessing: {symptom.name}**\n")
+            # Large, prominent symptom header
+            message_parts.append(f"\n\n━━━━━━━━━━━━━━━━━━━━\n\n🔍 **Now let's talk about:**\n## 💊 {symptom.name}\n\n━━━━━━━━━━━━━━━━━━━━\n")
         
         message_parts.append(question.text)
         
@@ -732,7 +739,26 @@ class SymptomCheckerEngine:
 
     def _handle_summary_action(self, user_response: Any) -> EngineResponse:
         """Handle user's action selection on the summary screen."""
-        if user_response == 'download':
+        if user_response == 'add_notes':
+            # Prompt user for personal notes
+            self.state.phase = ConversationPhase.ADDING_NOTES
+            return EngineResponse(
+                message="✏️ **Add Personal Notes**\n\n"
+                        "Type any additional information you'd like to include with this symptom check:\n\n"
+                        "• How you're feeling overall\n"
+                        "• Any other symptoms you noticed\n"
+                        "• Questions for your doctor\n"
+                        "• Notes about medications or treatments",
+                message_type='text_input',
+                options=[
+                    {'label': '💾 Save Notes & Continue', 'value': 'submit_notes', 'style': 'primary'},
+                    {'label': '← Back to Summary', 'value': 'back_to_summary', 'style': 'secondary'}
+                ],
+                sender='ruby',
+                state=self.state
+            )
+        
+        elif user_response == 'download':
             # Return summary data for download
             return EngineResponse(
                 message="📥 Your summary is ready for download.",
@@ -780,6 +806,48 @@ class SymptomCheckerEngine:
         # Default: show summary again
         return self._generate_summary()
 
+    def _handle_notes_input(self, user_response: Any) -> EngineResponse:
+        """Handle the patient's personal notes input."""
+        if user_response == 'back_to_summary':
+            # Go back to summary without saving notes
+            self.state.phase = ConversationPhase.SUMMARY
+            return self._generate_summary()
+        
+        # Check if it's a "submit notes" action with notes data
+        if isinstance(user_response, dict) and 'notes' in user_response:
+            notes_text = user_response.get('notes', '').strip()
+        elif isinstance(user_response, str) and user_response not in ['submit_notes', 'back_to_summary']:
+            # The user typed their notes directly
+            notes_text = user_response.strip()
+        else:
+            notes_text = ''
+        
+        if notes_text:
+            # Save the notes to state
+            self.state.personal_notes = notes_text
+            
+            # Show confirmation and return to summary options
+            self.state.phase = ConversationPhase.SUMMARY
+            return EngineResponse(
+                message=f"✅ **Notes saved!**\n\n"
+                        f"Your notes:\n> {notes_text}\n\n"
+                        "---\n\n"
+                        "What would you like to do next?",
+                message_type='text',
+                options=[
+                    {"label": "📥 Download Summary", "value": "download", "icon": "download"},
+                    {"label": "📔 Save to My Diary", "value": "save_diary", "icon": "diary"},
+                    {"label": "✏️ Edit Notes", "value": "add_notes", "icon": "edit"},
+                    {"label": "✅ Done for Today", "value": "done", "icon": "check"},
+                ],
+                sender='ruby',
+                state=self.state
+            )
+        else:
+            # No notes provided, return to summary
+            self.state.phase = ConversationPhase.SUMMARY
+            return self._generate_summary()
+
     def _get_download_summary(self) -> Dict[str, Any]:
         """Generate summary data for PDF/download."""
         symptoms_assessed = []
@@ -798,6 +866,7 @@ class SymptomCheckerEngine:
             'symptoms': symptoms_assessed,
             'triage_level': self.state.highest_triage_level.value,
             'triage_results': self.state.triage_results,
+            'personal_notes': self.state.personal_notes,
             'disclaimer': (
                 "This symptom check was conducted using Oncolife's automated triage system. "
                 "It does not replace professional medical advice. Always follow your care team's instructions."

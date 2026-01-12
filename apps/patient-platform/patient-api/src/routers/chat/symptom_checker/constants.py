@@ -43,6 +43,7 @@ class ConversationPhase(str, Enum):
     SCREENING = "screening"                      # Per-symptom questions
     FOLLOW_UP = "follow_up"                      # Follow-up questions
     SUMMARY = "summary"                          # NEW: Session summary
+    ADDING_NOTES = "adding_notes"                # NEW: Adding personal notes
     COMPLETED = "completed"                      # Final state
     EMERGENCY = "emergency"                      # Emergency path
     BRANCHED = "branched"                        # Branched to another symptom
@@ -238,6 +239,7 @@ MEDS_COUGH = [
 # =============================================================================
 
 SUMMARY_ACTIONS = [
+    {"label": "✏️ Add Personal Notes", "value": "add_notes", "icon": "edit"},
     {"label": "📥 Download Summary", "value": "download", "icon": "download"},
     {"label": "📔 Save to My Diary", "value": "save_diary", "icon": "diary"},
     {"label": "🔄 Report Another Symptom", "value": "report_another", "icon": "repeat"},
