@@ -2406,25 +2406,42 @@ SYMPTOMS['URG-114'] = SymptomDef(
 # HEA-210: Headache (HIGH RISK - CNS)
 def _eval_headache(answers: Dict[str, Any]) -> LogicResult:
     worst_ever = answers.get('worst_ever') is True
-    vision = answers.get('vision') is True
-    confusion = answers.get('confusion') is True
+    neuro_symptoms = answers.get('neuro_symptoms', [])
     severity = answers.get('severity')
     
-    # Alert: Worst/Vision/Confusion OR Severe → Notify immediate (mass/bleed risk)
-    if worst_ever or vision or confusion or severity == 'sev':
+    # Check for ANY neurological red flags (per oncologist spec)
+    has_neuro_red_flags = (
+        worst_ever or
+        'vision' in neuro_symptoms or
+        'speech' in neuro_symptoms or
+        'face_droop' in neuro_symptoms or
+        'limb_weak' in neuro_symptoms or
+        'balance' in neuro_symptoms or
+        'confusion' in neuro_symptoms
+    )
+    
+    # Alert: ANY of the neurological red flags → CALL 911 AND Notify Care Team
+    if has_neuro_red_flags:
         reasons = []
         if worst_ever:
             reasons.append('Worst headache of life / sudden onset')
-        if vision:
-            reasons.append('Vision changes')
-        if confusion:
-            reasons.append('Confusion/neuro symptoms')
-        if severity == 'sev':
-            reasons.append('Severe pain')
+        if 'vision' in neuro_symptoms:
+            reasons.append('Blurred or double vision')
+        if 'speech' in neuro_symptoms:
+            reasons.append('Trouble speaking or understanding words')
+        if 'face_droop' in neuro_symptoms:
+            reasons.append('Face drooping on one side')
+        if 'limb_weak' in neuro_symptoms:
+            reasons.append('Arm or leg weakness')
+        if 'balance' in neuro_symptoms:
+            reasons.append('Trouble walking or balance')
+        if 'confusion' in neuro_symptoms:
+            reasons.append('Confusion or trouble staying awake')
+        
         return LogicResult(
             action='continue',
-            triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message=f"URGENT Headache: {', '.join(reasons)}. Rule out CNS mass/bleed."
+            triage_level=TriageLevel.CALL_911,
+            triage_message=f"URGENT HEADACHE - Call 911: {', '.join(reasons)}. Rule out CNS mass/bleed/stroke."
         )
     
     return LogicResult(action='continue')
@@ -2432,6 +2449,14 @@ def _eval_headache(answers: Dict[str, Any]) -> LogicResult:
 def _eval_headache_followup(answers: Dict[str, Any]) -> LogicResult:
     onset = answers.get('onset')
     fever = answers.get('fever') is True
+    temp = answers.get('ha_temp')
+    duration = answers.get('duration')
+    severity = answers.get('severity')  # From screening
+    
+    try:
+        t = float(temp) if temp else 0
+    except (ValueError, TypeError):
+        t = 0
     
     # Sudden onset is very concerning → Emergency
     if onset == 'sudden':
@@ -2441,9 +2466,24 @@ def _eval_headache_followup(answers: Dict[str, Any]) -> LogicResult:
             triage_message='Sudden onset headache - possible stroke/aneurysm. Seek emergency care.'
         )
     
-    # Fever with headache - possible meningitis → Branch to Fever
-    if fever:
+    # Fever ≥100.3 with headache - possible meningitis → Branch to Fever
+    if fever or t >= 100.3:
         return LogicResult(action='branch', branch_to_symptom_id='FEV-202')
+    
+    # If NO neurological red flags but: Severe OR (Moderate for ≥3 days) → Notify Care Team
+    if severity == 'sev':
+        return LogicResult(
+            action='stop',
+            triage_level=TriageLevel.NOTIFY_CARE_TEAM,
+            triage_message='Severe headache - contact care team.'
+        )
+    
+    if severity == 'mod' and duration in ['3d', '>3d']:
+        return LogicResult(
+            action='stop',
+            triage_level=TriageLevel.NOTIFY_CARE_TEAM,
+            triage_message='Moderate headache for 3+ days - contact care team.'
+        )
     
     return LogicResult(
         action='stop',
@@ -2459,24 +2499,32 @@ SYMPTOMS['HEA-210'] = SymptomDef(
     screening_questions=[
         Question(
             id='worst_ever',
-            text='Is this the worst headache of your life or did it start suddenly and very strongly?',
+            text='Is this the worst headache you\'ve ever had, or did it start suddenly and very strongly?',
             input_type=InputType.YES_NO
         ),
         Question(
-            id='vision',
-            text='Are you experiencing any vision changes?',
-            input_type=InputType.YES_NO
-        ),
-        Question(
-            id='confusion',
-            text='Are you experiencing confusion or other neurological symptoms?',
-            input_type=InputType.YES_NO
+            id='neuro_symptoms',
+            text='Do you have any of these symptoms?',
+            input_type=InputType.MULTISELECT,
+            options=[
+                create_option('Blurred or double vision', 'vision'),
+                create_option('Trouble speaking or understanding words', 'speech'),
+                create_option('One side of your face looks droopy', 'face_droop'),
+                create_option('One arm or leg feels weak, heavy, or harder to move', 'limb_weak'),
+                create_option('Trouble walking or keeping your balance', 'balance'),
+                create_option('Confusion or trouble staying awake', 'confusion'),
+                create_option('None of these', 'none')
+            ]
         ),
         Question(
             id='severity',
             text='Rate your headache:',
             input_type=InputType.CHOICE,
-            options=opts_from_dicts(SEVERITY_OPTIONS)
+            options=[
+                create_option('Mild (1-3)', 'mild'),
+                create_option('Moderate (4-6)', 'mod'),
+                create_option('Severe (7-10)', 'sev')
+            ]
         ),
         Question(
             id='interfere',
@@ -2498,6 +2546,17 @@ SYMPTOMS['HEA-210'] = SymptomDef(
             ]
         ),
         Question(
+            id='duration',
+            text='How long have you had this headache?',
+            input_type=InputType.CHOICE,
+            options=[
+                create_option('Less than a day', '<1d'),
+                create_option('1-2 days', '1-2d'),
+                create_option('3 days', '3d'),
+                create_option('More than 3 days', '>3d')
+            ]
+        ),
+        Question(
             id='meds',
             text='Have you taken any medications for the headache?',
             input_type=InputType.YES_NO
@@ -2512,6 +2571,12 @@ SYMPTOMS['HEA-210'] = SymptomDef(
             id='fever',
             text='Do you have a fever?',
             input_type=InputType.YES_NO
+        ),
+        Question(
+            id='ha_temp',
+            text='What is your temperature?',
+            input_type=InputType.NUMBER,
+            condition=lambda a: a.get('fever') is True
         )
     ],
     evaluate_follow_up=_eval_headache_followup
@@ -2520,32 +2585,44 @@ SYMPTOMS['HEA-210'] = SymptomDef(
 
 # ABD-211: Abdominal Pain (GI Risk)
 def _eval_abdominal(answers: Dict[str, Any]) -> LogicResult:
-    cramping = answers.get('cramping') is True
     severity = answers.get('severity')
     temp = answers.get('abd_temp')
+    last_bm = answers.get('last_bm_days')
+    passing_gas = answers.get('passing_gas')
+    blood_stool = answers.get('blood_stool_screen') is True
     
     try:
         t = float(temp) if temp else 0
+        bm_days = float(last_bm) if last_bm else 0
     except (ValueError, TypeError):
         t = 0
+        bm_days = 0
     
-    fever = t >= 100.3
+    fever = t > 100.3
+    no_bm_3_days = bm_days >= 3
+    no_gas = passing_gas is False
     
-    # Alert: Mod/Sev OR Cramping OR Fever → Notify (bleed/obstruction/perforation risk)
-    if severity in ['mod', 'sev'] or cramping or fever:
+    # Alert per oncologist spec:
+    # If abdominal pain moderate or severe, 3 days of no bowel movement or passing gas, 
+    # OR temperature >100.3 OR blood in stool → Notify Care Team
+    if severity in ['mod', 'sev'] or no_bm_3_days or no_gas or fever or blood_stool:
         reasons = []
         if severity == 'sev':
-            reasons.append('Severe pain')
+            reasons.append('Severe abdominal pain')
         elif severity == 'mod':
-            reasons.append('Moderate pain')
-        if cramping:
-            reasons.append('Cramping')
+            reasons.append('Moderate abdominal pain')
+        if no_bm_3_days:
+            reasons.append(f'No bowel movement for {int(bm_days)} days')
+        if no_gas:
+            reasons.append('Not passing gas')
         if fever:
-            reasons.append(f'Fever {t}°F')
+            reasons.append(f'Temperature {t}°F')
+        if blood_stool:
+            reasons.append('Blood in stool')
         return LogicResult(
             action='continue',
             triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message=f"Abdominal pain: {', '.join(reasons)}. Rule out GI bleed/obstruction."
+            triage_message=f"Abdominal pain alert: {', '.join(reasons)}. Rule out GI bleed/obstruction."
         )
     
     return LogicResult(action='continue')
@@ -2587,11 +2664,6 @@ SYMPTOMS['ABD-211'] = SymptomDef(
     hidden=True,
     screening_questions=[
         Question(
-            id='cramping',
-            text='Is the pain cramping or colicky?',
-            input_type=InputType.YES_NO
-        ),
-        Question(
             id='severity',
             text='Rate your abdominal pain:',
             input_type=InputType.CHOICE,
@@ -2610,6 +2682,21 @@ SYMPTOMS['ABD-211'] = SymptomDef(
             id='abd_temp',
             text='What is your temperature?',
             input_type=InputType.NUMBER
+        ),
+        Question(
+            id='last_bm_days',
+            text='How many days since your last bowel movement?',
+            input_type=InputType.NUMBER
+        ),
+        Question(
+            id='passing_gas',
+            text='Are you passing gas?',
+            input_type=InputType.YES_NO
+        ),
+        Question(
+            id='blood_stool_screen',
+            text='Is there any blood in your stool?',
+            input_type=InputType.YES_NO
         )
     ],
     evaluate_screening=_eval_abdominal,
@@ -2649,17 +2736,17 @@ def _eval_leg_pain(answers: Dict[str, Any]) -> LogicResult:
     asymmetric = answers.get('asymmetric') is True
     worse_walk_press = answers.get('worse_walk_press') is True
     
-    # DVT Alert: Asymmetric OR Worse with walk/press → Notify immediate
+    # DVT Alert: Asymmetric OR Worse with walk/press → CALL 911 AND Notify Care Team (per oncologist spec)
     if asymmetric or worse_walk_press:
         reasons = []
         if asymmetric:
-            reasons.append('One leg more swollen/red/warm/painful')
+            reasons.append('One leg more swollen/red/warm/painful than the other')
         if worse_walk_press:
-            reasons.append('Pain worsens with walking/pressure')
+            reasons.append('Pain worsens with walking/pressing on calf')
         return LogicResult(
             action='continue',
-            triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message=f"DVT CONCERN: {', '.join(reasons)}. Notify Care Team immediately for evaluation."
+            triage_level=TriageLevel.CALL_911,
+            triage_message=f"⚠️ DVT CONCERN - URGENT: {', '.join(reasons)}. Notify Care Team immediately for evaluation."
         )
     
     return LogicResult(action='continue')
