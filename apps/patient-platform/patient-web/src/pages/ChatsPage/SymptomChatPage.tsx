@@ -273,6 +273,10 @@ const SymptomChatPage: React.FC = () => {
               const content = selected.join(', ') || 'none';
               sendUserMessage(content, 'button_response');
             }}
+            onSummaryAction={(action) => {
+              // Handle summary actions like 'save_to_diary', 'new_session', 'acknowledge'
+              sendUserMessage(action, 'button_response');
+            }}
             shouldShowInteractive={shouldShowInteractive(message, index)}
           />
         ))}
