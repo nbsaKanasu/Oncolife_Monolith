@@ -96,6 +96,12 @@ async def get_user_from_token(token: str) -> Optional[TokenData]:
     if not token:
         return None
     
+    # Local dev mode bypass - accept fake dev tokens
+    if settings.local_dev_mode:
+        if token.startswith("dev-mode-token-"):
+            # Extract UUID from dev token or use default
+            return TokenData(sub=LOCAL_DEV_PATIENT_UUID, email="dev@oncolife.local")
+    
     try:
         jwks = _get_jwks()
         unverified_header = jwt.get_unverified_header(token)

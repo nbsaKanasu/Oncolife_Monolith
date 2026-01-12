@@ -7,8 +7,11 @@
  */
 
 // Base URLs from environment variables
+// In dev mode, default to localhost:8000 for direct API access
 const API_BASE = import.meta.env.VITE_API_BASE || '';
-const WS_BASE = import.meta.env.VITE_WS_BASE || API_BASE.replace('http', 'ws');
+const WS_BASE = import.meta.env.VITE_WS_BASE || (
+  import.meta.env.DEV ? 'ws://localhost:8000' : API_BASE.replace('http', 'ws')
+);
 
 // API Version prefix
 const API_VERSION = '/api/v1';

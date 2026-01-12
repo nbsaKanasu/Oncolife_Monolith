@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       cors: true,
       proxy: {
         '/api': {
-          target: env.VITE_GATEWAY_URL || 'http://localhost:3000',
+          target: env.VITE_GATEWAY_URL || 'http://localhost:8000',
           changeOrigin: true,
           secure: false,
           ws: true,
