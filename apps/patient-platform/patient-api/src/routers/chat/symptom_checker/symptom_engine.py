@@ -20,7 +20,10 @@ from .constants import (
     MEDICAL_DISCLAIMER, EMERGENCY_CHECK_MESSAGE, RUBY_GREETING,
     EMERGENCY_SYMPTOMS, SYMPTOM_GROUPS, SUMMARY_ACTIONS,
     PATIENT_CONTEXT_MESSAGE, LAST_CHEMO_OPTIONS, PHYSICIAN_VISIT_OPTIONS,
-    validate_temperature, validate_text_input, TEMP_FEVER_THRESHOLD
+    validate_temperature, validate_text_input, TEMP_FEVER_THRESHOLD,
+    validate_blood_pressure, validate_heart_rate, validate_oxygen_saturation,
+    validate_days, validate_times_per_day, validate_blood_sugar, validate_weight,
+    INPUT_HINTS
 )
 from .symptom_definitions import (
     SYMPTOMS, SymptomDef, Question, LogicResult,
@@ -528,6 +531,12 @@ class SymptomCheckerEngine:
         
         message_parts.append(question.text)
         
+        # Add input hints for NUMBER inputs
+        if question.input_type == InputType.NUMBER:
+            hint = self._get_input_hint(question.id)
+            if hint:
+                message_parts.append(f"\n\n{hint}")
+        
         full_message = "\n".join(message_parts)
         
         self._add_to_chat_history('ruby', question.text)
@@ -542,6 +551,105 @@ class SymptomCheckerEngine:
             state=self.state
         )
 
+    def _get_input_hint(self, question_id: str) -> Optional[str]:
+        """Get the input hint/format for a question based on its ID."""
+        q_id = question_id.lower()
+        
+        if 'temp' in q_id:
+            return INPUT_HINTS.get('temperature', '')
+        if 'bp' in q_id or 'blood_pressure' in q_id or 'pressure' in q_id:
+            return INPUT_HINTS.get('blood_pressure', '')
+        if 'hr' in q_id or 'heart_rate' in q_id or 'pulse' in q_id:
+            return INPUT_HINTS.get('heart_rate', '')
+        if 'o2' in q_id or 'oxygen' in q_id or 'spo2' in q_id or 'sat' in q_id:
+            return INPUT_HINTS.get('oxygen', '')
+        if 'sugar' in q_id or 'glucose' in q_id:
+            return INPUT_HINTS.get('blood_sugar', '')
+        if 'days' in q_id or 'day' in q_id or 'duration' in q_id:
+            return INPUT_HINTS.get('days', '')
+        if 'times' in q_id or 'episodes' in q_id or 'frequency' in q_id:
+            return INPUT_HINTS.get('times', '')
+        if 'weight' in q_id:
+            return INPUT_HINTS.get('weight', '')
+        
+        return None
+
+    def _validate_numeric_input(self, question: Any, user_response: Any) -> tuple[bool, Any, Optional[str]]:
+        """
+        Validate numeric inputs based on question ID patterns.
+        
+        Returns:
+            (is_valid, validated_value, error_message_or_None)
+        """
+        q_id = question.id.lower()
+        response_str = str(user_response).strip()
+        
+        # Temperature validation (with Celsius auto-conversion)
+        if 'temp' in q_id:
+            is_valid, value, msg = validate_temperature(response_str)
+            if not is_valid:
+                return False, None, msg
+            # Log if Celsius was converted
+            if msg:
+                logger.info(f"Temperature conversion: {msg}")
+            return True, value, None
+        
+        # Blood pressure validation (format: 120/80)
+        if 'bp' in q_id or 'blood_pressure' in q_id or 'pressure' in q_id:
+            is_valid, value, msg = validate_blood_pressure(response_str)
+            if not is_valid:
+                return False, None, msg
+            return True, value, None
+        
+        # Heart rate validation
+        if 'hr' in q_id or 'heart_rate' in q_id or 'pulse' in q_id:
+            is_valid, value, msg = validate_heart_rate(response_str)
+            if not is_valid:
+                return False, None, msg
+            return True, value, None
+        
+        # Oxygen saturation validation
+        if 'o2' in q_id or 'oxygen' in q_id or 'spo2' in q_id or 'sat' in q_id:
+            is_valid, value, msg = validate_oxygen_saturation(response_str)
+            if not is_valid:
+                return False, None, msg
+            return True, value, None
+        
+        # Blood sugar validation
+        if 'sugar' in q_id or 'glucose' in q_id or 'blood_sugar' in q_id:
+            is_valid, value, msg = validate_blood_sugar(response_str)
+            if not is_valid:
+                return False, None, msg
+            return True, value, None
+        
+        # Days validation
+        if 'days' in q_id or 'day' in q_id or 'duration' in q_id:
+            is_valid, value, msg = validate_days(response_str)
+            if not is_valid:
+                return False, None, msg
+            return True, value, None
+        
+        # Times/frequency validation
+        if 'times' in q_id or 'episodes' in q_id or 'frequency' in q_id or 'count' in q_id:
+            is_valid, value, msg = validate_times_per_day(response_str)
+            if not is_valid:
+                return False, None, msg
+            return True, value, None
+        
+        # Weight validation
+        if 'weight' in q_id or 'lbs' in q_id:
+            is_valid, value, msg = validate_weight(response_str)
+            if not is_valid:
+                return False, None, msg
+            return True, value, None
+        
+        # Generic number - just ensure it's a valid number
+        try:
+            value = float(response_str)
+            return True, value, None
+        except (ValueError, TypeError):
+            return False, None, "📝 Please enter a valid number."
+
     def _handle_screening_response(self, user_response: Any) -> EngineResponse:
         """Handle a response during the screening phase."""
         symptom = get_symptom_by_id(self.state.current_symptom_id)
@@ -552,36 +660,38 @@ class SymptomCheckerEngine:
         if self.state.current_question_index < len(questions):
             question = questions[self.state.current_question_index]
             
-            # Validate temperature input (Fahrenheit)
-            if question.input_type == InputType.NUMBER and 'temp' in question.id.lower():
-                is_valid, temp_value, error_msg = validate_temperature(str(user_response))
+            # Validate NUMBER inputs
+            if question.input_type == InputType.NUMBER:
+                is_valid, validated_value, error_msg = self._validate_numeric_input(question, user_response)
                 if not is_valid:
-                    # Return error and ask again
                     return EngineResponse(
-                        message=f"⚠️ {error_msg}\n\n{question.text}",
+                        message=f"{error_msg}\n\n{question.text}",
                         message_type='number',
                         options=[],
                         sender='ruby',
                         avatar='⚠️',
                         state=self.state
                     )
-                # Store validated temperature
-                self.state.answers[question.id] = temp_value
-                logger.info(f"Stored validated temp for {question.id}: {temp_value}°F")
+                self.state.answers[question.id] = validated_value
+                logger.info(f"Stored validated {question.id}: {validated_value}")
+            
+            # Validate TEXT inputs
+            elif question.input_type == InputType.TEXT:
+                is_valid, error_msg = validate_text_input(str(user_response))
+                if not is_valid:
+                    return EngineResponse(
+                        message=f"{error_msg}\n\n{question.text}",
+                        message_type='text',
+                        options=[],
+                        sender='ruby',
+                        avatar='⚠️',
+                        state=self.state
+                    )
+                self.state.answers[question.id] = user_response
+                logger.info(f"Stored answer for {question.id}: {user_response}")
+            
+            # Other input types (CHOICE, YES_NO, MULTISELECT) - no validation needed
             else:
-                # Validate text input
-                if question.input_type == InputType.TEXT:
-                    is_valid, error_msg = validate_text_input(str(user_response))
-                    if not is_valid:
-                        return EngineResponse(
-                            message=f"⚠️ {error_msg}\n\n{question.text}",
-                            message_type='text',
-                            options=[],
-                            sender='ruby',
-                            avatar='⚠️',
-                            state=self.state
-                        )
-                
                 self.state.answers[question.id] = user_response
                 logger.info(f"Stored answer for {question.id}: {user_response}")
 
@@ -598,34 +708,38 @@ class SymptomCheckerEngine:
         if self.state.current_question_index < len(questions):
             question = questions[self.state.current_question_index]
             
-            # Validate temperature input (Fahrenheit)
-            if question.input_type == InputType.NUMBER and 'temp' in question.id.lower():
-                is_valid, temp_value, error_msg = validate_temperature(str(user_response))
+            # Validate NUMBER inputs
+            if question.input_type == InputType.NUMBER:
+                is_valid, validated_value, error_msg = self._validate_numeric_input(question, user_response)
                 if not is_valid:
                     return EngineResponse(
-                        message=f"⚠️ {error_msg}\n\n{question.text}",
+                        message=f"{error_msg}\n\n{question.text}",
                         message_type='number',
                         options=[],
                         sender='ruby',
                         avatar='⚠️',
                         state=self.state
                     )
-                self.state.answers[question.id] = temp_value
-                logger.info(f"Stored validated temp for {question.id}: {temp_value}°F")
+                self.state.answers[question.id] = validated_value
+                logger.info(f"Stored validated {question.id}: {validated_value}")
+            
+            # Validate TEXT inputs
+            elif question.input_type == InputType.TEXT:
+                is_valid, error_msg = validate_text_input(str(user_response))
+                if not is_valid:
+                    return EngineResponse(
+                        message=f"{error_msg}\n\n{question.text}",
+                        message_type='text',
+                        options=[],
+                        sender='ruby',
+                        avatar='⚠️',
+                        state=self.state
+                    )
+                self.state.answers[question.id] = user_response
+                logger.info(f"Stored follow-up answer for {question.id}: {user_response}")
+            
+            # Other input types - no validation needed
             else:
-                # Validate text input
-                if question.input_type == InputType.TEXT:
-                    is_valid, error_msg = validate_text_input(str(user_response))
-                    if not is_valid:
-                        return EngineResponse(
-                            message=f"⚠️ {error_msg}\n\n{question.text}",
-                            message_type='text',
-                            options=[],
-                            sender='ruby',
-                            avatar='⚠️',
-                            state=self.state
-                        )
-                
                 self.state.answers[question.id] = user_response
                 logger.info(f"Stored follow-up answer for {question.id}: {user_response}")
 
