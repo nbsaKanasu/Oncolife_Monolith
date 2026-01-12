@@ -41,35 +41,41 @@ const SystemAvatar: React.FC = () => (
 // Format user response for better display
 const formatUserResponse = (content: string): string => {
   const friendlyLabels: Record<string, string> = {
-    'accept': '✓ I Understand',
-    'none': '✓ None of these',
-    'acknowledge': '✓ I Understand',
-    'call_911': '📞 Calling 911',
-    'save_diary': '📔 Save to Diary',
-    'download': '📥 Download Summary',
-    'report_another': '🔄 Report Another Symptom',
-    'done': '✅ Done',
-    'go_diary': '📔 Go to Diary',
-    'continue': '➡️ Continue',
-    'yes': '✓ Yes',
-    'no': '✗ No',
+    'accept': 'I Understand',
+    'none': 'None of these',
+    'acknowledge': 'I Understand',
+    'call_911': 'Calling 911',
+    'save_diary': 'Save to Diary',
+    'download': 'Download Summary',
+    'report_another': 'Report Another',
+    'done': 'Done',
+    'go_diary': 'Go to Diary',
+    'continue': 'Continue',
+    'yes': 'Yes',
+    'no': 'No',
+    'true': 'Yes',
+    'false': 'No',
   };
   
-  // Check for exact match
-  if (friendlyLabels[content.toLowerCase()]) {
-    return friendlyLabels[content.toLowerCase()];
+  // Remove any line breaks that might be in the content
+  const cleanContent = content.replace(/\n/g, ' ').trim();
+  
+  // Check for exact match (case insensitive)
+  const lowerContent = cleanContent.toLowerCase();
+  if (friendlyLabels[lowerContent]) {
+    return friendlyLabels[lowerContent];
   }
   
-  // Check for comma-separated symptom selections
-  if (content.includes(',')) {
-    const symptoms = content.split(',').map(s => s.trim());
-    if (symptoms.length > 1) {
-      return `Selected: ${symptoms.join(', ')}`;
+  // Check for comma-separated selections
+  if (cleanContent.includes(',')) {
+    const items = cleanContent.split(',').map(s => s.trim()).filter(s => s);
+    if (items.length > 0) {
+      return items.join(', ');
     }
   }
   
-  // Return as-is for other content
-  return content;
+  // Return cleaned content
+  return cleanContent;
 };
 
 export const SymptomMessageBubble: React.FC<SymptomMessageBubbleProps> = ({
