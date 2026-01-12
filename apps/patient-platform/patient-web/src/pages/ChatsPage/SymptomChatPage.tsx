@@ -268,6 +268,11 @@ const SymptomChatPage: React.FC = () => {
             onMultiSelectSubmit={handleMultiSelectSubmit}
             onSymptomSelect={handleSymptomSelect}
             onDisclaimerAccept={() => handleOptionSelect('accept')}
+            onEmergencyCheck={(selected) => {
+              // Send emergency selection - 'none' or array of selected symptoms
+              const content = selected.join(', ') || 'none';
+              sendUserMessage(content, 'button_response');
+            }}
             shouldShowInteractive={shouldShowInteractive(message, index)}
           />
         ))}
