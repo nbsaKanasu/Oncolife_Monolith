@@ -28,7 +28,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import { Search, Plus, Edit, UserCog, Mail, Building2, ChevronRight, X } from 'lucide-react';
 import styled from 'styled-components';
-import { useStaff, Staff } from '../../services/staff';
+import { useStaff } from '../../services/staff';
+import type { Staff } from '../../services/staff';
 
 // Theme colors (Doctor)
 const colors = {
