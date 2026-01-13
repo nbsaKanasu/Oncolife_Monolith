@@ -403,29 +403,46 @@ Forgot to ask something during your last visit? Write it down here!
 
 ## 7. My Treatment Calendar
 
-Track your chemotherapy appointments and treatment schedule.
+Track your chemotherapy appointments and treatment schedule. The treatment calendar is now integrated into your **Profile** page for easier access.
 
-### Viewing Your Calendar
+### Viewing Your Treatment Timeline
 
-1. Tap the **💊 Treatment** icon
-2. See a calendar with your treatment dates
-3. **Green dots** = Past treatments
-4. **Blue dots** = Upcoming treatments
+1. Go to **👤 Profile** page
+2. Scroll down to the **"Chemotherapy Timeline"** section
+3. See your upcoming and past treatments:
+   - **📆 Upcoming Sessions** - Highlighted in blue with countdown
+   - **📋 Recent Sessions** - Shown in gray for reference
 
-### Logging a Chemo Date
+### Adding a Treatment Date
 
-If you need to add a treatment date:
+1. On your Profile page, find the Timeline section
+2. Click **"+ Add Date"** button
+3. Select the date from the calendar picker
+4. Click **"✓ Add Date"** to save
 
-1. Tap **"+ Log Treatment"**
-2. Select the date from the calendar
-3. Add any notes (optional)
-4. Tap **"Save"**
+### Managing Dates
 
-### What You'll See
+| Action | How To |
+|--------|--------|
+| **Add Date** | Click "+ Add Date", select date, confirm |
+| **Delete Date** | Click 🗑️ icon, confirm deletion |
+| **View Details** | See countdown (e.g., "In 3 days") for each date |
 
-- **Upcoming Treatments:** Highlighted with reminders
-- **Past Treatments:** Tracked for your records
-- **Cycle Information:** Which cycle you're on
+### Visual Timeline
+
+The timeline shows your chemotherapy journey:
+
+```
+📆 UPCOMING SESSIONS
+   ● Wed, Jan 15, 2026  [In 2 days]
+   ● Wed, Jan 29, 2026  [In 16 days]
+
+📋 RECENT SESSIONS
+   ○ Wed, Jan 1, 2026   [12 days ago]
+   ○ Wed, Dec 18, 2025  [26 days ago]
+```
+
+💡 **Tip:** Your profile also stores your **Last Chemotherapy Date** and **Next Physician Visit** separately in the Treatment Information section for quick reference.
 
 ---
 
@@ -463,11 +480,55 @@ Use the search bar to find specific topics:
 ### Viewing Your Profile
 
 1. Tap the **👤 Profile** icon
-2. See your information:
-   - Name
-   - Email
-   - Phone Number
-   - Treatment Information
+2. See your information organized in sections:
+
+**Personal Information:**
+- Name, Email, Phone Number
+- Date of Birth
+- Reminder Time
+
+**Treatment Information:**
+- Diagnosis (Cancer Type)
+- Treatment Type
+- Last Chemotherapy Date
+- Next Physician Visit
+- Doctor Name, Clinic Name
+
+**Emergency Contact:**
+- Contact Name
+- Contact Phone
+
+### Updating Your Treatment Information
+
+Your profile now stores important treatment information that was previously asked during each symptom check-in:
+
+1. Go to Profile → **"Edit"** button
+2. Update your treatment information:
+   - **Last Chemotherapy Date** - When was your most recent chemo session
+   - **Next Physician Visit** - Your upcoming appointment with your doctor
+   - **Diagnosis** - Your cancer type/diagnosis
+   - **Treatment Type** - e.g., Chemotherapy, Immunotherapy
+3. Tap **"Save Changes"**
+
+💡 **Tip:** Keeping this information up-to-date helps your care team provide better support.
+
+### Chemotherapy Timeline
+
+Below your profile information, you'll see a **Chemotherapy Timeline** showing:
+
+| Section | What It Shows |
+|---------|---------------|
+| 📆 **Upcoming Sessions** | Scheduled chemo dates with countdown |
+| 📋 **Recent Sessions** | Your past chemo dates for reference |
+
+**To Add a Chemo Date:**
+1. Click **"+ Add Date"**
+2. Select the date from the calendar
+3. Click **"Add Date"** to confirm
+
+**To Remove a Date:**
+1. Click the 🗑️ icon next to any date
+2. Confirm deletion
 
 ### Changing Reminder Settings
 
@@ -479,9 +540,9 @@ Use the search bar to find specific topics:
 
 ### Updating Your Contact Info
 
-1. Go to Profile → **"Edit Profile"**
-2. Update your phone or email
-3. Tap **"Save"**
+1. Go to Profile → **"Edit"** button
+2. Update your phone, emergency contact, or other details
+3. Tap **"Save Changes"**
 
 ### Logging Out
 

@@ -14,9 +14,10 @@ import type { ProfileFormData } from '../types';
 interface PersonalInformationProps {
   formData: ProfileFormData;
   isEditing: boolean;
-  onFieldChange: (field: keyof ProfileFormData, value: string) => void;
+  onFieldChange: (field: keyof ProfileFormData, value: string | number | null) => void;
   onSave: () => void;
   onCancel: () => void;
+  isSaving?: boolean;
 }
 
 const GridContainer = styled.div`
@@ -94,11 +95,12 @@ const PersonalInformation: React.FC<PersonalInformationProps> = ({
   onFieldChange,
   onSave,
   onCancel,
+  isSaving = false,
 }) => {
   const handleInputChange = (field: keyof ProfileFormData) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    onFieldChange(field, e.target.value);
+    onFieldChange(field, e.target.value || null);
   };
 
   return (
@@ -269,10 +271,10 @@ const PersonalInformation: React.FC<PersonalInformationProps> = ({
       
       {isEditing && (
         <ButtonGroup>
-          <SaveButton onClick={onSave}>
-            Save Changes
+          <SaveButton onClick={onSave} disabled={isSaving}>
+            {isSaving ? '⏳ Saving...' : '💾 Save Changes'}
           </SaveButton>
-          <CancelButton onClick={onCancel}>
+          <CancelButton onClick={onCancel} disabled={isSaving}>
             Cancel
           </CancelButton>
         </ButtonGroup>

@@ -87,6 +87,8 @@ OncoLife is a healthcare platform built with a modular monorepo architecture. Th
 │  │  │  - diary.py        │  │  │              │  │  │  - patients.py     │  │  │
 │  │  │  - questions.py    │  │  │              │  │  │  - registration.py │  │  │
 │  │  │  - education.py    │  │  │              │  │  │  - staff.py        │  │  │
+│  │  │  - profile.py      │  │  │              │  │  │  - reports.py      │  │  │
+│  │  │  - chemo.py        │  │  │              │  │  │                    │  │  │
 │  │  │  - onboarding.py   │  │  │              │  │  └────────────────────┘  │  │
 │  │  └────────────────────┘  │  │              │  │  ┌────────────────────┐  │  │
 │  │  ┌────────────────────┐  │  │              │  │  │ Service Layer      │  │  │
@@ -94,9 +96,11 @@ OncoLife is a healthcare platform built with a modular monorepo architecture. Th
 │  │  │  - AuthService     │  │  │◄────────────►│  │  │  - RegistrationSvc │  │  │
 │  │  │  - DiaryService    │  │  │   Cross-DB   │  │  │  - AuditService    │  │  │
 │  │  │  - EducationSvc    │  │  │   Queries    │  │  │  - PatientService  │  │  │
-│  │  │  - OnboardingSvc   │  │  │              │  │  └────────────────────┘  │  │
-│  │  │  - SymptomEngine   │  │  │              │  │  ┌────────────────────┐  │  │
-│  │  └────────────────────┘  │  │              │  │  │ Repository Layer   │  │  │
+│  │  │  - ProfileService  │  │  │              │  │  │  - ReportService   │  │  │
+│  │  │  - ChemoService    │  │  │              │  │  └────────────────────┘  │  │
+│  │  │  - OnboardingSvc   │  │  │              │  │  ┌────────────────────┐  │  │
+│  │  │  - SymptomEngine   │  │  │              │  │  │ Repository Layer   │  │  │
+│  │  └────────────────────┘  │  │              │  │  │  - StaffRepo       │  │  │
 │  │  ┌────────────────────┐  │  │              │  │  │  - StaffRepo       │  │  │
 │  │  │ Repository Layer   │  │  │              │  │  │  - ClinicRepo      │  │  │
 │  │  │  - DiaryRepo       │  │  │              │  │  └────────────────────┘  │  │

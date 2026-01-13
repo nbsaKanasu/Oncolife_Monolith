@@ -3,7 +3,8 @@ Profile Endpoints - Patient API
 ================================
 
 Endpoints for patient profile management:
-- GET /: Get complete patient profile
+- GET /: Get complete patient profile with oncology data
+- PUT /: Update complete patient profile
 - GET /info: Get detailed patient info
 - PATCH /config: Update patient configuration
 - PATCH /consent: Update consent status
@@ -32,7 +33,7 @@ router = APIRouter()
 # =============================================================================
 
 class PatientProfileResponse(BaseModel):
-    """Complete patient profile response."""
+    """Complete patient profile response with oncology data."""
     first_name: str
     last_name: str
     email_address: str
@@ -41,6 +42,36 @@ class PatientProfileResponse(BaseModel):
     reminder_time: Optional[time] = None
     doctor_name: Optional[str] = None
     clinic_name: Optional[str] = None
+    # Treatment info
+    diagnosis: Optional[str] = None
+    treatment_type: Optional[str] = None
+    chemo_plan_name: Optional[str] = None
+    chemo_start_date: Optional[date] = None
+    chemo_end_date: Optional[date] = None
+    current_cycle: Optional[int] = None
+    total_cycles: Optional[int] = None
+    last_chemo_date: Optional[date] = None
+    next_physician_visit: Optional[date] = None
+    # Emergency contact
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Request model for updating patient profile."""
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    reminder_time: Optional[time] = None
+    # Treatment info
+    diagnosis: Optional[str] = None
+    treatment_type: Optional[str] = None
+    last_chemo_date: Optional[date] = None
+    next_physician_visit: Optional[date] = None
+    # Emergency contact
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
 
 
 class PatientInfoResponse(BaseModel):
@@ -91,7 +122,7 @@ class ConfigurationResponse(BaseModel):
     "/",
     response_model=PatientProfileResponse,
     summary="Get patient profile",
-    description="Get complete patient profile with doctor and clinic info."
+    description="Get complete patient profile with doctor, clinic, and oncology info."
 )
 async def get_patient_profile(
     patient_db: Session = Depends(get_patient_db),
@@ -100,7 +131,7 @@ async def get_patient_profile(
 ):
     """
     Fetch complete patient profile by combining data from
-    both patient and doctor databases.
+    both patient and doctor databases, including oncology profile.
     """
     logger.info(f"Get profile: patient={patient_uuid}")
     
@@ -108,6 +139,45 @@ async def get_patient_profile(
     
     try:
         profile = profile_service.get_profile(UUID(patient_uuid))
+        return PatientProfileResponse(**profile)
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.put(
+    "/",
+    response_model=PatientProfileResponse,
+    summary="Update patient profile",
+    description="Update patient profile including treatment and emergency contact info."
+)
+async def update_patient_profile(
+    update_data: ProfileUpdateRequest,
+    patient_db: Session = Depends(get_patient_db),
+    doctor_db: Session = Depends(get_doctor_db),
+    patient_uuid: str = Query(..., description="Patient UUID"),
+):
+    """
+    Update patient profile including oncology and emergency contact data.
+    """
+    logger.info(f"Update profile: patient={patient_uuid}")
+    
+    profile_service = ProfileService(patient_db, doctor_db)
+    
+    try:
+        profile = profile_service.update_profile(
+            patient_uuid=UUID(patient_uuid),
+            first_name=update_data.first_name,
+            last_name=update_data.last_name,
+            phone_number=update_data.phone_number,
+            date_of_birth=update_data.date_of_birth,
+            reminder_time=update_data.reminder_time,
+            diagnosis=update_data.diagnosis,
+            treatment_type=update_data.treatment_type,
+            last_chemo_date=update_data.last_chemo_date,
+            next_physician_visit=update_data.next_physician_visit,
+            emergency_contact_name=update_data.emergency_contact_name,
+            emergency_contact_phone=update_data.emergency_contact_phone,
+        )
         return PatientProfileResponse(**profile)
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

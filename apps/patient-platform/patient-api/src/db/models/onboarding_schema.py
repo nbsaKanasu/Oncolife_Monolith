@@ -209,6 +209,10 @@ class OncologyProfile(Base):
     
     treatment_department = Column(String(255))
     
+    # Appointment tracking (Patient-Facing)
+    next_clinic_visit = Column(Date)  # Next scheduled clinic/physician visit
+    last_chemo_date = Column(Date)  # Last chemotherapy session date
+    
     # ==========================================================================
     # CLINICAL CONTEXT (NOT Displayed to Patient)
     # ==========================================================================

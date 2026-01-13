@@ -15,8 +15,9 @@ This document provides a complete testing guide for the OncoLife Patient Applica
 | Symptom Checker | WS /api/v1/chat/ws/{uuid} | ✅ Implemented |
 | Patient Diary | GET/POST /api/v1/diary | ✅ Implemented |
 | Questions to Doctor | GET/POST /api/v1/questions | ✅ Implemented |
-| Chemo Dates | GET/POST /api/v1/chemo | ✅ Implemented |
-| Profile Management | GET/PATCH /api/v1/profile | ✅ Implemented |
+| Chemo Dates | GET/POST/DELETE /api/v1/chemo | ✅ Implemented |
+| Profile (with Oncology) | GET/PUT /api/v1/profile | ✅ Implemented |
+| Chemo Timeline | GET /api/v1/chemo/upcoming | ✅ Implemented |
 | Education Content | GET /api/v1/education/tab | ✅ Implemented |
 
 ---
@@ -513,7 +514,7 @@ GET /api/v1/chemo/history
 
 ### 6. Profile Management
 
-#### 6.1 View Profile
+#### 6.1 View Profile (with Oncology Data)
 
 **Screen Flow:**
 ```
@@ -521,32 +522,131 @@ Dashboard → Profile Icon → Profile Screen
 ```
 
 **What to Test:**
-- Name displayed correctly
-- Email displayed
-- Phone number displayed
-- Disease type displayed
-- Treatment type displayed
+
+| Section | Fields to Verify |
+|---------|-----------------|
+| **Personal Info** | Name, Email, Phone, DOB, Reminder Time |
+| **Treatment Info** | Diagnosis, Treatment Type, Doctor/Clinic Name |
+| **Treatment Dates** | Last Chemo Date, Next Physician Visit |
+| **Emergency Contact** | Contact Name, Contact Phone |
+
+**API Test:**
+```bash
+GET /api/v1/profile?patient_uuid={uuid}
+
+Expected Response:
+{
+  "first_name": "Test",
+  "last_name": "Patient",
+  "email_address": "test@example.com",
+  "phone_number": "555-1234",
+  "date_of_birth": "1980-05-15",
+  "reminder_time": "09:00",
+  "doctor_name": "Dr. Smith",
+  "clinic_name": "Oncology Center",
+  "diagnosis": "Breast Cancer",
+  "treatment_type": "Chemotherapy",
+  "chemo_start_date": "2025-12-16",
+  "chemo_end_date": "2026-04-28",
+  "current_cycle": 2,
+  "total_cycles": 8,
+  "last_chemo_date": "2026-01-10",
+  "next_physician_visit": "2026-01-20",
+  "emergency_contact_name": "Jane Doe",
+  "emergency_contact_phone": "555-5678"
+}
+```
 
 ---
 
-#### 6.2 Update Reminder Preferences
+#### 6.2 Update Profile (with Treatment Information)
 
 **Screen Flow:**
 ```
-Profile → "Reminder Settings" → Edit Form → Save
+Profile → "Edit" Button → Edit Form → "Save Changes"
 ```
 
 **What to Test:**
 1. Navigate to Profile
-2. Click "Reminder Settings"
-3. Change reminder method (Email/SMS)
-4. Change reminder time
-5. Click "Save"
-6. **Expected:** Settings updated
+2. Click "Edit" button
+3. Update treatment information fields:
+   - Last Chemotherapy Date (date picker)
+   - Next Physician Visit (date picker)
+   - Diagnosis
+   - Treatment Type
+   - Emergency Contact Name/Phone
+4. Click "Save Changes"
+5. **Expected:** ✅ Success message, data persisted
+6. Refresh page and verify changes persist
 
 **API Test:**
 ```bash
-PATCH /api/v1/profile/config
+PUT /api/v1/profile?patient_uuid={uuid}
+{
+  "first_name": "Test",
+  "last_name": "Patient",
+  "phone_number": "555-1234",
+  "diagnosis": "Breast Cancer Stage II",
+  "treatment_type": "Neoadjuvant Chemotherapy",
+  "last_chemo_date": "2026-01-10",
+  "next_physician_visit": "2026-01-25",
+  "emergency_contact_name": "John Doe",
+  "emergency_contact_phone": "555-9999"
+}
+```
+
+---
+
+#### 6.3 Chemotherapy Timeline
+
+**Screen Flow:**
+```
+Profile Page → Scroll to "Chemotherapy Timeline" section
+```
+
+**What to Test:**
+1. **Upcoming Sessions:** Displays future chemo dates with countdown
+2. **Recent Sessions:** Displays past chemo dates
+3. **Add Date:** Click "+ Add Date", select date, confirm
+4. **Delete Date:** Click 🗑️ icon, confirm deletion
+
+**API Tests:**
+```bash
+# Get upcoming chemo dates
+GET /api/v1/chemo/upcoming?patient_uuid={uuid}
+
+# Get chemo history
+GET /api/v1/chemo/history?patient_uuid={uuid}
+
+# Add a chemo date
+POST /api/v1/chemo/log?patient_uuid={uuid}
+{
+  "chemo_date": "2026-02-01"
+}
+
+# Delete a chemo date
+DELETE /api/v1/chemo/2026-02-01?patient_uuid={uuid}
+```
+
+---
+
+#### 6.4 Update Reminder Preferences
+
+**Screen Flow:**
+```
+Profile → "Edit" → Update Reminder Time → Save
+```
+
+**What to Test:**
+1. Navigate to Profile
+2. Click "Edit" button
+3. Change reminder time
+4. Click "Save Changes"
+5. **Expected:** Settings updated
+
+**API Test:**
+```bash
+PATCH /api/v1/profile/config?patient_uuid={uuid}
 {
   "reminder_method": "sms",
   "reminder_time": "08:00"

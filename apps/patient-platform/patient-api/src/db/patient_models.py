@@ -104,6 +104,9 @@ class PatientInfo(Base):
     phone_number = Column(String)
     disease_type = Column(String)
     treatment_type = Column(String)
+    # Emergency contact
+    emergency_contact_name = Column(String, nullable=True)
+    emergency_contact_phone = Column(String, nullable=True)
     is_deleted = Column(Boolean, nullable=False, server_default='false')
 
 class PatientPhysicianAssociations(Base):
