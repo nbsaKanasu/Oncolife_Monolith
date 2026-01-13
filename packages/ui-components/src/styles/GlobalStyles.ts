@@ -20,9 +20,8 @@ import { sharedTokens, cardBorderColors } from './theme';
 // =============================================================================
 
 export const GlobalStyles = createGlobalStyle`
-  /* Font Imports - DM Sans + Fraunces (Lovable style) */
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&display=swap');
-
+  /* Note: Fonts (DM Sans + Fraunces) are loaded via <link> tags in index.html */
+  
   /* CSS Reset */
   *, *::before, *::after {
     margin: 0;
