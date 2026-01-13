@@ -417,17 +417,93 @@ aws rds create-db-instance \
 
 ### Run Migrations
 
+After creating RDS, you need to run database migrations to create all tables.
+
+#### Option 1: Using Migration Script (Recommended)
+
+```bash
+# From your local machine with VPN access to RDS
+./scripts/aws/run-migrations.sh all
+```
+
+This will provide detailed instructions for running migrations on AWS RDS.
+
+#### Option 2: Via SSM Session Manager
+
 ```bash
 #!/bin/bash
-# scripts/run-migrations.sh
-
-# SSH into bastion or use SSM Session Manager
+# Connect to bastion/EC2 with SSM
 aws ssm start-session --target i-xxx
 
-# Run migrations
+# Clone repo and set up environment
 cd /opt/Oncolife_Monolith/apps/patient-platform/patient-api
+python3 -m venv venv
 source venv/bin/activate
+pip install -r requirements.txt
+
+# Set environment variables
+export PATIENT_DB_HOST=oncolife-db.xxx.us-west-2.rds.amazonaws.com
+export PATIENT_DB_PORT=5432
+export PATIENT_DB_USER=oncolife_admin
+export PATIENT_DB_PASSWORD=$(aws secretsmanager get-secret-value \
+    --secret-id oncolife/db --query 'SecretString' \
+    --output text | jq -r '.password')
+export PATIENT_DB_NAME=oncolife_patient
+
+# Run migrations
 alembic upgrade head
+
+# Verify tables created
+psql -h $PATIENT_DB_HOST -U $PATIENT_DB_USER -d $PATIENT_DB_NAME \
+    -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name;"
+```
+
+#### Option 3: Apply SQL Script Directly
+
+```bash
+# Connect to RDS via psql
+psql -h oncolife-db.xxx.us-west-2.rds.amazonaws.com \
+     -U oncolife_admin \
+     -d oncolife_patient \
+     -f scripts/db/schema_patient_diary_doctor_dashboard.sql
+```
+
+#### Migration Files
+
+| Migration | Description |
+|-----------|-------------|
+| `0001_initial_schema.py` | Core tables: users, conversations, diary, questions |
+| `0002_onboarding_ocr_tables.py` | OCR/Onboarding: providers, oncology_profiles, medications, chemo_schedule, fax_ingestion_log, ocr_field_confidence |
+
+#### Tables Created
+
+**Core Tables:**
+- `users`, `conversations`, `messages`, `diary_entries`, `patient_questions`
+
+**Onboarding/OCR Tables:**
+- `providers` - Normalized physician/clinic data
+- `oncology_profiles` - Cancer diagnosis, treatment, chemo timeline
+- `medications` - Chemotherapy and supportive drugs
+- `chemo_schedule` - Specific appointment dates for ChemoTimeline
+- `fax_ingestion_log` - HIPAA audit trail for fax reception
+- `ocr_field_confidence` - Per-field OCR accuracy scores
+- `ocr_confidence_thresholds` - Auto-accept/review threshold config
+
+**Verification:**
+```sql
+-- Verify all core tables
+\dt
+
+-- Verify new onboarding tables
+SELECT table_name FROM information_schema.tables 
+WHERE table_name IN (
+    'providers', 'oncology_profiles', 'medications', 
+    'chemo_schedule', 'fax_ingestion_log', 'ocr_field_confidence'
+);
+
+-- Check OCR thresholds seeded
+SELECT COUNT(*) FROM ocr_confidence_thresholds;
+-- Should return 26 rows
 ```
 
 ---

@@ -543,9 +543,31 @@ const MyComponent = () => {
 
 ## 6. Database Operations
 
-### Running Migrations (Alembic)
+### Running Migrations
 
-Alembic is configured for both APIs with initial migrations.
+We provide multiple ways to run database migrations depending on your environment.
+
+#### Using the Migration Script (Recommended)
+
+```bash
+# Run migrations on local Docker
+./scripts/aws/run-migrations.sh local
+
+# Apply SQL schema directly to local Docker
+./scripts/aws/run-migrations.sh sql
+
+# Check migration status
+./scripts/aws/run-migrations.sh status
+
+# For AWS RDS instructions
+./scripts/aws/run-migrations.sh all
+```
+
+#### Using Alembic Directly
+
+Alembic is configured for both APIs with migrations for:
+- `0001` - Initial schema (users, conversations, diary, etc.)
+- `0002` - Onboarding/OCR tables (providers, oncology_profiles, medications, etc.)
 
 ```bash
 cd apps/patient-platform/patient-api
@@ -581,6 +603,34 @@ export PATIENT_DB_NAME=oncolife_patient
 # OR use DATABASE_URL
 export DATABASE_URL=postgresql://user:pass@host:5432/database
 ```
+
+### Database Tables Overview
+
+#### Core Tables
+
+| Table | Description |
+|-------|-------------|
+| `users` | User accounts with Cognito link |
+| `patient_info` | Patient demographics + emergency contacts |
+| `conversations` | Symptom checker chat sessions |
+| `messages` | Chat messages |
+| `diary_entries` | Patient health journal |
+| `patient_questions` | Questions for doctor feature |
+
+#### Onboarding/OCR Tables (NEW)
+
+| Table | Description |
+|-------|-------------|
+| `patient_referrals` | Raw OCR data from fax referrals |
+| `providers` | Normalized physician/clinic data |
+| `oncology_profiles` | Cancer diagnosis, treatment plan, chemo timeline |
+| `medications` | Chemotherapy and supportive medications |
+| `chemo_schedule` | Specific chemo appointment dates |
+| `fax_ingestion_log` | HIPAA audit trail for fax reception |
+| `ocr_field_confidence` | Per-field OCR accuracy scores |
+| `ocr_confidence_thresholds` | Auto-accept/review thresholds |
+
+See `scripts/db/schema_patient_diary_doctor_dashboard.sql` for complete schema.
 
 ### Direct Table Creation (Development)
 
