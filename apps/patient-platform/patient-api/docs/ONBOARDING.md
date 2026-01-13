@@ -189,20 +189,344 @@ Headers:
   X-Twilio-Signature: <HMAC-SHA1 signature>
 ```
 
-### Phase 2: Referral Reception (Legacy - Direct S3)
-
 ### Phase 2: OCR Processing
 
 1. **AWS Textract** processes the document
-2. **Form fields** are extracted:
-   - Patient: Name, DOB, Email, Phone, MRN
-   - Physician: Name, Clinic, NPI
-   - Diagnosis: Cancer type, Staging
-   - Treatment: Chemo regimen, Dates, Cycles
-   - History: Medical, Surgical, Medications
-   - Vitals: Height, Weight, BMI, BP
+2. **Form fields** are extracted (see complete list below)
 3. **Validation** checks for required fields
-4. **Low confidence fields** flagged for review
+4. **Confidence scoring** applied to each field
+5. **Low confidence fields** flagged for manual review
+
+---
+
+## Complete OCR Field Extraction
+
+### Data Flow: Fax → Normalized Tables
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      OCR DATA NORMALIZATION FLOW                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────┐
+  │   Fax Document  │
+  │   (PDF/TIFF)    │
+  └────────┬────────┘
+           │
+           ▼
+  ┌─────────────────┐      ┌─────────────────────────────────────────────────┐
+  │  AWS Textract   │────▶ │            fax_ingestion_log                    │
+  │  (OCR Engine)   │      │  - Fax metadata, S3 location, processing status │
+  └────────┬────────┘      └─────────────────────────────────────────────────┘
+           │
+           ▼
+  ┌─────────────────┐      ┌─────────────────────────────────────────────────┐
+  │  Field Parser   │────▶ │           ocr_field_confidence                  │
+  │  + Confidence   │      │  - Per-field confidence scores & review status  │
+  └────────┬────────┘      └─────────────────────────────────────────────────┘
+           │
+           ▼
+  ┌─────────────────┐      ┌─────────────────────────────────────────────────┐
+  │  Normalization  │────▶ │           patient_referrals                     │
+  │  Service        │      │  - Raw intake data (complete OCR output)        │
+  └────────┬────────┘      └─────────────────────────────────────────────────┘
+           │
+           ├────────────────────────────────────────────────────────────────┐
+           │                                                                │
+           ▼                                                                ▼
+  ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────────────┐
+  │    providers    │      │   patient_info  │      │    oncology_profiles    │
+  │                 │      │                 │      │                         │
+  │ - Physician     │      │ - Name, DOB     │      │ - Cancer diagnosis      │
+  │ - Clinic        │      │ - Email, Phone  │      │ - Treatment plan        │
+  │ - NPI           │      │ - Emergency Ctc │      │ - Chemo schedule        │
+  │ - Address       │      └─────────────────┘      │ - Biomarkers            │
+  └─────────────────┘                               └───────────┬─────────────┘
+                                                                │
+                                                                ▼
+                                                    ┌─────────────────────────┐
+                                                    │      medications        │
+                                                    │                         │
+                                                    │ - Drug names & doses    │
+                                                    │ - Category (chemo, etc) │
+                                                    │ - Schedule              │
+                                                    └─────────────────────────┘
+                                                                │
+                                                                ▼
+                                                    ┌─────────────────────────┐
+                                                    │     chemo_schedule      │
+                                                    │                         │
+                                                    │ - Specific dates        │
+                                                    │ - Cycle/day info        │
+                                                    │ - Status (ChemoTimeline)│
+                                                    └─────────────────────────┘
+```
+
+### All Extracted OCR Fields
+
+#### Patient Demographics (Required)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| First Name | `patient_first_name` | ✅ | 95% | "Test" |
+| Last Name | `patient_last_name` | ✅ | 95% | "test" |
+| Date of Birth | `patient_dob` | ✅ | 98% | "12/16/1961" |
+| Sex | `patient_sex` | ✅ | 95% | "female" |
+| Email | `patient_email` | ✅ | 95% | "test@yahoo.com" |
+| Phone | `patient_phone` | ✅ | 95% | "503-330-1631" |
+| MRN | `patient_mrn` | ❌ Internal | 98% | "12345678" |
+
+#### Physician & Clinic (Normalized to `providers` table)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| Physician Name | `full_name` | ✅ | 90% | "Abhishek Harshad Patel, MD" |
+| NPI | `npi` | ❌ Internal | 98% | "1234567890" |
+| Specialty | `specialty` | ❌ Internal | 85% | "Hematology/Oncology" |
+| Clinic Name | `clinic_name` | ✅ | 90% | "Arizona Center for Cancer Care" |
+| Clinic Address | `clinic_address` | ❌ Internal | 85% | "19646 N. 27th Avenue, Suite 301" |
+| Clinic City | `clinic_city` | ❌ Internal | 85% | "Phoenix" |
+| Clinic State | `clinic_state` | ❌ Internal | 85% | "AZ" |
+| Clinic ZIP | `clinic_zip` | ❌ Internal | 90% | "85027" |
+| Phone | `phone` | ✅ | 90% | "623-238-7700" |
+| Fax | `fax` | ❌ Internal | 90% | "480-882-5007" |
+
+#### Cancer Diagnosis (Stored in `oncology_profiles`)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| Cancer Type | `cancer_type` | ✅ | 90% | "Lobular carcinoma of left breast" |
+| Cancer Stage | `cancer_stage` | ❌ Hidden | 92% | "IIB" |
+| Diagnosis Date | `cancer_diagnosis_date` | ✅ | 95% | "10/20/2025" |
+| Histology | `cancer_histology` | ❌ Hidden | 88% | "Invasive Lobular Carcinoma" |
+| Grade | `cancer_grade` | ❌ Hidden | 90% | "GX" |
+| ICD-10 Code | `cancer_icd10_code` | ❌ Internal | 95% | "C50.912" |
+| SNOMED Code | `cancer_snomed_code` | ❌ Internal | 90% | "METASTATIC MALIGNANT NEOPLASM..." |
+
+#### Biomarkers (Stored in `oncology_profiles`)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| ER Status | `er_status` | ❌ Hidden | 92% | "Positive (+)" or "98%" |
+| PR Status | `pr_status` | ❌ Hidden | 92% | "Positive (+)" or "5%" |
+| HER2 Status | `her2_status` | ❌ Hidden | 92% | "Negative (-)" |
+| Ki-67 | `ki67_percentage` | ❌ Hidden | 90% | "15" (percentage) |
+| Oncotype Score | `oncotype_score` | ❌ Hidden | 95% | "25" |
+
+#### AJCC Staging (Stored in `oncology_profiles`)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| T Category | `ajcc_t_category` | ❌ Hidden | 92% | "cTX" |
+| N Category | `ajcc_n_category` | ❌ Hidden | 92% | "cNX" |
+| M Category | `ajcc_m_category` | ❌ Hidden | 92% | "cM0" |
+| Stage Group | `ajcc_stage_group` | ❌ Hidden | 92% | "IIB" |
+
+#### Treatment Plan (Stored in `oncology_profiles`)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| Line of Treatment | `line_of_treatment` | ✅ | 88% | "Neoadjuvant" |
+| Treatment Goal | `treatment_goal` | ❌ Hidden | 85% | "[No plan goal]" |
+| Chemo Plan Name | `chemo_plan_name` | ✅ | 88% | "OP SOC ddAC every 2 weeks f/b PACLitaxel..." |
+| Chemo Regimen | `chemo_regimen_description` | ❌ Hidden | 85% | Full regimen text |
+| Start Date | `chemo_start_date` | ✅ | 95% | "12/16/2025" |
+| End Date | `chemo_end_date` | ✅ | 95% | "4/28/2026" |
+| Current Cycle | `current_cycle` | ✅ | 95% | "0" |
+| Total Cycles | `total_cycles` | ✅ | 95% | "8" |
+| Department | `treatment_department` | ❌ Hidden | 85% | "HonorHealth Cancer Care - Deer Valley Infusion" |
+| Status | `treatment_status` | ❌ Internal | 90% | "Active" |
+
+#### Appointments (Stored in `oncology_profiles`)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| Next Chemo Date | `next_chemo_date` | ✅ ChemoTimeline | 95% | "2026-01-27" |
+| Next Clinic Visit | `next_clinic_visit` | ✅ Profile | 90% | "2026-02-01" |
+| Last Chemo Date | `last_chemo_date` | ✅ ChemoTimeline | 95% | "2026-01-13" |
+
+#### Medications (Normalized to `medications` table)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| Drug Name | `medication_name` | ✅ Profile | 90% | "DOXOrubicin (ADRIAMYCIN SOLN)" |
+| Generic Name | `generic_name` | ❌ Hidden | 85% | "doxorubicin" |
+| Brand Name | `brand_name` | ❌ Hidden | 85% | "ADRIAMYCIN" |
+| Category | `category` | ❌ Hidden | 90% | "chemotherapy" |
+| Dose | `dose` | ✅ Profile | 92% | "112 mg" |
+| Dose per m² | `dose_per_m2` | ❌ Hidden | 90% | "60 mg/m2" |
+| Route | `route` | ❌ Hidden | 88% | "IV push" |
+| Frequency | `frequency` | ❌ Hidden | 88% | "q2 weeks" |
+| Cycle Day | `cycle_day` | ❌ Hidden | 88% | "Day 1" |
+
+**Example Medications Extracted:**
+
+| Drug | Category | Dose | Route | Schedule |
+|------|----------|------|-------|----------|
+| DOXOrubicin (ADRIAMYCIN) | chemotherapy | 112 mg (60 mg/m2) | IV push | q2 weeks x 4 cycles |
+| cyclophosphamide (CYTOXAN) | chemotherapy | 1,120 mg (600 mg/m2) | IV infusion | q2 weeks x 4 cycles |
+| PACLitaxel (TaxOL) | chemotherapy | 150 mg (80 mg/m2) | IVPB | Days 1,8,15 q3 weeks |
+| letrozole (FEMARA) | hormone_therapy | 2.5 mg | Oral | Daily |
+| ribociclib (KISQALI) | targeted_therapy | 600 mg | Oral | Days 1-21 of 28 |
+
+#### Chemo Schedule (Normalized to `chemo_schedule` table)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| Date | `scheduled_date` | ✅ ChemoTimeline | 95% | "2026-01-13" |
+| Time | `scheduled_time` | ❌ Hidden | 85% | "09:00" |
+| Cycle | `cycle_number` | ✅ ChemoTimeline | 95% | "3" |
+| Day of Cycle | `day_of_cycle` | ❌ Hidden | 90% | "1" |
+| Medications | `medications` (JSONB) | ✅ ChemoTimeline | 90% | ["DOXOrubicin", "cyclophosphamide"] |
+| Status | `status` | ✅ ChemoTimeline | 95% | "scheduled" |
+
+**Example Schedule from Fax:**
+
+| Date | Cycle | Medications |
+|------|-------|-------------|
+| 12/16/2025 | 1 | DOXOrubicin, cyclophosphamide |
+| 12/30/2025 | 2 | DOXOrubicin, cyclophosphamide |
+| 1/13/2026 | 3 | DOXOrubicin, cyclophosphamide |
+| 1/27/2026 | 4 | DOXOrubicin, cyclophosphamide |
+| 2/10/2026 | 5 | PACLitaxel (Days 1,8,15) |
+
+#### Vitals (Stored in `oncology_profiles`)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| Height | `height_cm` | ❌ Hidden | 95% | "172.7" (from 5'8") |
+| Weight | `weight_kg` | ❌ Hidden | 95% | "73.4" |
+| BMI | `bmi` | ❌ Hidden | 95% | "24.61" |
+| Blood Pressure | `blood_pressure` (referral) | ❌ Hidden | 90% | "115/58" |
+| Pulse | `pulse` (referral) | ❌ Hidden | 90% | "56" |
+| Temperature | `temperature_f` (referral) | ❌ Hidden | 90% | "98.0" |
+| SpO2 | `spo2` (referral) | ❌ Hidden | 90% | "98" |
+| ECOG Status | `ecog_status` | ❌ Hidden | 92% | "0" |
+
+#### Medical History (Stored in `patient_referrals` and `oncology_profiles`)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| History of Cancer | `history_of_cancer` | ❌ Hidden | 85% | "Lobular carcinoma in situ dx 11/18/21..." |
+| Past Medical | `past_medical_history` | ❌ Hidden | 85% | "Abnormal Pap smear, COVID 7/2022..." |
+| Past Surgical | `past_surgical_history` | ❌ Hidden | 85% | "Bilateral mastectomy 8/9/22..." |
+| Family History | `family_history` (JSONB) | ❌ Hidden | 80% | {"aunt": "breast cancer", ...} |
+| Genetic Testing | `genetic_testing` | ❌ Hidden | 88% | "Ambry negative" |
+| Allergies | `allergies` | ❌ Hidden | 90% | "No Known Allergies" |
+
+#### Social/Behavioral (Stored in `patient_referrals`)
+
+| Field | Table Column | Displayed? | Threshold | Example |
+|-------|--------------|------------|-----------|---------|
+| Tobacco Use | `tobacco_use` | ❌ Hidden | 90% | "Never" |
+| Alcohol Use | `alcohol_use` | ❌ Hidden | 85% | "2-3 times a week" |
+| Drug Use | `drug_use` | ❌ Hidden | 85% | "Never" |
+| Social Drivers | `social_drivers` (JSONB) | ❌ Hidden | 80% | Full SDOH data |
+
+---
+
+## OCR Confidence Thresholds
+
+### Threshold Categories
+
+| Category | Auto-Accept | Manual Review | Reject | Description |
+|----------|-------------|---------------|--------|-------------|
+| **Critical Patient ID** | ≥ 98% | 85-97% | < 85% | Name, DOB - must be accurate |
+| **Contact Info** | ≥ 95% | 80-94% | < 80% | Email, Phone - important for login |
+| **Physician Info** | ≥ 90% | 75-89% | < 75% | Provider lookup and linking |
+| **Diagnosis** | ≥ 90% | 75-89% | < 75% | Cancer type, staging |
+| **Treatment Plan** | ≥ 88% | 70-87% | < 70% | Dates, cycles |
+| **Medications** | ≥ 90% | 75-89% | < 75% | Drug names, doses |
+| **Vitals** | ≥ 95% | 85-94% | < 85% | Numeric values |
+| **History** | ≥ 85% | 70-84% | < 70% | Free text fields |
+
+### Manual Review Workflow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        MANUAL REVIEW WORKFLOW                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  Field Extracted with Low Confidence
+           │
+           ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Confidence < auto_accept_threshold?                                     │
+  │                                                                          │
+  │  YES ──────────────────────────────────────────────────────────────────┐ │
+  │                                                                         │ │
+  │  ┌───────────────────────────────────────────────────────────────────┐ │ │
+  │  │  Confidence >= manual_review_threshold?                           │ │ │
+  │  │                                                                   │ │ │
+  │  │  YES ─────────────────────────────────────────────────────────┐  │ │ │
+  │  │                                                                │  │ │ │
+  │  │  ┌──────────────────────────────────────────────────────────┐ │  │ │ │
+  │  │  │  Status: "requires_review"                               │ │  │ │ │
+  │  │  │  - Add to review queue                                   │ │  │ │ │
+  │  │  │  - Notify admin (optional)                               │ │  │ │ │
+  │  │  │  - Highlight in UI (yellow)                              │ │  │ │ │
+  │  │  └──────────────────────────────────────────────────────────┘ │  │ │ │
+  │  │                                                                │  │ │ │
+  │  │  NO ────────────────────────────────────────────────────────┐ │  │ │ │
+  │  │                                                              │ │  │ │ │
+  │  │  ┌──────────────────────────────────────────────────────────┐│ │  │ │ │
+  │  │  │  Status: "rejected"                                      ││ │  │ │ │
+  │  │  │  - Mark field as unusable                                ││ │  │ │ │
+  │  │  │  - Require manual entry                                  ││ │  │ │ │
+  │  │  │  - Highlight in UI (red)                                 ││ │  │ │ │
+  │  │  └──────────────────────────────────────────────────────────┘│ │  │ │ │
+  │  └───────────────────────────────────────────────────────────────┘ │ │ │
+  │                                                                     │ │ │
+  │  NO (auto-accept) ─────────────────────────────────────────────────┘ │ │
+  │                                                                       │ │
+  │  ┌─────────────────────────────────────────────────────────────────┐ │ │
+  │  │  Status: "accepted"                                              │ │ │
+  │  │  - Use extracted value directly                                  │ │ │
+  │  │  - No human review needed                                        │ │ │
+  │  │  - Proceed with normalization                                    │ │ │
+  │  └─────────────────────────────────────────────────────────────────┘ │ │
+  └──────────────────────────────────────────────────────────────────────┘ │
+                                                                            │
+                                                                            ▼
+                                                         ┌─────────────────────┐
+                                                         │  Normalize & Store  │
+                                                         │  in target tables   │
+                                                         └─────────────────────┘
+```
+
+---
+
+## Database Tables (Complete Schema)
+
+### New Tables for OCR/Onboarding
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `fax_ingestion_log` | HIPAA audit trail | fax_id, received_at, ocr_status, s3_key |
+| `ocr_field_confidence` | Per-field scores | field_name, confidence_score, status |
+| `ocr_confidence_thresholds` | Validation config | field_category, auto_accept_threshold |
+| `providers` | Physician/clinic data | full_name, npi, clinic_name |
+| `oncology_profiles` | Cancer/treatment | cancer_type, chemo_plan_name, biomarkers |
+| `medications` | Normalized drug list | medication_name, category, dose |
+| `chemo_schedule` | Appointment dates | scheduled_date, cycle_number, status |
+
+### Migration
+
+Run the new migration:
+
+```bash
+cd apps/patient-platform/patient-api
+alembic upgrade head
+```
+
+Or run the SQL script directly:
+
+```bash
+psql -h $DB_HOST -U $DB_USER -d oncolife_patient \
+  -f scripts/db/schema_patient_diary_doctor_dashboard.sql
+```
+
+---
 
 ### Phase 3: Patient Account Creation
 

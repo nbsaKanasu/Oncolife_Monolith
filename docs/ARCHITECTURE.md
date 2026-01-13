@@ -1085,25 +1085,135 @@ async def get_resource(uuid: UUID):
 
 ## Database Design
 
-### Patient Database Tables
+### Patient Database Tables - Core
 
 | Table | Description |
 |-------|-------------|
-| `patient_info` | Patient profiles (name, email, DOB, etc.) |
-| `patient_configurations` | Patient settings (reminders, consent) |
+| `patient_info` | Patient profiles (name, email, DOB, emergency contacts) |
+| `patient_configurations` | Patient settings (reminders, consent, timezone) |
 | `patient_physician_associations` | Patient-doctor relationships |
-| `patient_diary_entries` | Health journal entries |
-| `patient_chemo_dates` | Chemotherapy date tracking |
-| `conversations` | Chat sessions |
-| `messages` | Chat messages |
+| `patient_diary_entries` | Health journal entries with mood/symptoms |
+| `patient_chemo_dates` | Legacy chemotherapy date tracking |
+| `conversations` | Chat sessions with triage level |
+| `messages` | Chat messages with metadata |
+| `patient_questions` | "Questions for Doctor" feature |
+| `education_content` | Symptom-linked educational materials |
 
-### Doctor Database Tables
+### Patient Database Tables - Onboarding & OCR
 
 | Table | Description |
 |-------|-------------|
-| `staff_profiles` | Doctor/nurse profiles |
-| `all_clinics` | Healthcare facilities |
+| `patient_referrals` | Complete OCR output from fax referrals |
+| `referral_documents` | S3 references to original fax PDFs |
+| `patient_onboarding_status` | Progress through onboarding wizard |
+| `onboarding_notification_log` | Email/SMS audit trail |
+
+### Patient Database Tables - Normalized OCR Data (NEW)
+
+| Table | Description |
+|-------|-------------|
+| `providers` | Normalized physician/clinic data (NPI, address, contact) |
+| `oncology_profiles` | Cancer diagnosis, biomarkers, treatment plan, chemo timeline |
+| `medications` | Normalized medication list (chemotherapy, supportive, etc.) |
+| `chemo_schedule` | Specific chemotherapy appointment dates for ChemoTimeline |
+| `fax_ingestion_log` | HIPAA audit trail for all fax receptions |
+| `ocr_field_confidence` | Per-field OCR accuracy scores for quality assurance |
+| `ocr_confidence_thresholds` | Configuration for auto-accept/manual-review thresholds |
+
+### Doctor Database Tables - Core
+
+| Table | Description |
+|-------|-------------|
+| `staff_profiles` | Doctor/nurse profiles (role, specialty) |
+| `all_clinics` | Healthcare facilities (address, contact) |
 | `staff_associations` | Staff-clinic relationships |
+
+### Doctor Database Tables - Analytics & Reporting
+
+| Table | Description |
+|-------|-------------|
+| `symptom_time_series` | Time-series symptom data for clinical analytics |
+| `treatment_events` | Chemo cycle events for timeline overlays |
+| `physician_reports` | Weekly report metadata and S3 paths |
+| `audit_logs` | HIPAA-compliant access logging |
+
+### Database Entity Relationship Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PATIENT DATABASE ENTITY RELATIONSHIPS                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    ┌────────────────────────┐
+                    │    fax_ingestion_log   │
+                    │  (HIPAA Audit Trail)   │
+                    └───────────┬────────────┘
+                                │ 1:N
+                                ▼
+        ┌───────────────────────────────────────────────────────────┐
+        │                  ocr_field_confidence                      │
+        │        (Per-field scores for all extracted fields)         │
+        └───────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         patient_referrals (Raw OCR Data)                     │
+└────────────────────────────────────┬────────────────────────────────────────┘
+                                     │
+            ┌────────────────────────┼────────────────────────┐
+            │                        │                        │
+            ▼                        ▼                        ▼
+   ┌────────────────┐      ┌────────────────┐       ┌────────────────┐
+   │   providers    │      │  patient_info  │       │referral_docs   │
+   │                │      │                │       │  (S3 Links)    │
+   │ - full_name    │      │ - name, email  │       └────────────────┘
+   │ - npi          │      │ - dob, phone   │
+   │ - clinic_name  │      │ - emergency_   │
+   │ - address      │      │   contact_*    │
+   └───────┬────────┘      └───────┬────────┘
+           │ 1:N                   │ 1:1
+           ▼                       ▼
+   ┌────────────────────────────────────────────────────────────────┐
+   │                      oncology_profiles                          │
+   │                                                                 │
+   │  - cancer_type, stage, grade, histology                         │
+   │  - er_status, pr_status, her2_status, oncotype_score            │
+   │  - chemo_plan_name, chemo_start_date, chemo_end_date            │
+   │  - current_cycle, total_cycles                                  │
+   │  - next_chemo_date, next_clinic_visit, last_chemo_date          │
+   │  - bmi, height_cm, weight_kg, ecog_status                       │
+   │  - history_of_cancer, past_medical_history, past_surgical_history│
+   └───────────────────────────────┬────────────────────────────────┘
+                                   │ 1:N
+                                   ▼
+                    ┌──────────────────────────────────┐
+                    │           medications             │
+                    │                                  │
+                    │  - medication_name               │
+                    │  - category (chemotherapy, etc.) │
+                    │  - dose, route, frequency        │
+                    │  - cycle_day, cycles_planned     │
+                    └────────────────┬─────────────────┘
+                                     │
+                                     ▼
+                    ┌──────────────────────────────────┐
+                    │        chemo_schedule            │
+                    │       (ChemoTimeline UI)         │
+                    │                                  │
+                    │  - scheduled_date                │
+                    │  - cycle_number, day_of_cycle    │
+                    │  - medications (JSONB array)     │
+                    │  - status (scheduled/completed)  │
+                    └──────────────────────────────────┘
+
+   ┌───────────────────────────────────────────────────────────────┐
+   │  DOCTOR DB: Queries patient_db for cross-database analytics  │
+   │  - symptom_time_series: Patient symptom trends over time     │
+   │  - treatment_events: Chemo cycle markers for timeline        │
+   │  - physician_reports: Weekly summary PDFs (S3)               │
+   │  - audit_logs: All PHI access logged for HIPAA               │
+   └───────────────────────────────────────────────────────────────┘
+```
 
 ---
 
