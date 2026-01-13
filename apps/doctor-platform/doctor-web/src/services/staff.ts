@@ -1,4 +1,18 @@
+/**
+ * Staff Service - Doctor Portal
+ * ==============================
+ * 
+ * Handles all staff-related API calls.
+ * Connects to doctor-api backend endpoints.
+ */
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../utils/apiClient';
+import { API_CONFIG } from '../config/api';
+
+// =============================================================================
+// Types
+// =============================================================================
 
 export interface Staff {
   id: string;
@@ -35,129 +49,149 @@ export interface UpdateStaffRequest {
   npiNumber?: string;
 }
 
-// Mock data
-const mockStaffData: Staff[] = [
-  {
-    id: '1',
-    firstName: 'Jane',
-    lastName: 'Cooper',
-    email: 'jane.cooper@example.com',
-    role: 'physician',
-    clinicName: 'City Medical Center',
-    npiNumber: '1234567890'
-  },
-  {
-    id: '2',
-    firstName: 'Esther',
-    lastName: 'Howard',
-    email: 'esther.howard@example.com',
-    role: 'staff',
-    clinicName: 'City Medical Center'
-  },
-  {
-    id: '3',
-    firstName: 'Robert',
-    lastName: 'Fox',
-    email: 'robert.fox@example.com',
-    role: 'admin',
-    clinicName: 'City Medical Center'
-  },
-  {
-    id: '4',
-    firstName: 'Dianne',
-    lastName: 'Russell',
-    email: 'dianne.russell@example.com',
-    role: 'physician',
-    clinicName: 'Downtown Clinic',
-    npiNumber: '0987654321'
-  },
-  {
-    id: '5',
-    firstName: 'Albert',
-    lastName: 'Flores',
-    email: 'albert.flores@example.com',
-    role: 'staff',
-    clinicName: 'Downtown Clinic'
-  },
-  {
-    id: '6',
-    firstName: 'Ralph',
-    lastName: 'Edwards',
-    email: 'ralph.edwards@example.com',
-    role: 'physician',
-    clinicName: 'City Medical Center',
-    npiNumber: '1122334455'
-  },
-  {
-    id: '7',
-    firstName: 'Cody',
-    lastName: 'Fisher',
-    email: 'cody.fisher@example.com',
-    role: 'staff',
-    clinicName: 'Downtown Clinic'
-  },
-  {
-    id: '8',
-    firstName: 'Annette',
-    lastName: 'Black',
-    email: 'annette.black@example.com',
-    role: 'admin',
-    clinicName: 'City Medical Center'
-  },
-  {
-    id: '9',
-    firstName: 'Marvin',
-    lastName: 'McKinney',
-    email: 'marvin.mckinney@example.com',
-    role: 'physician',
-    clinicName: 'Downtown Clinic',
-    npiNumber: '5566778899'
-  },
-  {
-    id: '10',
-    firstName: 'Leslie',
-    lastName: 'Alexander',
-    email: 'leslie.alexander@example.com',
-    role: 'staff',
-    clinicName: 'City Medical Center'
+// Backend response types (from doctor-api)
+interface BackendStaffResponse {
+  staff_uuid: string;
+  email_address: string;
+  first_name?: string;
+  last_name?: string;
+  full_name: string;
+  role: string;
+  npi_number?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface BackendStaffListResponse {
+  staff: BackendStaffResponse[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+// =============================================================================
+// Transform Functions (Backend → Frontend)
+// =============================================================================
+
+const transformStaff = (backend: BackendStaffResponse): Staff => ({
+  id: backend.staff_uuid,
+  firstName: backend.first_name || '',
+  lastName: backend.last_name || '',
+  email: backend.email_address,
+  role: backend.role,
+  clinicName: '', // TODO: Add clinic name from backend if available
+  npiNumber: backend.npi_number,
+});
+
+// =============================================================================
+// API Functions
+// =============================================================================
+
+const getStaff = async (
+  page: number, 
+  search?: string, 
+  pageSize: number = 10
+): Promise<StaffListResponse> => {
+  try {
+    const skip = (page - 1) * pageSize;
+    const params = new URLSearchParams({
+      skip: skip.toString(),
+      limit: pageSize.toString(),
+    });
+    
+    let endpoint = `${API_CONFIG.ENDPOINTS.STAFF.LIST}?${params.toString()}`;
+    
+    // Use search endpoint if search term provided
+    if (search && search.length >= 2) {
+      endpoint = `${API_CONFIG.ENDPOINTS.STAFF.LIST}/search?q=${encodeURIComponent(search)}&limit=${pageSize}`;
+      
+      const response = await apiClient.get<BackendStaffResponse[]>(endpoint);
+      const staffList = response.data.map(transformStaff);
+      
+      return {
+        data: staffList,
+        total: staffList.length,
+        page,
+        page_size: pageSize,
+      };
+    }
+    
+    const response = await apiClient.get<BackendStaffListResponse>(endpoint);
+    const staffList = response.data.staff.map(transformStaff);
+    
+    return {
+      data: staffList,
+      total: response.data.total,
+      page,
+      page_size: pageSize,
+    };
+  } catch (error) {
+    console.error('Error fetching staff:', error);
+    return {
+      data: [],
+      total: 0,
+      page: 1,
+      page_size: pageSize,
+    };
   }
-];
-
-// Mock storage
-let staffData = [...mockStaffData];
-let nextId = 11;
-
-// Simulate API delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Get staff list with mock data
-const getStaff = async (page: number, search?: string, pageSize: number = 10): Promise<StaffListResponse> => {
-  await delay(500); // Simulate network delay
-  
-  let filteredData = [...staffData];
-  
-  // Apply search filter
-  if (search) {
-    const searchLower = search.toLowerCase();
-    filteredData = filteredData.filter(staff => 
-      staff.firstName.toLowerCase().includes(searchLower) ||
-      staff.lastName.toLowerCase().includes(searchLower) ||
-      staff.email.toLowerCase().includes(searchLower)
-    );
-  }
-  
-  const total = filteredData.length;
-  const startIndex = (page - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
-  
-  return {
-    data: paginatedData,
-    total,
-    page,
-    page_size: pageSize
-  };
 };
+
+const addStaffMember = async (
+  data: AddStaffRequest
+): Promise<{ message: string; staff_uuid: string }> => {
+  // Determine if this is a physician or staff member
+  if (data.role === 'physician') {
+    const response = await apiClient.post<{ message: string; staff_uuid: string }>(
+      `${API_CONFIG.ENDPOINTS.STAFF.LIST}/physician`,
+      {
+        email_address: data.email,
+        first_name: data.firstName,
+        last_name: data.lastName,
+        npi_number: data.npiNumber || '0000000000', // NPI is required for physicians
+        clinic_uuid: '00000000-0000-0000-0000-000000000000', // TODO: Get from context
+      }
+    );
+    return response.data;
+  } else {
+    const response = await apiClient.post<{ message: string; staff_uuid: string }>(
+      `${API_CONFIG.ENDPOINTS.STAFF.LIST}/member`,
+      {
+        email_address: data.email,
+        first_name: data.firstName,
+        last_name: data.lastName,
+        role: data.role,
+        physician_uuids: [], // TODO: Get from context
+        clinic_uuid: '00000000-0000-0000-0000-000000000000', // TODO: Get from context
+      }
+    );
+    return response.data;
+  }
+};
+
+const updateStaffMember = async ({ 
+  id, 
+  data 
+}: { 
+  id: string; 
+  data: UpdateStaffRequest 
+}): Promise<{ message: string }> => {
+  // TODO: Implement when backend supports staff updates
+  // const response = await apiClient.put(
+  //   API_CONFIG.ENDPOINTS.STAFF.BY_UUID(id),
+  //   {
+  //     first_name: data.firstName,
+  //     last_name: data.lastName,
+  //     email_address: data.email,
+  //     role: data.role,
+  //   }
+  // );
+  // return response.data;
+  throw new Error('Staff update not yet implemented in backend');
+};
+
+// =============================================================================
+// React Query Hooks
+// =============================================================================
 
 export const useStaff = (page: number, search?: string, pageSize: number = 10) => {
   return useQuery({
@@ -166,68 +200,24 @@ export const useStaff = (page: number, search?: string, pageSize: number = 10) =
   });
 };
 
-// Add staff with mock data
-const addStaff = async (data: AddStaffRequest): Promise<{ message: string; staff_uuid: string }> => {
-  await delay(800); // Simulate network delay
-  
-  const newStaff: Staff = {
-    id: nextId.toString(),
-    firstName: data.firstName,
-    lastName: data.lastName,
-    email: data.email,
-    role: data.role,
-    clinicName: data.clinicName,
-    npiNumber: data.npiNumber
-  };
-  
-  staffData.push(newStaff);
-  nextId++;
-  
-  return {
-    message: `${data.role} added successfully`,
-    staff_uuid: newStaff.id
-  };
-};
-
 export const useAddStaff = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: addStaff,
+    mutationFn: addStaffMember,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff'] });
     },
   });
-};
-
-// Update staff with mock data
-const updateStaff = async ({ id, data }: { id: string; data: UpdateStaffRequest }): Promise<{ message: string }> => {
-  await delay(600); // Simulate network delay
-  
-  const staffIndex = staffData.findIndex(staff => staff.id === id);
-  
-  if (staffIndex === -1) {
-    throw new Error('Staff member not found');
-  }
-  
-  // Update the staff member
-  staffData[staffIndex] = {
-    ...staffData[staffIndex],
-    ...data
-  };
-  
-  return {
-    message: 'Staff member updated successfully'
-  };
 };
 
 export const useUpdateStaff = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: updateStaff,
+    mutationFn: updateStaffMember,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff'] });
     },
   });
-}; 
+};

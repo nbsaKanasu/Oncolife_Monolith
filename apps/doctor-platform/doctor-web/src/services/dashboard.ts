@@ -1,6 +1,18 @@
+/**
+ * Dashboard Service - Doctor Portal
+ * ==================================
+ * 
+ * Handles all dashboard and analytics API calls.
+ * Connects to doctor-api backend endpoints.
+ */
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../utils/apiClient';
 import { API_CONFIG } from '../config/api';
+
+// =============================================================================
+// Types
+// =============================================================================
 
 export interface PatientSummary {
   id: string;
@@ -14,17 +26,15 @@ export interface PatientSummary {
   priority: 'high' | 'medium' | 'low';
 }
 
-// ===== New Types for Dashboard API =====
-
 export interface PatientRanking {
   patient_uuid: string;
-  first_name: string;
-  last_name: string;
-  email_address: string;
-  last_checkin: string;
-  max_severity: string;
+  first_name: string | null;
+  last_name: string | null;
+  email_address: string | null;
+  last_checkin: string | null;
+  max_severity: string | null;
   has_escalation: boolean;
-  severity_badge: 'mild' | 'moderate' | 'severe' | 'urgent';
+  severity_badge: string;
 }
 
 export interface DashboardLanding {
@@ -34,14 +44,14 @@ export interface DashboardLanding {
 }
 
 export interface SymptomDataPoint {
-  date: string;
+  date: string | null;
   severity: string;
   severity_numeric: number;
 }
 
 export interface TreatmentEvent {
   event_type: string;
-  event_date: string;
+  event_date: string | null;
   metadata: Record<string, unknown>;
 }
 
@@ -55,40 +65,38 @@ export interface PatientTimeline {
 export interface SharedQuestion {
   id: string;
   question_text: string;
-  category: string;
+  category: string | null;
   is_answered: boolean;
-  created_at: string;
+  created_at: string | null;
 }
 
 export interface WeeklyReportSummary {
-  report_id: string;
+  report_id: string | null;
   physician_id: string;
   report_week_start: string;
   report_week_end: string;
   generated_at: string;
-  total_patients: number;
-  escalation_count: number;
-  s3_path?: string;
+  patient_count: number;
+  total_alerts: number;
+  total_questions: number;
+}
+
+export interface PatientReportSection {
+  patient: Record<string, unknown>;
+  symptoms: Record<string, unknown>;
+  alerts: Array<Record<string, unknown>>;
+  questions: Array<Record<string, unknown>>;
 }
 
 export interface WeeklyReportData {
+  physician_id: string;
   report_week_start: string;
   report_week_end: string;
-  physician_id: string;
-  patients: Array<{
-    patient_uuid: string;
-    first_name: string;
-    last_name: string;
-    max_severity: string;
-    escalation_count: number;
-    symptom_data: SymptomDataPoint[];
-    shared_questions: SharedQuestion[];
-  }>;
-  summary_stats: {
-    total_patients: number;
-    total_escalations: number;
-    severity_breakdown: Record<string, number>;
-  };
+  generated_at: string;
+  patient_count: number;
+  total_alerts: number;
+  total_questions: number;
+  patients: PatientReportSection[];
 }
 
 export interface DashboardResponse {
@@ -98,139 +106,197 @@ export interface DashboardResponse {
   totalPages: number;
 }
 
-// Mock data for development
-const mockPatientSummaries: PatientSummary[] = [
-  {
-    id: '1',
-    patientName: 'John Doe',
-    dateOfBirth: 'January 1, 2001',
-    mrn: 'A123456',
-    symptoms: 'Fatigue, weight loss, localized pain',
-    summary: 'The patient is a diagnosed case of breast cancer, currently under chemotherapy treatment. Presenting symptoms included fatigue, weight loss, and localized pain in the right breast area.',
-    lastUpdated: 'April 19, 2025',
-    status: 'active',
-    priority: 'high'
-  },
-  {
-    id: '2',
-    patientName: 'Jane Smith',
-    dateOfBirth: 'March 15, 1985',
-    mrn: 'B789012',
-    symptoms: 'Chest pain, shortness of breath',
-    summary: 'Patient diagnosed with lung cancer, currently receiving radiotherapy. Experiencing chest pain and shortness of breath.',
-    lastUpdated: 'April 18, 2025',
-    status: 'active',
-    priority: 'medium'
-  },
-  {
-    id: '3',
-    patientName: 'Robert Johnson',
-    dateOfBirth: 'July 22, 1978',
-    mrn: 'C345678',
-    symptoms: 'Abdominal discomfort, changes in bowel habits',
-    summary: 'Colon cancer diagnosis, post-surgical follow-up. Monitoring for any recurrence signs.',
-    lastUpdated: 'April 17, 2025',
-    status: 'active',
-    priority: 'low'
-  },
-  {
-    id: '4',
-    patientName: 'Sarah Wilson',
-    dateOfBirth: 'November 8, 1992',
-    mrn: 'D901234',
-    symptoms: 'Headaches, vision changes',
-    summary: 'Brain tumor case, currently under observation. Regular monitoring of neurological symptoms.',
-    lastUpdated: 'April 16, 2025',
-    status: 'pending',
-    priority: 'high'
-  },
-  {
-    id: '5',
-    patientName: 'Michael Brown',
-    dateOfBirth: 'September 12, 1965',
-    mrn: 'E567890',
-    symptoms: 'Bone pain, fractures',
-    summary: 'Multiple myeloma diagnosis, receiving targeted therapy. Managing bone pain and monitoring for fractures.',
-    lastUpdated: 'April 15, 2025',
-    status: 'active',
-    priority: 'medium'
-  },
-  {
-    id: '6',
-    patientName: 'Emily Davis',
-    dateOfBirth: 'February 28, 1989',
-    mrn: 'F123789',
-    symptoms: 'Skin lesions, itching',
-    summary: 'Melanoma case, post-excision monitoring. Regular skin checks and follow-up appointments.',
-    lastUpdated: 'April 14, 2025',
-    status: 'active',
-    priority: 'low'
-  },
-  {
-    id: '7',
-    patientName: 'David Miller',
-    dateOfBirth: 'May 10, 1972',
-    mrn: 'G456123',
-    symptoms: 'Back pain, weakness in legs',
-    summary: 'Spinal cord tumor, post-operative care. Physical therapy ongoing for mobility improvement.',
-    lastUpdated: 'April 13, 2025',
-    status: 'active',
-    priority: 'medium'
-  },
-  {
-    id: '8',
-    patientName: 'Lisa Anderson',
-    dateOfBirth: 'December 3, 1983',
-    mrn: 'H789456',
-    symptoms: 'Irregular periods, pelvic pain',
-    summary: 'Ovarian cancer diagnosis, chemotherapy treatment. Monitoring for treatment response and side effects.',
-    lastUpdated: 'April 12, 2025',
-    status: 'active',
-    priority: 'high'
-  }
-];
+// =============================================================================
+// Transform Functions
+// =============================================================================
 
+const mapSeverityToPriority = (severity: string | null): 'high' | 'medium' | 'low' => {
+  if (!severity) return 'low';
+  switch (severity.toLowerCase()) {
+    case 'urgent':
+    case 'severe':
+      return 'high';
+    case 'moderate':
+      return 'medium';
+    default:
+      return 'low';
+  }
+};
+
+const transformPatientRankingToSummary = (ranking: PatientRanking): PatientSummary => ({
+  id: ranking.patient_uuid,
+  patientName: `${ranking.first_name || ''} ${ranking.last_name || ''}`.trim() || 'Unknown',
+  dateOfBirth: '',
+  mrn: '',
+  symptoms: '',
+  summary: '',
+  lastUpdated: ranking.last_checkin || '',
+  status: 'active',
+  priority: mapSeverityToPriority(ranking.max_severity),
+});
+
+// =============================================================================
+// API Functions
+// =============================================================================
+
+// Fetch dashboard landing (ranked patient list)
+const fetchDashboardLanding = async (days: number = 7): Promise<DashboardLanding> => {
+  try {
+    const response = await apiClient.get<DashboardLanding>(
+      `${API_CONFIG.ENDPOINTS.DASHBOARD.LANDING}?days=${days}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching dashboard landing:', error);
+    return {
+      patients: [],
+      total_patients: 0,
+      period_days: days,
+    };
+  }
+};
+
+// Fetch patient summaries (transformed from dashboard landing)
 const fetchPatientSummaries = async (
   page: number = 1, 
   search: string = '', 
   filter: string = 'all'
 ): Promise<DashboardResponse> => {
-  // For now, return mock data
-  // In production, this would be:
-  // const response = await apiClient.get<DashboardResponse>(
-  //   `${API_CONFIG.ENDPOINTS.DASHBOARD}/patients?page=${page}&search=${search}&filter=${filter}`
-  // );
-  // return response.data;
-  
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-  
-  let filteredData = mockPatientSummaries;
-  
-  // Apply search filter
-  if (search) {
-    filteredData = filteredData.filter(patient => 
-      patient.patientName.toLowerCase().includes(search.toLowerCase()) ||
-      patient.mrn.toLowerCase().includes(search.toLowerCase())
+  try {
+    const dashboardData = await fetchDashboardLanding(30);
+    
+    let patients = dashboardData.patients.map(transformPatientRankingToSummary);
+    
+    // Apply search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      patients = patients.filter(patient => 
+        patient.patientName.toLowerCase().includes(searchLower) ||
+        patient.mrn.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    // Apply status filter
+    if (filter && filter !== 'all') {
+      patients = patients.filter(patient => patient.status === filter);
+    }
+    
+    const itemsPerPage = 10;
+    const startIndex = (page - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedData = patients.slice(startIndex, endIndex);
+    
+    return {
+      data: paginatedData,
+      total: patients.length,
+      page,
+      totalPages: Math.ceil(patients.length / itemsPerPage),
+    };
+  } catch (error) {
+    console.error('Error fetching patient summaries:', error);
+    return {
+      data: [],
+      total: 0,
+      page: 1,
+      totalPages: 0,
+    };
+  }
+};
+
+// Fetch patient timeline data
+const fetchPatientTimeline = async (
+  patientUuid: string,
+  days: number = 30
+): Promise<PatientTimeline> => {
+  try {
+    const response = await apiClient.get<PatientTimeline>(
+      `${API_CONFIG.ENDPOINTS.DASHBOARD.PATIENT_TIMELINE(patientUuid)}?days=${days}`
     );
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching patient timeline:', error);
+    return {
+      patient_uuid: patientUuid,
+      period_days: days,
+      symptom_series: {},
+      treatment_events: [],
+    };
   }
-  
-  // Apply status filter
-  if (filter && filter !== 'all') {
-    filteredData = filteredData.filter(patient => patient.status === filter);
+};
+
+// Fetch patient's shared questions
+const fetchPatientQuestions = async (patientUuid: string): Promise<SharedQuestion[]> => {
+  try {
+    const response = await apiClient.get<SharedQuestion[]>(
+      API_CONFIG.ENDPOINTS.DASHBOARD.PATIENT_QUESTIONS(patientUuid)
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching patient questions:', error);
+    return [];
   }
-  
-  const itemsPerPage = 4;
-  const startIndex = (page - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
-  
-  return {
-    data: paginatedData,
-    total: filteredData.length,
-    page,
-    totalPages: Math.ceil(filteredData.length / itemsPerPage)
-  };
+};
+
+// Fetch weekly reports list
+const fetchReportsList = async (): Promise<WeeklyReportSummary[]> => {
+  try {
+    const response = await apiClient.get<WeeklyReportSummary[]>(
+      API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_LIST
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching reports list:', error);
+    return [];
+  }
+};
+
+// Fetch weekly report data
+const fetchWeeklyReportData = async (weekStart?: string): Promise<WeeklyReportData> => {
+  try {
+    const url = weekStart 
+      ? `${API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_WEEKLY}?week_start=${weekStart}`
+      : API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_WEEKLY;
+    const response = await apiClient.get<WeeklyReportData>(url);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching weekly report:', error);
+    const now = new Date();
+    const weekStartDate = new Date(now);
+    weekStartDate.setDate(now.getDate() - now.getDay());
+    const weekEndDate = new Date(weekStartDate);
+    weekEndDate.setDate(weekStartDate.getDate() + 6);
+    
+    return {
+      physician_id: '',
+      report_week_start: weekStartDate.toISOString().split('T')[0],
+      report_week_end: weekEndDate.toISOString().split('T')[0],
+      generated_at: new Date().toISOString(),
+      patient_count: 0,
+      total_alerts: 0,
+      total_questions: 0,
+      patients: [],
+    };
+  }
+};
+
+// Generate weekly report
+const generateWeeklyReport = async (weekStart?: string): Promise<{ report_id: string }> => {
+  const response = await apiClient.post<{ report_id: string }>(
+    API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_GENERATE,
+    { week_start: weekStart }
+  );
+  return response.data;
+};
+
+// =============================================================================
+// React Query Hooks
+// =============================================================================
+
+export const useDashboardLanding = (days: number = 7) => {
+  return useQuery({
+    queryKey: ['dashboardLanding', days],
+    queryFn: () => fetchDashboardLanding(days),
+  });
 };
 
 export const usePatientSummaries = (
@@ -244,121 +310,12 @@ export const usePatientSummaries = (
   });
 };
 
-// Fetch individual patient details
-const fetchPatientDetails = async (patientId: string): Promise<PatientSummary> => {
-  // For now, return mock data
-  // In production, this would be:
-  // const response = await apiClient.get<PatientSummary>(
-  //   `${API_CONFIG.ENDPOINTS.DASHBOARD}/patients/${patientId}`
-  // );
-  // return response.data;
-  
-  await new Promise(resolve => setTimeout(resolve, 200));
-  
-  const patient = mockPatientSummaries.find(p => p.id === patientId);
-  if (!patient) {
-    throw new Error('Patient not found');
-  }
-  
-  return patient;
-};
-
-export const usePatientDetails = (patientId: string) => {
-  return useQuery({
-    queryKey: ['patientDetails', patientId],
-    queryFn: () => fetchPatientDetails(patientId),
-    enabled: !!patientId,
-  });
-};
-
-// ===== Real API Functions for Dashboard =====
-
-// Fetch dashboard landing (ranked patient list)
-const fetchDashboardLanding = async (days: number = 7): Promise<DashboardLanding> => {
-  try {
-    const response = await apiClient.get(
-      `${API_CONFIG.ENDPOINTS.DASHBOARD.LANDING}?days=${days}`
-    );
-    return response.data;
-  } catch {
-    // Fallback to mock data if API not ready
-    return {
-      patients: mockPatientSummaries.map(p => ({
-        patient_uuid: p.id,
-        first_name: p.patientName.split(' ')[0],
-        last_name: p.patientName.split(' ')[1] || '',
-        email_address: `${p.patientName.toLowerCase().replace(' ', '.')}@example.com`,
-        last_checkin: p.lastUpdated,
-        max_severity: p.priority === 'high' ? 'severe' : p.priority === 'medium' ? 'moderate' : 'mild',
-        has_escalation: p.priority === 'high',
-        severity_badge: p.priority === 'high' ? 'severe' : p.priority === 'medium' ? 'moderate' : 'mild' as 'mild' | 'moderate' | 'severe' | 'urgent',
-      })),
-      total_patients: mockPatientSummaries.length,
-      period_days: days,
-    };
-  }
-};
-
-export const useDashboardLanding = (days: number = 7) => {
-  return useQuery({
-    queryKey: ['dashboardLanding', days],
-    queryFn: () => fetchDashboardLanding(days),
-  });
-};
-
-// Fetch patient timeline data
-const fetchPatientTimeline = async (
-  patientUuid: string,
-  days: number = 30
-): Promise<PatientTimeline> => {
-  try {
-    const response = await apiClient.get(
-      `${API_CONFIG.ENDPOINTS.DASHBOARD.PATIENT_TIMELINE(patientUuid)}?days=${days}`
-    );
-    return response.data;
-  } catch {
-    // Fallback mock data
-    return {
-      patient_uuid: patientUuid,
-      period_days: days,
-      symptom_series: {
-        'nausea': [
-          { date: '2025-01-01', severity: 'mild', severity_numeric: 1 },
-          { date: '2025-01-02', severity: 'moderate', severity_numeric: 2 },
-          { date: '2025-01-03', severity: 'mild', severity_numeric: 1 },
-        ],
-        'fatigue': [
-          { date: '2025-01-01', severity: 'moderate', severity_numeric: 2 },
-          { date: '2025-01-02', severity: 'severe', severity_numeric: 3 },
-          { date: '2025-01-03', severity: 'moderate', severity_numeric: 2 },
-        ],
-      },
-      treatment_events: [
-        { event_type: 'chemo_start', event_date: '2024-12-16', metadata: { cycle: 1 } },
-        { event_type: 'cycle_start', event_date: '2024-12-30', metadata: { cycle: 2 } },
-      ],
-    };
-  }
-};
-
 export const usePatientTimeline = (patientUuid: string, days: number = 30) => {
   return useQuery({
     queryKey: ['patientTimeline', patientUuid, days],
     queryFn: () => fetchPatientTimeline(patientUuid, days),
     enabled: !!patientUuid,
   });
-};
-
-// Fetch patient's shared questions
-const fetchPatientQuestions = async (patientUuid: string): Promise<SharedQuestion[]> => {
-  try {
-    const response = await apiClient.get(
-      API_CONFIG.ENDPOINTS.DASHBOARD.PATIENT_QUESTIONS(patientUuid)
-    );
-    return response.data.questions || response.data;
-  } catch {
-    return [];
-  }
 };
 
 export const usePatientQuestions = (patientUuid: string) => {
@@ -369,16 +326,6 @@ export const usePatientQuestions = (patientUuid: string) => {
   });
 };
 
-// Fetch weekly reports list
-const fetchReportsList = async (): Promise<WeeklyReportSummary[]> => {
-  try {
-    const response = await apiClient.get(API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_LIST);
-    return response.data.reports || response.data;
-  } catch {
-    return [];
-  }
-};
-
 export const useReportsList = () => {
   return useQuery({
     queryKey: ['reportsList'],
@@ -386,50 +333,11 @@ export const useReportsList = () => {
   });
 };
 
-// Fetch weekly report data
-const fetchWeeklyReportData = async (weekStart?: string): Promise<WeeklyReportData> => {
-  try {
-    const url = weekStart 
-      ? `${API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_WEEKLY}?week_start=${weekStart}`
-      : API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_WEEKLY;
-    const response = await apiClient.get(url);
-    return response.data;
-  } catch {
-    // Fallback mock data
-    const now = new Date();
-    const weekStartDate = new Date(now);
-    weekStartDate.setDate(now.getDate() - now.getDay());
-    const weekEndDate = new Date(weekStartDate);
-    weekEndDate.setDate(weekStartDate.getDate() + 6);
-    
-    return {
-      report_week_start: weekStartDate.toISOString().split('T')[0],
-      report_week_end: weekEndDate.toISOString().split('T')[0],
-      physician_id: 'mock-physician',
-      patients: [],
-      summary_stats: {
-        total_patients: 0,
-        total_escalations: 0,
-        severity_breakdown: {},
-      },
-    };
-  }
-};
-
 export const useWeeklyReportData = (weekStart?: string) => {
   return useQuery({
     queryKey: ['weeklyReport', weekStart],
     queryFn: () => fetchWeeklyReportData(weekStart),
   });
-};
-
-// Generate weekly report
-const generateWeeklyReport = async (weekStart?: string): Promise<{ report_id: string }> => {
-  const response = await apiClient.post(
-    API_CONFIG.ENDPOINTS.DASHBOARD.REPORTS_GENERATE,
-    { week_start: weekStart }
-  );
-  return response.data;
 };
 
 export const useGenerateReport = () => {
@@ -440,5 +348,27 @@ export const useGenerateReport = () => {
       queryClient.invalidateQueries({ queryKey: ['reportsList'] });
       queryClient.invalidateQueries({ queryKey: ['weeklyReport'] });
     },
+  });
+};
+
+// Legacy hook for backwards compatibility
+export const usePatientDetails = (patientId: string) => {
+  return useQuery({
+    queryKey: ['patientDetails', patientId],
+    queryFn: async (): Promise<PatientSummary> => {
+      const timeline = await fetchPatientTimeline(patientId, 30);
+      return {
+        id: timeline.patient_uuid,
+        patientName: '',
+        dateOfBirth: '',
+        mrn: '',
+        symptoms: Object.keys(timeline.symptom_series).join(', '),
+        summary: '',
+        lastUpdated: '',
+        status: 'active',
+        priority: 'medium',
+      };
+    },
+    enabled: !!patientId,
   });
 };

@@ -28,6 +28,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import { Search, Plus, Edit, UserCog, Mail, Building2, ChevronRight, X } from 'lucide-react';
 import styled from 'styled-components';
+import { useStaff, Staff } from '../../services/staff';
 
 // Theme colors (Doctor)
 const colors = {
@@ -223,46 +224,7 @@ const EmptyState = styled.div`
   }
 `;
 
-// Staff type
-interface Staff {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: string;
-  clinicName?: string;
-}
-
-// Mock data
-const mockStaffData = {
-  data: [
-    {
-      id: '1',
-      firstName: 'John',
-      lastName: 'Smith',
-      email: 'john.smith@clinic.com',
-      role: 'Doctor',
-      clinicName: 'Main Clinic'
-    },
-    {
-      id: '2',
-      firstName: 'Sarah',
-      lastName: 'Johnson',
-      email: 'sarah.johnson@clinic.com',
-      role: 'Nurse',
-      clinicName: 'Main Clinic'
-    },
-    {
-      id: '3',
-      firstName: 'Michael',
-      lastName: 'Brown',
-      email: 'michael.brown@clinic.com',
-      role: 'Administrator',
-      clinicName: 'East Branch'
-    }
-  ],
-  total: 3
-};
+// Staff type is imported from services/staff
 
 // Modal Components
 const AddStaffModal: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => (
@@ -373,10 +335,8 @@ const StaffPage: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
   
-  // Mock API
-  const data = mockStaffData;
-  const isLoading = false;
-  const error = null;
+  // Real API call using useStaff hook
+  const { data, isLoading, error } = useStaff(page + 1, search, rowsPerPage);
   
   const handleChangePage = (_: unknown, newPage: number) => {
     setPage(newPage);
