@@ -357,3 +357,108 @@ async def get_patient_statistics(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         )
+
+
+# =============================================================================
+# Patient Questions Endpoint
+# =============================================================================
+
+class PatientQuestion(BaseModel):
+    """Patient question for doctor review."""
+    id: str
+    question_text: str
+    category: Optional[str] = None
+    is_answered: bool = False
+    created_at: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class QuestionsResponse(BaseModel):
+    """Response with shared questions."""
+    questions: List[PatientQuestion]
+    total: int
+
+
+@router.get(
+    "/{patient_uuid}/questions",
+    response_model=QuestionsResponse,
+    summary="Get Patient Questions",
+    description="Get questions shared by the patient for doctor review.",
+)
+async def get_patient_questions(
+    patient_uuid: UUID,
+    include_answered: bool = Query(True, description="Include answered questions"),
+    limit: int = Query(50, ge=1, le=200),
+    current_user: TokenData = Depends(get_current_user),
+    patient_db: Session = Depends(get_patient_db_session),
+    doctor_db: Session = Depends(get_doctor_db_session),
+):
+    """
+    Get shared questions from a patient.
+    
+    Only questions where share_with_physician=True are visible.
+    This allows doctors to see what the patient wants to discuss.
+    """
+    logger.info(f"Getting shared questions for patient {patient_uuid}")
+    
+    patient_service = PatientService(patient_db, doctor_db)
+    
+    try:
+        questions = patient_service.get_patient_questions(
+            patient_uuid=patient_uuid,
+            staff_uuid=UUID(current_user.sub),
+            include_answered=include_answered,
+            limit=limit,
+        )
+        return QuestionsResponse(
+            questions=[PatientQuestion(**q) for q in questions],
+            total=len(questions),
+        )
+    except AuthorizationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+
+
+@router.patch(
+    "/{patient_uuid}/questions/{question_id}/answered",
+    response_model=PatientQuestion,
+    summary="Mark Question as Answered",
+    description="Mark a patient's question as answered.",
+)
+async def mark_question_answered(
+    patient_uuid: UUID,
+    question_id: UUID,
+    current_user: TokenData = Depends(get_current_user),
+    patient_db: Session = Depends(get_patient_db_session),
+    doctor_db: Session = Depends(get_doctor_db_session),
+):
+    """
+    Mark a patient's question as answered.
+    
+    Doctors can mark questions as answered after discussing with the patient.
+    """
+    logger.info(f"Marking question {question_id} as answered for patient {patient_uuid}")
+    
+    patient_service = PatientService(patient_db, doctor_db)
+    
+    try:
+        question = patient_service.mark_question_answered(
+            patient_uuid=patient_uuid,
+            question_id=question_id,
+            staff_uuid=UUID(current_user.sub),
+        )
+        return PatientQuestion(**question)
+    except AuthorizationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )

@@ -474,7 +474,134 @@ class PatientService(BaseService):
             "total_diary_entries": total_diary_entries,
         }
 
+    # =========================================================================
+    # PATIENT QUESTIONS - Shared questions for doctor review
+    # =========================================================================
+    
+    def get_patient_questions(
+        self,
+        patient_uuid: UUID,
+        staff_uuid: UUID,
+        include_answered: bool = True,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get shared questions from a patient.
+        
+        Only returns questions where share_with_physician=True.
+        These are questions the patient wants to discuss with their doctor.
+        
+        Args:
+            patient_uuid: The patient's UUID
+            staff_uuid: The requesting staff member's UUID
+            include_answered: Whether to include answered questions
+            limit: Maximum questions to return
+            
+        Returns:
+            List of question dictionaries
+            
+        Raises:
+            AuthorizationError: If not authorized
+        """
+        if not self._is_authorized_for_patient(patient_uuid, staff_uuid):
+            raise AuthorizationError(
+                f"Staff {staff_uuid} not authorized to view patient {patient_uuid}"
+            )
+        
+        # Query shared questions only
+        query = """
+            SELECT id, question_text, category, is_answered, created_at
+            FROM patient_questions
+            WHERE patient_uuid = :patient_uuid
+            AND share_with_physician = true
+            AND is_deleted = false
+        """
+        
+        if not include_answered:
+            query += " AND is_answered = false"
+        
+        query += " ORDER BY created_at DESC LIMIT :limit"
+        
+        result = self.patient_db.execute(
+            query,
+            {"patient_uuid": str(patient_uuid), "limit": limit}
+        )
+        
+        questions = []
+        for row in result:
+            questions.append({
+                "id": str(row[0]),
+                "question_text": row[1],
+                "category": row[2],
+                "is_answered": row[3],
+                "created_at": row[4].isoformat() if row[4] else None,
+            })
+        
+        return questions
 
+    def mark_question_answered(
+        self,
+        patient_uuid: UUID,
+        question_id: UUID,
+        staff_uuid: UUID,
+    ) -> Dict[str, Any]:
+        """
+        Mark a patient's question as answered.
+        
+        Doctors can mark questions as answered after discussing with the patient.
+        
+        Args:
+            patient_uuid: The patient's UUID
+            question_id: The question's UUID
+            staff_uuid: The requesting staff member's UUID
+            
+        Returns:
+            Updated question dictionary
+            
+        Raises:
+            AuthorizationError: If not authorized
+            NotFoundError: If question not found
+        """
+        if not self._is_authorized_for_patient(patient_uuid, staff_uuid):
+            raise AuthorizationError(
+                f"Staff {staff_uuid} not authorized to view patient {patient_uuid}"
+            )
+        
+        # Get the question
+        result = self.patient_db.execute(
+            """
+            SELECT id, question_text, category, is_answered, created_at
+            FROM patient_questions
+            WHERE id = :question_id
+            AND patient_uuid = :patient_uuid
+            AND share_with_physician = true
+            AND is_deleted = false
+            """,
+            {"question_id": str(question_id), "patient_uuid": str(patient_uuid)}
+        )
+        
+        row = result.fetchone()
+        if not row:
+            raise NotFoundError(f"Question {question_id} not found")
+        
+        # Mark as answered
+        self.patient_db.execute(
+            """
+            UPDATE patient_questions
+            SET is_answered = true, updated_at = NOW()
+            WHERE id = :question_id
+            """,
+            {"question_id": str(question_id)}
+        )
+        self.patient_db.commit()
+        
+        return {
+            "id": str(row[0]),
+            "question_text": row[1],
+            "category": row[2],
+            "is_answered": True,  # Updated value
+            "created_at": row[4].isoformat() if row[4] else None,
+        }
 
 
 

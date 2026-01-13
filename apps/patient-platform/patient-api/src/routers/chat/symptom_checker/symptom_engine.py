@@ -983,7 +983,8 @@ class SymptomCheckerEngine:
                 f"**Summary:** {concise_summary}\n\n"
                 "---\n\n"
                 "⚠️ **Care team notified** - they will review and follow up.\n\n"
-                "💬 **Want to add anything?** You can add personal notes before saving.\n\n"
+                "📔 **Saved to your diary** automatically for your records.\n\n"
+                "💬 **Want to add anything?** You can add personal notes.\n\n"
                 "What would you like to do?"
             )
             triage_level = TriageLevel.NOTIFY_CARE_TEAM
@@ -999,7 +1000,8 @@ class SymptomCheckerEngine:
                 f"**Summary:** {concise_summary}\n\n"
                 "---\n\n"
                 "✅ **Good news!** No urgent concerns identified.\n\n"
-                "💬 **Want to add anything?** You can add personal notes before saving.\n\n"
+                "📔 **Saved to your diary** automatically for your records.\n\n"
+                "💬 **Want to add anything?** You can add personal notes.\n\n"
                 "What would you like to do?"
             )
             triage_level = TriageLevel.NONE
@@ -1051,11 +1053,12 @@ class SymptomCheckerEngine:
                 state=self.state
             )
         
-        elif user_response == 'save_diary':
-            # Indicate diary save
+        elif user_response in ['save_diary', 'view_diary']:
+            # Diary is auto-saved, this just navigates to view it
             return EngineResponse(
-                message="📔 Your symptom check has been saved to your diary.\n\n"
-                        "You can view it anytime in the **My Diary** section.",
+                message="📔 **Your symptom check is in your diary.**\n\n"
+                        "It was automatically saved when the assessment completed.\n\n"
+                        "You can view and add notes to it anytime in **My Diary**.",
                 message_type='text',
                 options=[
                     {'label': '📔 Go to Diary', 'value': 'go_diary', 'action': 'navigate:diary'},

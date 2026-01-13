@@ -375,6 +375,15 @@ class ChatService:
                 )
                 chat.bulleted_summary = summaries['bulleted']
                 chat.longer_summary = summaries['longer']
+                
+                # AUTO-SAVE to diary when conversation completes
+                # This happens automatically - no user action required
+                try:
+                    self._save_chat_to_diary(chat)
+                    logger.info(f"Auto-saved symptom check to diary: chat={chat_uuid}")
+                except Exception as e:
+                    # Don't fail the whole flow if diary save fails
+                    logger.error(f"Failed to auto-save to diary: {e}")
             else:
                 chat.conversation_state = engine_response.state.phase.value
         
