@@ -24,7 +24,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from jose import jwt
+from jose import jwt, JWTError
 
 from db.session import get_patient_db as _get_patient_db, get_doctor_db as _get_doctor_db
 from core import settings
@@ -102,9 +102,10 @@ def get_token_payload(
             algorithms=[settings.jwt_algorithm]
         )
         return payload
-    except jwt.ExpiredSignatureError:
-        raise AuthenticationException("Token has expired")
-    except jwt.InvalidTokenError as e:
+    except JWTError as e:
+        error_msg = str(e).lower()
+        if "expired" in error_msg:
+            raise AuthenticationException("Token has expired")
         logger.warning(f"Invalid token: {e}")
         raise AuthenticationException("Invalid authentication token")
 
