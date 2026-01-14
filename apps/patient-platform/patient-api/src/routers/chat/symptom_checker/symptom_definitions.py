@@ -57,6 +57,16 @@ def create_option(label: str, value: Any) -> Option:
     return Option(label=label, value=value)
 
 
+def _days_at_least(days_value: Any, threshold: int) -> bool:
+    """Helper to check if days value is at least the threshold."""
+    if days_value is None:
+        return False
+    try:
+        return float(days_value) >= threshold
+    except (ValueError, TypeError):
+        return False
+
+
 def opts_from_dicts(dicts: List[Dict]) -> List[Option]:
     """Convert list of dicts to list of Options."""
     return [Option(label=d["label"], value=d["value"]) for d in dicts]
@@ -157,24 +167,25 @@ SYMPTOMS['URG-102'] = SymptomDef(
 
 # URG-103: Bleeding / Bruising
 def _eval_bleeding(answers: Dict[str, Any]) -> LogicResult:
-    # Alert: pressure won't stop OR significant blood
-    if answers.get('pressure') is True or answers.get('stool_urine') == 'significant':
+    # CRITICAL: Non-stop bleeding with pressure → CALL 911 (highest priority)
+    if answers.get('pressure') is True:
         return LogicResult(
             action='stop',
             triage_level=TriageLevel.CALL_911,
-            triage_message='Non-stop bleeding or significant blood in stool/urine. Call 911 or Care Team immediately.'
+            triage_message='Call 911 right now. Bleeding that will not stop with pressure requires immediate emergency care.'
         )
-    # Minor bleeding
-    if answers.get('stool_urine') == 'little':
+    # ANY blood in stool or urine → Contact care team or ED (NOT 911 per spec)
+    if answers.get('stool_urine') is True:
         return LogicResult(
             action='stop',
             triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message='Minor blood in stool/urine reported.'
+            triage_message='Contact your care team or go to the emergency department. Blood in stool or urine requires prompt medical evaluation.'
         )
+    # No bleeding concerns - just bruising
     return LogicResult(
         action='stop',
         triage_level=TriageLevel.NONE,
-        triage_message='Bruising reported - no significant bleeding.'
+        triage_message='Bruising reported without bleeding concerns. Monitor and report any changes to your care team.'
     )
 
 SYMPTOMS['URG-103'] = SymptomDef(
@@ -190,12 +201,7 @@ SYMPTOMS['URG-103'] = SymptomDef(
         Question(
             id='stool_urine',
             text='Do you have any blood in your stool or urine?',
-            input_type=InputType.CHOICE,
-            options=[
-                create_option('No', 'no'),
-                create_option('A little', 'little'),
-                create_option('A significant amount (about a cup)', 'significant')
-            ]
+            input_type=InputType.YES_NO
         ),
         Question(
             id='injury',
@@ -417,27 +423,34 @@ def _eval_nausea(answers: Dict[str, Any]) -> LogicResult:
     severity = answers.get('severity_post_meds')  # Check post-med severity
     severity_no_meds = answers.get('severity_no_meds')  # Check if not taking meds
     
+    # Get effective severity (from meds or no-meds path)
+    effective_severity = severity or severity_no_meds
+    
     # Alert: Oral intake "barely" or "none"
     intake_bad = intake in ['none', 'barely']
     
-    # Alert: Duration ≥ 3 days AND (Worsening or Same)
-    chronic_worsening = days == '>3d' and trend == 'bad'
-    
     # Alert: SEVERE nausea (post-meds or not taking meds)
-    severe_nausea = severity == 'sev' or severity_no_meds == 'sev'
+    severe_nausea = effective_severity == 'sev'
     
-    if intake_bad or chronic_worsening or severe_nausea:
+    # Per spec: Alert if MODERATE + ≥3 days + worsening/same (not improving)
+    moderate_chronic_worsening = (
+        effective_severity == 'mod' and 
+        days == '>3d' and 
+        trend == 'bad'  # 'bad' = worsening or same
+    )
+    
+    if intake_bad or severe_nausea or moderate_chronic_worsening:
         reasons = []
         if intake_bad:
             reasons.append(f'Oral intake: {intake}')
-        if chronic_worsening:
-            reasons.append('Duration ≥3 days and worsening/same')
         if severe_nausea:
-            reasons.append('Severe nausea')
+            reasons.append('Severe nausea despite medication')
+        if moderate_chronic_worsening:
+            reasons.append('Moderate nausea for ≥3 days and worsening/same')
         return LogicResult(
             action='continue',
             triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message=f"Nausea alert: {', '.join(reasons)}."
+            triage_message=f"Nausea alert: {', '.join(reasons)}. Please contact your care team."
         )
     return LogicResult(action='continue')
 
@@ -562,19 +575,41 @@ def _eval_vomiting(answers: Dict[str, Any]) -> LogicResult:
     vom_freq = answers.get('vom_freq')
     intake = answers.get('intake')
     severity = answers.get('severity_post_med')
+    days = answers.get('days')
+    trend = answers.get('vom_trend')
     
+    # Parse days as number
+    try:
+        days_num = float(days) if days else 0
+    except (ValueError, TypeError):
+        days_num = 0
+    
+    # Alert criteria per spec:
+    # - >6 episodes in 24 hours
+    # - No oral intake for ≥12 hours
+    # - Vomiting rated severe despite medication
     if vom_freq == 'high' or intake == 'none' or severity == 'sev':
+        reasons = []
+        if vom_freq == 'high':
+            reasons.append('>6 episodes in 24 hours')
+        if intake == 'none':
+            reasons.append('No oral intake for 12+ hours')
+        if severity == 'sev':
+            reasons.append('Severe vomiting despite medication')
         return LogicResult(
             action='continue',
             triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message='>6 episodes in 24 hrs OR No intake 12h OR Severe.'
+            triage_message=f"Vomiting alert: {', '.join(reasons)}. Please contact your care team immediately."
         )
-    if severity == 'mod':
+    
+    # Per spec: Vomiting rated moderate for ≥3 days and worsening or same
+    if severity == 'mod' and days_num >= 3 and trend in ['worse', 'same']:
         return LogicResult(
             action='continue',
             triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message='Moderate Vomiting reported.'
+            triage_message=f"Moderate vomiting for {int(days_num)} days ({trend}). Please contact your care team."
         )
+    
     return LogicResult(action='continue')
 
 def _eval_vomiting_followup(answers: Dict[str, Any]) -> LogicResult:
@@ -622,6 +657,18 @@ SYMPTOMS['VOM-204'] = SymptomDef(
             id='days',
             text='How many days have you been vomiting?',
             input_type=InputType.NUMBER
+        ),
+        # Per spec: Ask trend for ≥3 days to check for moderate + worsening/same
+        Question(
+            id='vom_trend',
+            text='Is the vomiting worsening or the same?',
+            input_type=InputType.CHOICE,
+            options=[
+                create_option('Worsening', 'worse'),
+                create_option('Same', 'same'),
+                create_option('Improving', 'better')
+            ],
+            condition=lambda a: _days_at_least(a.get('days'), 3)
         ),
         Question(
             id='vom_freq',
@@ -1641,7 +1688,7 @@ def _eval_swelling(answers: Dict[str, Any]) -> LogicResult:
     associated = answers.get('swell_associated', [])
     redness = answers.get('redness') is True
     
-    # EMERGENT conditions
+    # EMERGENT conditions per spec
     is_one_sided = one_side == 'one'
     is_sudden = onset == 'today'
     has_critical_location = any(loc in locations for loc in ['neck_chest', 'port', 'iv_site'])
@@ -1651,38 +1698,58 @@ def _eval_swelling(answers: Dict[str, Any]) -> LogicResult:
     has_redness = 'redness' in associated or redness
     is_severe = severity == 'sev'
     
-    # EMERGENT: One-sided, Sudden onset, Critical locations, or any concerning symptoms
-    if is_one_sided or is_sudden or has_critical_location or has_sob or has_chest or has_fever or has_redness or is_severe:
-        reasons = []
-        if is_one_sided:
-            reasons.append('One-sided swelling')
-        if is_sudden:
-            reasons.append('Sudden onset')
-        if has_critical_location:
-            reasons.append('Neck/chest/port/IV site involvement')
-        if has_sob:
-            reasons.append('Shortness of breath')
-        if has_chest:
-            reasons.append('Chest discomfort')
-        if has_fever:
-            reasons.append('Fever')
-        if has_redness:
-            reasons.append('Redness')
-        if is_severe:
-            reasons.append('Severe swelling')
-        
-        # If SOB or chest discomfort → Emergency
-        if has_sob or has_chest:
-            return LogicResult(
-                action='stop',
-                triage_level=TriageLevel.CALL_911,
-                triage_message=f"URGENT Swelling with: {', '.join(reasons)}. Seek immediate care."
-            )
-        
+    # Per spec: SOB with swelling → branch to URG-101 for breathing emergency
+    if has_sob:
+        return LogicResult(
+            action='branch',
+            branch_to_symptom_id='URG-101',
+            triage_level=TriageLevel.CALL_911,
+            triage_message='Swelling with shortness of breath. This may be an emergency.'
+        )
+    
+    # Build reasons list for messaging
+    reasons = []
+    if is_one_sided:
+        reasons.append('One-sided swelling')
+    if is_sudden:
+        reasons.append('Sudden onset')
+    if has_critical_location:
+        reasons.append('Neck/chest/port/IV site involvement')
+    if has_chest:
+        reasons.append('Chest discomfort')
+    if has_fever:
+        reasons.append('Fever')
+    if has_redness:
+        reasons.append('Redness')
+    if is_severe:
+        reasons.append('Severe swelling')
+    
+    # EMERGENT per spec: All these conditions require "Call 911 or your care team right away"
+    # - One-sided swelling with sudden onset
+    # - Neck/chest/port/IV site involvement
+    # - Chest discomfort, fever, redness, or severe swelling
+    emergent_condition = (
+        (is_one_sided and is_sudden) or  # One-sided + sudden
+        has_critical_location or          # Neck/chest/port/IV
+        has_chest or                      # Chest discomfort
+        has_fever or                      # Fever
+        has_redness or                    # Redness
+        is_severe                         # Severe
+    )
+    
+    if emergent_condition:
+        return LogicResult(
+            action='stop',
+            triage_level=TriageLevel.CALL_911,
+            triage_message=f"URGENT: Call 911 or your care team right away. {', '.join(reasons)}."
+        )
+    
+    # One-sided OR sudden alone (not combined) - still concerning but not emergent
+    if is_one_sided or is_sudden:
         return LogicResult(
             action='continue',
             triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message=f"Swelling concern: {', '.join(reasons)}."
+            triage_message=f"Swelling concern: {', '.join(reasons)}. Contact your care team."
         )
     
     # Notify: Moderate OR worsening OR >3 days OR bilateral arm/leg
@@ -1829,6 +1896,7 @@ def _eval_mouth_sores(answers: Dict[str, Any]) -> LogicResult:
     intake_bad = intake in ['none', 'barely', 'difficulty']
     
     # Alert: Not able to eat/drink normally AND/OR Fever OR Rating Severe
+    # Use 'continue' to proceed to follow-up questions (swallowing pain, dehydration)
     if intake_bad or weight_loss is True or discomfort == 'sev' or has_fever:
         reasons = []
         if intake == 'none':
@@ -1843,15 +1911,77 @@ def _eval_mouth_sores(answers: Dict[str, Any]) -> LogicResult:
             reasons.append(f'Fever {t}°F')
         
         return LogicResult(
-            action='stop',
+            action='continue',  # Continue to follow-up questions
             triage_level=TriageLevel.NOTIFY_CARE_TEAM,
-            triage_message=f"Mouth sores alert: {', '.join(reasons)}."
+            triage_message=f"Mouth sores alert: {', '.join(reasons)}. Please contact your care team."
         )
     
+    # Still continue to follow-up even for manageable cases
+    return LogicResult(
+        action='continue',
+        triage_level=TriageLevel.NONE,
+        triage_message='Mouth sores reported - manageable.'
+    )
+
+
+def _eval_mouth_sores_followup(answers: Dict[str, Any]) -> LogicResult:
+    """Evaluate mouth sores follow-up with dehydration checks per spec MSO-208."""
+    swallowing_pain = answers.get('swallowing_pain') is True
+    
+    # Check dehydration signs
+    urine_dark = answers.get('mso_urine_dark') is True
+    urine_less = answers.get('mso_urine_less') is True
+    thirsty = answers.get('mso_thirsty') is True
+    lightheaded = answers.get('mso_lightheaded') is True
+    vitals_text = answers.get('mso_vitals', '')
+    
+    # Parse vitals if provided
+    vitals = parse_vitals_from_text(vitals_text) if vitals_text else {'hr_high': False, 'bp_low': False}
+    
+    # Collect dehydration signs
+    dehy_signs = []
+    if urine_dark:
+        dehy_signs.append('Dark urine')
+    if urine_less:
+        dehy_signs.append('Reduced urination')
+    if thirsty:
+        dehy_signs.append('Very thirsty')
+    if lightheaded:
+        dehy_signs.append('Lightheaded')
+    if vitals['hr_high']:
+        dehy_signs.append('HR ≥100')
+    if vitals['bp_low']:
+        dehy_signs.append('SBP ≤100')
+    
+    # Build message with all findings
+    findings = []
+    if swallowing_pain:
+        findings.append('Pain when swallowing')
+    if dehy_signs:
+        findings.extend(dehy_signs)
+    
+    # If dehydration signs present, branch to DEH-201 for full evaluation
+    if dehy_signs:
+        return LogicResult(
+            action='branch',
+            branch_to_symptom_id='DEH-201',
+            triage_level=TriageLevel.NOTIFY_CARE_TEAM,
+            triage_message=f"Mouth sores with dehydration signs: {', '.join(findings)}. You may be dehydrated. Please contact your care team immediately."
+        )
+    
+    # If swallowing pain but no dehydration
+    if swallowing_pain:
+        return LogicResult(
+            action='stop',
+            triage_level=TriageLevel.NOTIFY_CARE_TEAM,
+            triage_message='Mouth sores with pain when swallowing. Please contact your care team.'
+        )
+    
+    # No concerning follow-up findings
     return LogicResult(
         action='stop',
         triage_level=TriageLevel.NONE,
-        triage_message='Mouth sores reported - manageable.'
+        triage_message='Mouth sores follow-up complete. Continue home care and contact your care team if symptoms worsen.'
     )
 
 SYMPTOMS['MSO-208'] = SymptomDef(
@@ -1910,7 +2040,42 @@ SYMPTOMS['MSO-208'] = SymptomDef(
             options=opts_from_dicts(SEVERITY_OPTIONS)
         )
     ],
-    evaluate_screening=_eval_mouth_sores
+    evaluate_screening=_eval_mouth_sores,
+    follow_up_questions=[
+        # Per spec MSO-208: "Are you having any pain when you swallow?"
+        Question(
+            id='swallowing_pain',
+            text='Are you having any pain when you swallow?',
+            input_type=InputType.YES_NO
+        ),
+        # Standard dehydration question set (5 questions per DEH-201 spec)
+        Question(
+            id='mso_urine_dark',
+            text='Is your urine dark?',
+            input_type=InputType.YES_NO
+        ),
+        Question(
+            id='mso_urine_less',
+            text='Is the amount of urine a lot less over the last 12 hours?',
+            input_type=InputType.YES_NO
+        ),
+        Question(
+            id='mso_thirsty',
+            text='Are you very thirsty?',
+            input_type=InputType.YES_NO
+        ),
+        Question(
+            id='mso_lightheaded',
+            text='Are you lightheaded?',
+            input_type=InputType.YES_NO
+        ),
+        Question(
+            id='mso_vitals',
+            text='Do you know what your heart rate and blood pressure is? If so, please enter (e.g., HR: 95, BP: 110/70):',
+            input_type=InputType.TEXT
+        )
+    ],
+    evaluate_follow_up=_eval_mouth_sores_followup
 )
 
 
@@ -1987,12 +2152,13 @@ def _eval_skin(answers: Dict[str, Any]) -> LogicResult:
     coverage = answers.get('coverage')
     temp = answers.get('rash_temp')
     
-    # EMERGENCY: Face rash + trouble breathing
+    # EMERGENCY: Face rash + trouble breathing → Branch to URG-101 per spec
     if 'face' in locations and face_breath is True:
         return LogicResult(
-            action='stop',
+            action='branch',
+            branch_to_symptom_id='URG-101',
             triage_level=TriageLevel.CALL_911,
-            triage_message='Facial Rash with Breathing Difficulty.'
+            triage_message='Facial Rash with Breathing Difficulty - possible allergic reaction. Seek immediate emergency care.'
         )
     
     try:
@@ -2832,6 +2998,7 @@ SYMPTOMS['LEG-208'] = SymptomDef(
 def _eval_joint_muscle(answers: Dict[str, Any]) -> LogicResult:
     severity = answers.get('severity')
     interfere = answers.get('interfere') is True
+    move_sleep = answers.get('move_sleep') is True  # Per spec: hard to move around or sleep
     better_rest = answers.get('better_rest')
     temp = answers.get('jmp_temp')
     
@@ -2842,12 +3009,14 @@ def _eval_joint_muscle(answers: Dict[str, Any]) -> LogicResult:
     
     fever = t >= 100.4
     
-    # Alert: Sev OR Interfere OR Not controlled/better OR Fever → Notify
-    if severity == 'sev' or interfere or better_rest is False or fever:
+    # Alert: Sev OR Interfere OR Move/Sleep impact OR Not controlled/better OR Fever → Notify
+    if severity == 'sev' or interfere or move_sleep or better_rest is False or fever:
         reasons = []
         pain_type = answers.get('pain_type', 'Pain')
         if severity == 'sev':
             reasons.append('Severe pain')
+        if move_sleep:
+            reasons.append('Difficulty moving or sleeping')
         if interfere:
             reasons.append('Interferes with daily activities')
         if better_rest is False:
@@ -2872,10 +3041,20 @@ def _eval_joint_muscle_followup(answers: Dict[str, Any]) -> LogicResult:
             triage_message='Pain not controlled with usual medications - may need adjustment.'
         )
     
+    # Per spec for General Aches / Fatigue (non-urgent path):
+    # "Please let your care team know about your symptoms at your next appointment.
+    # This chatbot is not a substitute for medical care and is not continuously monitored.
+    # If you feel unsafe or believe this may be an emergency, please call 911 right away.
+    # You definitely want your care team to know. Should I add this as a diary in the list of questions to ask your care team?"
     return LogicResult(
         action='stop',
         triage_level=TriageLevel.NONE,
-        triage_message='Pain reported. Let care team know at next appointment. Return if pain worsens or prevents movement.'
+        triage_message=(
+            'Please let your care team know about your symptoms at your next appointment. '
+            'This chatbot is not a substitute for medical care and is not continuously monitored. '
+            'If you feel unsafe or believe this may be an emergency, please call 911 right away.\n\n'
+            '💡 **Would you like to add this to your diary as a question for your care team?**'
+        )
     )
 
 SYMPTOMS['JMP-212'] = SymptomDef(
@@ -2894,6 +3073,12 @@ SYMPTOMS['JMP-212'] = SymptomDef(
                 create_option('General aches', 'general')
             ]
         ),
+        # Per spec: Q1 - "Is your pain making it hard to move around or sleep?"
+        Question(
+            id='move_sleep',
+            text='Is your pain making it hard to move around or sleep?',
+            input_type=InputType.YES_NO
+        ),
         Question(
             id='severity',
             text='Rate your pain:',
@@ -2905,6 +3090,7 @@ SYMPTOMS['JMP-212'] = SymptomDef(
             text='Does the pain interfere with your daily activities?',
             input_type=InputType.YES_NO
         ),
+        # Per spec: Q2 - "Is it controlled with your usual pain medicine?"
         Question(
             id='better_rest',
             text='Does the pain get better with rest, hydration, or over-the-counter medicine?',

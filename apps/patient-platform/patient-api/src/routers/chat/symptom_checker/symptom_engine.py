@@ -56,6 +56,10 @@ class ConversationState:
     last_chemo_date: Optional[str] = None  # When was last chemotherapy
     next_physician_visit: Optional[str] = None  # Scheduled physician visit
     patient_context_step: int = 0  # 0=chemo, 1=physician visit
+    # Cross-symptom dehydration tracking (per spec DEH-201)
+    # Prevents asking same dehydration questions multiple times in one session
+    dehydration_questions_asked: bool = False
+    dehydration_signs_present: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize state to dictionary."""
@@ -76,7 +80,9 @@ class ConversationState:
             'personal_notes': self.personal_notes,
             'last_chemo_date': self.last_chemo_date,
             'next_physician_visit': self.next_physician_visit,
-            'patient_context_step': self.patient_context_step
+            'patient_context_step': self.patient_context_step,
+            'dehydration_questions_asked': self.dehydration_questions_asked,
+            'dehydration_signs_present': self.dehydration_signs_present
         }
 
     @classmethod
@@ -99,7 +105,9 @@ class ConversationState:
             personal_notes=data.get('personal_notes'),
             last_chemo_date=data.get('last_chemo_date'),
             next_physician_visit=data.get('next_physician_visit'),
-            patient_context_step=data.get('patient_context_step', 0)
+            patient_context_step=data.get('patient_context_step', 0),
+            dehydration_questions_asked=data.get('dehydration_questions_asked', False),
+            dehydration_signs_present=data.get('dehydration_signs_present', False)
         )
 
 
@@ -485,6 +493,19 @@ class SymptomCheckerEngine:
 
         return self._get_next_question(symptom, greeting_message)
 
+    def _is_dehydration_question(self, question_id: str) -> bool:
+        """Check if a question is a dehydration-related question (per DEH-201 cross-symptom tracking)."""
+        dehydration_patterns = [
+            'dehydration_signs', 'dehydration',
+            'urine_dark', 'urine_less', 'urine_amt', 'urine_color',
+            'thirsty', 'lightheaded', 'vitals_known',
+            # Module-specific prefixes
+            'mso_urine', 'mso_thirsty', 'mso_lightheaded', 'mso_vitals',
+            'vom_urine', 'vom_thirsty', 'vom_lightheaded', 'vom_vitals',
+            'dia_urine', 'dia_thirsty', 'dia_lightheaded', 'dia_vitals',
+        ]
+        return any(pattern in question_id for pattern in dehydration_patterns)
+
     def _get_next_question(self, symptom: SymptomDef, prefix_message: Optional[str] = None) -> EngineResponse:
         """Get the next applicable question for the current symptom."""
         questions = symptom.follow_up_questions if self.state.is_follow_up else symptom.screening_questions
@@ -492,8 +513,17 @@ class SymptomCheckerEngine:
         while self.state.current_question_index < len(questions):
             question = questions[self.state.current_question_index]
             
+            # DEH-201: Skip dehydration questions if already asked in this session
+            if self._is_dehydration_question(question.id) and self.state.dehydration_questions_asked:
+                logger.info(f"Skipping dehydration question {question.id} - already asked in session")
+                self.state.current_question_index += 1
+                continue
+            
             # Check if question condition is met
             if question.condition is None or question.condition(self.state.answers):
+                # Mark dehydration questions as asked
+                if self._is_dehydration_question(question.id):
+                    self.state.dehydration_questions_asked = True
                 return self._format_question(question, symptom, prefix_message)
             
             # Skip this question if condition not met
