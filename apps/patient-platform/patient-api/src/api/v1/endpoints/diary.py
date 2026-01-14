@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from api.deps import get_patient_db
+from api.deps import get_patient_db, get_current_user
 from services import DiaryService
 from core.logging import get_logger
 from core.exceptions import NotFoundError, ValidationError
@@ -31,15 +31,15 @@ router = APIRouter()
 # Local dev mode test patient UUID
 LOCAL_DEV_PATIENT_UUID = "11111111-1111-1111-1111-111111111111"
 
-def get_patient_uuid_with_fallback(patient_uuid: Optional[str]) -> str:
-    """Get patient UUID, falling back to test UUID in local dev mode."""
-    if patient_uuid:
-        return patient_uuid
+def get_patient_uuid_from_user(current_user) -> str:
+    """Extract patient UUID from authenticated user, with fallback for local dev."""
+    if current_user and hasattr(current_user, 'sub'):
+        return str(current_user.sub)
     if settings.local_dev_mode:
         return LOCAL_DEV_PATIENT_UUID
     raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="patient_uuid is required"
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated"
     )
 
 
@@ -89,13 +89,13 @@ class DiaryEntryUpdate(BaseModel):
 )
 async def get_all_diary_entries(
     db: Session = Depends(get_patient_db),
-    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
+    current_user = Depends(get_current_user),
     timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
 ):
     """
     Get all diary entries for the authenticated patient.
     """
-    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    patient_uuid = get_patient_uuid_from_user(current_user)
     logger.info(f"Get all diary entries: patient={patient_uuid}")
     
     diary_service = DiaryService(db)
@@ -114,13 +114,13 @@ async def get_diary_entries_by_month(
     year: int,
     month: int,
     db: Session = Depends(get_patient_db),
-    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
+    current_user = Depends(get_current_user),
     timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
 ):
     """
     Get all diary entries for a specific month and year.
     """
-    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    patient_uuid = get_patient_uuid_from_user(current_user)
     
     if month < 1 or month > 12:
         raise HTTPException(
@@ -149,12 +149,12 @@ async def get_diary_entries_by_month(
 async def create_diary_entry(
     entry_data: DiaryEntryCreate,
     db: Session = Depends(get_patient_db),
-    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
+    current_user = Depends(get_current_user),
 ):
     """
     Create a new diary entry for the authenticated patient.
     """
-    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    patient_uuid = get_patient_uuid_from_user(current_user)
     logger.info(f"Create diary entry: patient={patient_uuid}")
     
     diary_service = DiaryService(db)
@@ -181,13 +181,13 @@ async def update_diary_entry(
     entry_uuid: str,
     update_data: DiaryEntryUpdate,
     db: Session = Depends(get_patient_db),
-    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
+    current_user = Depends(get_current_user),
     timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
 ):
     """
     Update a diary entry for the authenticated patient.
     """
-    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    patient_uuid = get_patient_uuid_from_user(current_user)
     logger.info(f"Update diary entry: entry={entry_uuid} patient={patient_uuid}")
     
     diary_service = DiaryService(db)
@@ -217,12 +217,12 @@ async def update_diary_entry(
 async def soft_delete_diary_entry(
     entry_uuid: str,
     db: Session = Depends(get_patient_db),
-    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
+    current_user = Depends(get_current_user),
 ):
     """
     Soft deletes a diary entry by setting its is_deleted flag.
     """
-    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    patient_uuid = get_patient_uuid_from_user(current_user)
     logger.info(f"Delete diary entry: entry={entry_uuid} patient={patient_uuid}")
     
     diary_service = DiaryService(db)
@@ -241,13 +241,13 @@ async def soft_delete_diary_entry(
 )
 async def get_entries_for_doctor(
     db: Session = Depends(get_patient_db),
-    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
+    current_user = Depends(get_current_user),
     timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
 ):
     """
     Get entries marked for doctor review.
     """
-    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    patient_uuid = get_patient_uuid_from_user(current_user)
     logger.info(f"Get entries for doctor: patient={patient_uuid}")
     
     diary_service = DiaryService(db)

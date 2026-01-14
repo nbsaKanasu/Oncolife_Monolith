@@ -149,11 +149,13 @@ export const FilterButton = styled.button`
 
 export const SelectWrapper = styled.div`
   position: relative;
-  min-width: 140px;
+  min-width: 160px;
+  display: flex;
+  align-items: center;
   
   select {
     width: 100%;
-    padding: 0.75rem 2.5rem 0.75rem 1rem;
+    padding: 0.75rem 2.25rem 0.75rem 2.25rem;
     background: ${colors.paper};
     border: 1px solid ${colors.border};
     border-radius: 12px;
@@ -169,9 +171,23 @@ export const SelectWrapper = styled.div`
     }
   }
   
-  svg {
+  /* Left icon (calendar/filter) */
+  svg:first-child {
     position: absolute;
-    right: 0.875rem;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    color: ${colors.muted};
+    pointer-events: none;
+    z-index: 1;
+  }
+  
+  /* Right icon (chevron) */
+  svg:last-child {
+    position: absolute;
+    right: 0.75rem;
     top: 50%;
     transform: translateY(-50%);
     width: 16px;
