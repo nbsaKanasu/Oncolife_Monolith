@@ -71,7 +71,7 @@ export const API_CONFIG = {
     // Conversation Summaries
     SUMMARIES: {
       BY_MONTH: (year: number, month: number) => `/summaries/${year}/${month}`,
-      DETAIL: (uuid: string) => `/summaries/${uuid}`,
+      DETAIL: (uuid: string) => `/summaries/detail/${uuid}`,
     },
     
     // Patient Onboarding
