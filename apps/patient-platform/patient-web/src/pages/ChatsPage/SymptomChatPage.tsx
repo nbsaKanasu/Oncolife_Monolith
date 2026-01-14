@@ -152,9 +152,6 @@ const SymptomChatPage: React.FC = () => {
 
   // Determine if we should show text input
   const shouldShowTextInput = () => {
-    if (chatSession?.conversation_state === 'COMPLETED' || chatSession?.conversation_state === 'EMERGENCY') {
-      return false;
-    }
     if (!messages || messages.length === 0) return false;
     if (isThinking) return false;
     
@@ -162,9 +159,20 @@ const SymptomChatPage: React.FC = () => {
     if (lastMessage.sender === 'user') return false;
     
     const frontendType = lastMessage.structured_data?.frontend_type || lastMessage.message_type;
+    const phase = lastMessage.structured_data?.phase;
     
-    // Show text input for text, number, or text_input (notes) type questions
-    return frontendType === 'text' || frontendType === 'number' || frontendType === 'text_input';
+    // Always show text input when in ADDING_NOTES phase (personal notes after completion)
+    if (phase === 'ADDING_NOTES' || frontendType === 'text_input') {
+      return true;
+    }
+    
+    // Don't show input for completed conversations (unless adding notes)
+    if (chatSession?.conversation_state === 'COMPLETED' || chatSession?.conversation_state === 'EMERGENCY') {
+      return false;
+    }
+    
+    // Show text input for text, number type questions during normal flow
+    return frontendType === 'text' || frontendType === 'number';
   };
 
   // Download summary as text file

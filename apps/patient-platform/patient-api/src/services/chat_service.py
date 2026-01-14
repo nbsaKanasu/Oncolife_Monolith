@@ -407,6 +407,8 @@ class ChatService:
                 "summary_data": engine_response.summary_data,
                 # Include sender info (ruby or system)
                 "sender": engine_response.sender,
+                # Include phase for frontend (needed for ADDING_NOTES text input)
+                "phase": engine_response.state.phase.value if engine_response.state else None,
             },
         )
         self.db.add(assistant_msg)
