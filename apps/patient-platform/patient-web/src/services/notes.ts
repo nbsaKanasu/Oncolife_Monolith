@@ -16,10 +16,11 @@ export const useFetchNotes = (year: number, month: number) => {
   });
 };
 
-export const saveNewNotes = async (params: { content: string, title: string}) => {
+export const saveNewNotes = async (params: { content: string, title: string, marked_for_doctor?: boolean }) => {
   const body = {
     diary_entry: params.content,
     title: params.title,
+    marked_for_doctor: params.marked_for_doctor ?? false,
   };
   const response = await apiClient.post(API_CONFIG.ENDPOINTS.DIARY.CREATE, body);
   return response.data;
