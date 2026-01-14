@@ -22,21 +22,24 @@ from api.deps import get_patient_db, get_current_user
 from services import DiaryService
 from core.logging import get_logger
 from core.exceptions import NotFoundError, ValidationError
-from core import settings
 
 logger = get_logger(__name__)
 
 router = APIRouter()
 
-# Local dev mode test patient UUID
-LOCAL_DEV_PATIENT_UUID = "11111111-1111-1111-1111-111111111111"
-
 def get_patient_uuid_from_user(current_user) -> str:
-    """Extract patient UUID from authenticated user, with fallback for local dev."""
-    if current_user and hasattr(current_user, 'sub'):
-        return str(current_user.sub)
-    if settings.local_dev_mode:
-        return LOCAL_DEV_PATIENT_UUID
+    """Extract patient UUID from authenticated user.
+    
+    Note: In LOCAL_DEV_MODE, get_current_user already returns the test UUID,
+    so no additional fallback is needed here.
+    """
+    if current_user:
+        # get_current_user returns a dict with 'uuid' key
+        if isinstance(current_user, dict) and 'uuid' in current_user:
+            return str(current_user['uuid'])
+        # For backwards compat - check for .sub attribute
+        if hasattr(current_user, 'sub'):
+            return str(current_user.sub)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated"
