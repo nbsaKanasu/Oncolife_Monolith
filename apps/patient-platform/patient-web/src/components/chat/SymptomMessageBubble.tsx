@@ -548,6 +548,24 @@ export const SymptomMessageBubble: React.FC<SymptomMessageBubbleProps> = ({
       );
     }
 
+    // Default: render options as action buttons (for text messages with options)
+    // This handles cases like "notes saved" with follow-up action buttons
+    if (options.length > 0) {
+      return (
+        <div className="message-options action-options">
+          {options.map((opt: any, index: number) => (
+            <button
+              key={index}
+              className={`option-btn action-btn ${opt.style || 'default'}`}
+              onClick={() => onSummaryAction ? onSummaryAction(opt.value) : handleOptionClick(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
     return null;
   };
 
