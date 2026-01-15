@@ -298,7 +298,7 @@ Run the seed script:
 
 ```bash
 cd apps/patient-platform/patient-api
-python scripts/seed_education.py
+python scripts/seed_education_pdfs.py
 ```
 
 This seeds:

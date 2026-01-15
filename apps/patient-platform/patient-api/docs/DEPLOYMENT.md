@@ -1142,7 +1142,7 @@ echo "Education folder structure created"
 # scripts/upload-education-pdfs.sh
 
 BUCKET_NAME="oncolife-education"
-LOCAL_DOCS_DIR="./education-docs"  # Local directory with PDFs
+LOCAL_DOCS_DIR="./static/education"  # Local directory with PDFs
 
 # Upload symptom-specific documents
 for symptom_dir in $LOCAL_DOCS_DIR/symptoms/*/; do
@@ -1203,7 +1203,7 @@ source venv/bin/activate  # Linux/Mac
 export DATABASE_URL="postgresql://user:password@host:5432/oncolife_patient"
 
 # Run seed script
-python scripts/seed_education.py
+python scripts/seed_education_pdfs.py
 
 echo "Education seed data loaded"
 ```
@@ -1510,7 +1510,7 @@ SELECT * FROM disclaimers WHERE active = true;
 
 2. Re-run seed script if needed:
 ```bash
-python scripts/seed_education.py
+python scripts/seed_education_pdfs.py
 ```
 
 ---

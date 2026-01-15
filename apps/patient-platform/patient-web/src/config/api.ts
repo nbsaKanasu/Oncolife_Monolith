@@ -86,6 +86,19 @@ export const API_CONFIG = {
       SHARE: (id: string) => `/questions/${id}/share`,
     },
     
+    // Education Resources
+    EDUCATION: {
+      TAB: '/education/tab',
+      SEARCH: (query: string) => `/education/search?q=${encodeURIComponent(query)}`,
+      DOCUMENT: (id: string) => `/education/document/${id}`,
+      SYMPTOMS: '/education/symptoms',
+      DISCLAIMER: '/education/disclaimer',
+      DELIVER: '/education/deliver',
+      SUMMARY: '/education/summary',
+      SESSION: '/education/session',
+      SESSION_DETAIL: (id: string) => `/education/session/${id}`,
+    },
+    
     // Notes/Diary
     NOTES: '/diary',
     

@@ -640,6 +640,74 @@ COMMENT ON TABLE audit_logs IS 'HIPAA-compliant access audit logs';
 
 
 -- =============================================================================
+-- EDUCATION TABLES (PATIENT DATABASE)
+-- =============================================================================
+
+-- Education PDFs - Symptom-specific educational content
+CREATE TABLE IF NOT EXISTS education_pdfs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    symptom_code VARCHAR(50) NOT NULL,              -- e.g., 'NAU-203', 'FEV-202'
+    symptom_name VARCHAR(100) NOT NULL,             -- Human-readable name
+    title VARCHAR(255) NOT NULL,                    -- Document title
+    source VARCHAR(100),                            -- Source org (ACS, NCI, Chemocare)
+    file_path VARCHAR(500) NOT NULL,                -- Relative path to PDF
+    summary TEXT,                                   -- Brief content summary
+    keywords TEXT[],                                -- Keywords for search
+    display_order INTEGER NOT NULL DEFAULT 1,       -- Order within symptom
+    is_active BOOLEAN NOT NULL DEFAULT true,        -- Active/inactive toggle
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_education_pdfs_symptom_code ON education_pdfs(symptom_code);
+CREATE INDEX IF NOT EXISTS ix_education_pdfs_symptom_active ON education_pdfs(symptom_code, is_active);
+
+COMMENT ON TABLE education_pdfs IS 'Symptom-specific education PDFs (61 total)';
+COMMENT ON COLUMN education_pdfs.symptom_code IS 'Symptom code matching symptom checker (e.g., NAU-203)';
+COMMENT ON COLUMN education_pdfs.file_path IS 'Relative path: symptoms/nausea/ACS_Nausea.pdf';
+
+-- Education Handbooks - General reference handbooks
+CREATE TABLE IF NOT EXISTS education_handbooks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,                    -- Handbook title
+    description TEXT,                               -- Handbook description
+    file_path VARCHAR(500) NOT NULL,                -- Relative path to PDF
+    handbook_type VARCHAR(50) NOT NULL DEFAULT 'general',  -- general, emergency, medication
+    display_order INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE education_handbooks IS 'General handbooks like Chemo Basics';
+COMMENT ON COLUMN education_handbooks.file_path IS 'Relative path: handbooks/chemo_basics_handbook.pdf';
+
+-- Education Regimen PDFs - Chemotherapy regimen-specific content
+CREATE TABLE IF NOT EXISTS education_regimen_pdfs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    regimen_code VARCHAR(50) NOT NULL,              -- e.g., 'R-CHOP', 'FOLFOX'
+    regimen_name VARCHAR(100) NOT NULL,             -- Human-readable name
+    title VARCHAR(255) NOT NULL,                    -- Document title
+    source VARCHAR(100),                            -- Source organization
+    file_path VARCHAR(500) NOT NULL,                -- Relative path to PDF
+    document_type VARCHAR(50) NOT NULL DEFAULT 'overview',  -- overview, drug_info, side_effects
+    drug_name VARCHAR(100),                         -- Drug name if drug-specific
+    summary TEXT,                                   -- Brief summary
+    display_order INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_education_regimen_pdfs_regimen ON education_regimen_pdfs(regimen_code);
+CREATE INDEX IF NOT EXISTS ix_education_regimen_pdfs_regimen_active ON education_regimen_pdfs(regimen_code, is_active);
+
+COMMENT ON TABLE education_regimen_pdfs IS 'Chemo regimen-specific PDFs (R-CHOP, FOLFOX, etc.)';
+COMMENT ON COLUMN education_regimen_pdfs.regimen_code IS 'Matches patient oncology_profile.chemo_plan_name';
+COMMENT ON COLUMN education_regimen_pdfs.document_type IS 'overview = regimen overview, drug_info = specific drug';
+
+
+-- =============================================================================
 -- DATA MIGRATION - Populate symptom_time_series from existing conversations
 -- =============================================================================
 
@@ -678,6 +746,9 @@ COMMENT ON TABLE audit_logs IS 'HIPAA-compliant access audit logs';
 -- GRANT INSERT ON fax_ingestion_log TO oncolife_app;
 -- GRANT SELECT, INSERT ON ocr_field_confidence TO oncolife_app;
 -- GRANT SELECT ON ocr_confidence_thresholds TO oncolife_app;
+-- GRANT SELECT ON education_pdfs TO oncolife_app;
+-- GRANT SELECT ON education_handbooks TO oncolife_app;
+-- GRANT SELECT ON education_regimen_pdfs TO oncolife_app;
 
 -- Grant permissions for DOCTOR database
 -- GRANT SELECT, INSERT ON symptom_time_series TO oncolife_app;
@@ -702,6 +773,14 @@ COMMENT ON TABLE audit_logs IS 'HIPAA-compliant access audit logs';
 -- \dt+ fax_ingestion_log
 -- \dt+ ocr_field_confidence
 -- \dt+ ocr_confidence_thresholds
+-- \dt+ education_pdfs
+-- \dt+ education_handbooks
+-- \dt+ education_regimen_pdfs
+
+-- Verify education content counts:
+-- SELECT COUNT(*) as symptom_pdfs FROM education_pdfs WHERE is_active = true;
+-- SELECT COUNT(*) as handbooks FROM education_handbooks WHERE is_active = true;
+-- SELECT COUNT(*) as regimen_pdfs FROM education_regimen_pdfs WHERE is_active = true;
 
 -- DOCTOR DATABASE:
 -- \dt+ symptom_time_series
