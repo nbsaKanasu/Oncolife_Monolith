@@ -265,6 +265,65 @@ alembic upgrade head
 
 ---
 
+## Step 6b: Seed Education Content (Required)
+
+After running migrations, seed the education metadata for patient education PDFs:
+
+### Education PDFs Structure
+
+The `full-deploy.sh` script automatically uploads PDFs to S3 during deployment. The S3 bucket structure is:
+
+```
+s3://oncolife-education-{ACCOUNT_ID}/
+├── symptoms/           # Symptom-specific PDFs (61 files)
+│   ├── nausea/
+│   ├── fever/
+│   ├── diarrhea/
+│   └── ...
+├── handbooks/          # General handbooks (1 file)
+│   └── chemo_basics_handbook.pdf
+└── regimens/           # Chemo regimen PDFs (27 files)
+    ├── r_chop/
+    ├── folfox/
+    └── ...
+```
+
+### Seed Education Metadata
+
+After migrations, run the seed script to populate education metadata:
+
+```bash
+# From project root
+cd apps/patient-platform/patient-api
+
+# Set database connection
+export DATABASE_URL=postgresql://oncolife_admin:PASSWORD@RDS_ENDPOINT:5432/oncolife_patient
+
+# Run seed script
+python scripts/seed_education_pdfs.py
+```
+
+**What gets seeded:**
+| Table | Records | Content |
+|-------|---------|---------|
+| `education_pdfs` | 61 | Symptom-specific PDFs with summaries |
+| `education_handbooks` | 1 | Chemo Basics Handbook |
+| `education_regimen_pdfs` | 27 | Chemotherapy regimen drug info |
+
+### Manual Education Upload (If Needed)
+
+If education PDFs weren't uploaded during `full-deploy.sh`:
+
+```bash
+# Create bucket (if not exists)
+./scripts/aws/create-education-bucket.sh
+
+# Upload PDFs
+./scripts/aws/upload-education-pdfs.sh
+```
+
+---
+
 ## What Gets Created
 
 The script automatically creates all these AWS resources:

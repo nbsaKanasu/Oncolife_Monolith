@@ -45,7 +45,13 @@ sleep 30
 # 4. Verify everything is running
 curl http://localhost:8000/health   # Patient API
 curl http://localhost:8001/health   # Doctor API
+
+# 5. (Optional) Seed education PDFs for local testing
+docker exec -it oncolife-patient-api python scripts/seed_education_pdfs.py
 ```
+
+> **Note**: Education PDFs are served locally via FastAPI StaticFiles at `/static/education/`. 
+> On AWS, they're served via S3 pre-signed URLs.
 
 ### Access Points
 
@@ -629,8 +635,38 @@ export DATABASE_URL=postgresql://user:pass@host:5432/database
 | `fax_ingestion_log` | HIPAA audit trail for fax reception |
 | `ocr_field_confidence` | Per-field OCR accuracy scores |
 | `ocr_confidence_thresholds` | Auto-accept/review thresholds |
+| `education_pdfs` | Symptom-specific education documents |
+| `education_handbooks` | General handbooks (Chemo Basics) |
+| `education_regimen_pdfs` | Chemo regimen-specific drug info |
 
 See `scripts/db/schema_patient_diary_doctor_dashboard.sql` for complete schema.
+
+### Education Content Setup
+
+Education PDFs are stored and served differently in local vs AWS:
+
+| Environment | Storage | Access |
+|-------------|---------|--------|
+| **Local Dev** | `patient-api/static/education/` | FastAPI StaticFiles at `/static/` |
+| **AWS Prod** | S3 `oncolife-education-{ACCOUNT}` | Pre-signed URLs (30 min expiry) |
+
+**Seed education metadata locally:**
+```bash
+# Via Docker
+docker exec -it oncolife-patient-api python scripts/seed_education_pdfs.py
+
+# Or directly (if running locally)
+cd apps/patient-platform/patient-api
+python scripts/seed_education_pdfs.py
+```
+
+**Education folder structure:**
+```
+patient-api/static/education/
+├── symptoms/           # 61 symptom PDFs (Nausea, Fever, etc.)
+├── handbooks/          # 1 general handbook
+└── regimens/           # 27 chemo regimen PDFs (R-CHOP, FOLFOX, etc.)
+```
 
 ### Direct Table Creation (Development)
 

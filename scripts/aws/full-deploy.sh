@@ -833,6 +833,66 @@ create_s3_buckets() {
         
         log_success "Bucket configured: $bucket"
     done
+    
+    # Create folder structure for education bucket
+    EDUCATION_BUCKET="$PROJECT_NAME-education-$ACCOUNT_ID"
+    log_info "Creating education bucket folder structure..."
+    aws s3api put-object --bucket "$EDUCATION_BUCKET" --key "symptoms/" > /dev/null 2>&1 || true
+    aws s3api put-object --bucket "$EDUCATION_BUCKET" --key "handbooks/" > /dev/null 2>&1 || true
+    aws s3api put-object --bucket "$EDUCATION_BUCKET" --key "regimens/" > /dev/null 2>&1 || true
+    log_success "Education bucket folder structure created"
+}
+
+# =============================================================================
+# STEP 6b: UPLOAD EDUCATION PDFs TO S3
+# =============================================================================
+
+upload_education_pdfs() {
+    log_step "STEP 6b: Uploading Education PDFs to S3"
+    
+    EDUCATION_BUCKET="$PROJECT_NAME-education-$ACCOUNT_ID"
+    LOCAL_EDUCATION_PATH="apps/patient-platform/patient-api/static/education"
+    
+    if [ ! -d "$LOCAL_EDUCATION_PATH" ]; then
+        log_warning "Education PDF folder not found: $LOCAL_EDUCATION_PATH"
+        log_info "Skipping education PDF upload - you can run upload-education-pdfs.sh later"
+        return
+    fi
+    
+    # Count PDFs
+    PDF_COUNT=$(find "$LOCAL_EDUCATION_PATH" -name "*.pdf" 2>/dev/null | wc -l)
+    if [ "$PDF_COUNT" -eq 0 ]; then
+        log_warning "No PDF files found in $LOCAL_EDUCATION_PATH"
+        return
+    fi
+    
+    log_info "Found $PDF_COUNT PDF files to upload..."
+    
+    # Upload symptoms
+    if [ -d "$LOCAL_EDUCATION_PATH/symptoms" ]; then
+        log_info "Uploading symptom education PDFs..."
+        aws s3 sync "$LOCAL_EDUCATION_PATH/symptoms/" "s3://$EDUCATION_BUCKET/symptoms/" \
+            --content-type "application/pdf" > /dev/null 2>&1
+        log_success "Symptom PDFs uploaded"
+    fi
+    
+    # Upload handbooks
+    if [ -d "$LOCAL_EDUCATION_PATH/handbooks" ]; then
+        log_info "Uploading handbook PDFs..."
+        aws s3 sync "$LOCAL_EDUCATION_PATH/handbooks/" "s3://$EDUCATION_BUCKET/handbooks/" \
+            --content-type "application/pdf" > /dev/null 2>&1
+        log_success "Handbook PDFs uploaded"
+    fi
+    
+    # Upload regimens
+    if [ -d "$LOCAL_EDUCATION_PATH/regimens" ]; then
+        log_info "Uploading regimen education PDFs..."
+        aws s3 sync "$LOCAL_EDUCATION_PATH/regimens/" "s3://$EDUCATION_BUCKET/regimens/" \
+            --content-type "application/pdf" > /dev/null 2>&1
+        log_success "Regimen PDFs uploaded"
+    fi
+    
+    log_success "Education PDFs uploaded to s3://$EDUCATION_BUCKET/"
 }
 
 # =============================================================================
@@ -1470,6 +1530,7 @@ main() {
     create_rds_database
     create_cognito_user_pool
     create_s3_buckets
+    upload_education_pdfs
     create_secrets
     create_ecr_repositories
     create_cloudwatch_log_groups
@@ -1522,9 +1583,14 @@ EOFCONFIG
     echo -e "     ${YELLOW}CREATE DATABASE oncolife_patient;${NC}"
     echo -e "     ${YELLOW}CREATE DATABASE oncolife_doctor;${NC}"
     echo ""
-    echo -e "  2. Run migrations from a bastion host or local with VPN"
+    echo -e "  2. Run migrations from a bastion host or ECS task:"
+    echo -e "     ${YELLOW}cd apps/patient-platform/patient-api${NC}"
+    echo -e "     ${YELLOW}alembic upgrade head${NC}"
     echo ""
-    echo -e "  3. (Optional) Set up custom domains with Route 53 and ACM"
+    echo -e "  3. Seed education metadata (after migrations):"
+    echo -e "     ${YELLOW}python apps/patient-platform/patient-api/scripts/seed_education_pdfs.py${NC}"
+    echo ""
+    echo -e "  4. (Optional) Set up custom domains with Route 53 and ACM"
     echo ""
     echo -e "${CYAN}Configuration saved to: $CONFIG_FILE${NC}"
     echo ""

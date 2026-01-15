@@ -1192,7 +1192,9 @@ print('Tables created!')
 ### Step 4.4: Seed Education Data
 
 ```bash
-python scripts/seed_education.py
+# Seed education PDF metadata (run from patient-api directory)
+cd apps/patient-platform/patient-api
+python scripts/seed_education_pdfs.py
 ```
 
 ---

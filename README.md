@@ -299,15 +299,20 @@ aws ecs update-service --cluster oncolife-production --service doctor-api-servic
 
 ```bash
 # 1. Create S3 bucket for education content
-./scripts/create-education-bucket.sh
+./scripts/aws/create-education-bucket.sh
 
-# 2. Upload clinician-approved PDFs
-./scripts/upload-education-pdfs.sh
+# 2. Upload clinician-approved PDFs to S3
+./scripts/aws/upload-education-pdfs.sh
 
 # 3. Seed database with education metadata
 cd apps/patient-platform/patient-api
-python scripts/seed_education.py
+python scripts/seed_education_pdfs.py
 ```
+
+**Education Content Structure:**
+- `static/education/symptoms/` - 61 symptom-specific PDFs
+- `static/education/handbooks/` - General handbooks (Chemo Basics)
+- `static/education/regimens/` - 27 chemotherapy regimen PDFs
 
 ---
 

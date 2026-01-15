@@ -332,11 +332,20 @@ class EducationService:
         expiry_minutes: int = None,
     ) -> str:
         """
-        Generate pre-signed URL for secure S3 access.
+        Generate URL for education document access.
         
-        URLs are time-limited (default 30 minutes).
-        HTTPS only.
+        In development mode: Returns local static file URL
+        In production: Returns pre-signed S3 URL (time-limited, default 30 minutes)
         """
+        # Check if we're in local development mode
+        if settings.is_development or settings.local_dev_mode:
+            # Return local static file URL
+            # Files are served via FastAPI StaticFiles mount at /static/
+            local_url = f"/static/education/{s3_key}"
+            logger.debug(f"Using local static URL: {local_url}")
+            return local_url
+        
+        # Production: Generate S3 pre-signed URL
         expiry_minutes = expiry_minutes or self.URL_EXPIRY_MINUTES
         
         try:
