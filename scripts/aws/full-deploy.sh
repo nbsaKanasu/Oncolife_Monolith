@@ -1265,7 +1265,10 @@ register_task_definitions() {
                 {"name": "ENVIRONMENT", "value": "$ENVIRONMENT"},
                 {"name": "DEBUG", "value": "false"},
                 {"name": "LOG_LEVEL", "value": "INFO"},
-                {"name": "AWS_REGION", "value": "$AWS_REGION"}
+                {"name": "AWS_REGION", "value": "$AWS_REGION"},
+                {"name": "S3_EDUCATION_BUCKET", "value": "$PROJECT_NAME-education-$ACCOUNT_ID"},
+                {"name": "S3_REFERRAL_BUCKET", "value": "$PROJECT_NAME-referrals-$ACCOUNT_ID"},
+                {"name": "LOCAL_DEV_MODE", "value": "false"}
             ],
             "secrets": [
                 {"name": "PATIENT_DB_HOST", "valueFrom": "$DB_SECRET_ARN:host::"},
@@ -1322,7 +1325,10 @@ EOFPATIENT
                 {"name": "ENVIRONMENT", "value": "$ENVIRONMENT"},
                 {"name": "DEBUG", "value": "false"},
                 {"name": "LOG_LEVEL", "value": "INFO"},
-                {"name": "AWS_REGION", "value": "$AWS_REGION"}
+                {"name": "AWS_REGION", "value": "$AWS_REGION"},
+                {"name": "S3_EDUCATION_BUCKET", "value": "$PROJECT_NAME-education-$ACCOUNT_ID"},
+                {"name": "S3_REFERRAL_BUCKET", "value": "$PROJECT_NAME-referrals-$ACCOUNT_ID"},
+                {"name": "LOCAL_DEV_MODE", "value": "false"}
             ],
             "secrets": [
                 {"name": "DOCTOR_DB_HOST", "valueFrom": "$DB_SECRET_ARN:host::"},
@@ -1560,7 +1566,16 @@ main() {
     "rds_endpoint": "$RDS_ENDPOINT",
     "cognito_pool_id": "$COGNITO_POOL_ID",
     "patient_alb_dns": "$PATIENT_ALB_DNS",
-    "doctor_alb_dns": "$DOCTOR_ALB_DNS"
+    "doctor_alb_dns": "$DOCTOR_ALB_DNS",
+    "s3_buckets": {
+        "education": "$PROJECT_NAME-education-$ACCOUNT_ID",
+        "referrals": "$PROJECT_NAME-referrals-$ACCOUNT_ID"
+    },
+    "environment_variables": {
+        "S3_EDUCATION_BUCKET": "$PROJECT_NAME-education-$ACCOUNT_ID",
+        "S3_REFERRAL_BUCKET": "$PROJECT_NAME-referrals-$ACCOUNT_ID",
+        "AWS_REGION": "$AWS_REGION"
+    }
 }
 EOFCONFIG
     
