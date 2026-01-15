@@ -81,44 +81,8 @@ class ConversationDetailSchema(BaseModel):
 # =============================================================================
 # Endpoints
 # =============================================================================
-
-@router.get(
-    "/{year}/{month}",
-    response_model=List[ConversationSummarySchema],
-    summary="Get summaries by month",
-    description="Get conversation summaries for a specific month."
-)
-async def get_summaries_by_month(
-    year: int,
-    month: int,
-    db: Session = Depends(get_patient_db),
-    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
-    timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
-):
-    """
-    Get all conversation summaries for a specific month and year.
-    
-    Only returns conversations that have been processed
-    (have a bulleted_summary).
-    """
-    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
-    
-    if month < 1 or month > 12:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Month must be between 1 and 12",
-        )
-    
-    logger.info(f"Get summaries by month: patient={patient_uuid} {year}/{month}")
-    
-    summary_service = SummaryService(db)
-    
-    try:
-        summaries = summary_service.get_by_month(UUID(patient_uuid), year, month, timezone)
-        return [ConversationSummarySchema(**s) for s in summaries]
-    except ValidationError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
+# NOTE: Route order matters! Static routes (/detail, /recent, /count) must be
+# defined BEFORE dynamic routes (/{year}/{month}) to avoid path conflicts.
 
 @router.get(
     "/detail/{conversation_uuid}",
@@ -191,6 +155,44 @@ async def count_conversations(
     count = summary_service.count_conversations(UUID(patient_uuid))
     
     return {"count": count}
+
+
+@router.get(
+    "/{year}/{month}",
+    response_model=List[ConversationSummarySchema],
+    summary="Get summaries by month",
+    description="Get conversation summaries for a specific month."
+)
+async def get_summaries_by_month(
+    year: int,
+    month: int,
+    db: Session = Depends(get_patient_db),
+    patient_uuid: Optional[str] = Query(default=None, description="Patient UUID"),
+    timezone: str = Query(default="America/Los_Angeles", description="User's timezone"),
+):
+    """
+    Get all conversation summaries for a specific month and year.
+    
+    Only returns conversations that have been processed
+    (have a bulleted_summary).
+    """
+    patient_uuid = get_patient_uuid_with_fallback(patient_uuid)
+    
+    if month < 1 or month > 12:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Month must be between 1 and 12",
+        )
+    
+    logger.info(f"Get summaries by month: patient={patient_uuid} {year}/{month}")
+    
+    summary_service = SummaryService(db)
+    
+    try:
+        summaries = summary_service.get_by_month(UUID(patient_uuid), year, month, timezone)
+        return [ConversationSummarySchema(**s) for s in summaries]
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 
