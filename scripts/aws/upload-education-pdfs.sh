@@ -23,7 +23,7 @@ if [ -z "$ACCOUNT_ID" ]; then
 fi
 
 BUCKET_NAME="oncolife-education-${ACCOUNT_ID}"
-LOCAL_PATH="apps/patient-platform/patient-api/model_inputs/education"
+LOCAL_PATH="apps/patient-platform/patient-api/static/education"
 
 echo "=============================================="
 echo "Uploading Education Content to S3"
@@ -45,13 +45,13 @@ if [ ! -d "$LOCAL_PATH" ]; then
     echo "Creating sample directory structure..."
     
     mkdir -p "$LOCAL_PATH/symptoms"
-    mkdir -p "$LOCAL_PATH/care-team"
-    mkdir -p "$LOCAL_PATH/handouts"
+    mkdir -p "$LOCAL_PATH/handbooks"
+    mkdir -p "$LOCAL_PATH/regimens"
     
     echo "Please add your clinician-approved PDFs to:"
     echo "  $LOCAL_PATH/symptoms/     - Symptom-specific education"
-    echo "  $LOCAL_PATH/care-team/    - Care team handouts"
-    echo "  $LOCAL_PATH/handouts/     - General handouts"
+    echo "  $LOCAL_PATH/handbooks/    - General handbooks (e.g., Chemo Basics)"
+    echo "  $LOCAL_PATH/regimens/     - Chemo regimen-specific education"
     exit 0
 fi
 
@@ -66,26 +66,26 @@ else
     echo "  No symptom files found in $LOCAL_PATH/symptoms/"
 fi
 
-# Upload care team files
-if [ -d "$LOCAL_PATH/care-team" ] && [ "$(ls -A $LOCAL_PATH/care-team 2>/dev/null)" ]; then
-    echo "Uploading care team files..."
-    aws s3 sync "$LOCAL_PATH/care-team/" "s3://$BUCKET_NAME/care-team/" \
+# Upload handbooks
+if [ -d "$LOCAL_PATH/handbooks" ] && [ "$(ls -A $LOCAL_PATH/handbooks 2>/dev/null)" ]; then
+    echo "Uploading handbook files..."
+    aws s3 sync "$LOCAL_PATH/handbooks/" "s3://$BUCKET_NAME/handbooks/" \
         --content-type "application/pdf" \
         --metadata "uploaded-by=deploy-script,upload-date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "  Care team files uploaded."
+    echo "  Handbook files uploaded."
 else
-    echo "  No care team files found in $LOCAL_PATH/care-team/"
+    echo "  No handbook files found in $LOCAL_PATH/handbooks/"
 fi
 
-# Upload general handouts
-if [ -d "$LOCAL_PATH/handouts" ] && [ "$(ls -A $LOCAL_PATH/handouts 2>/dev/null)" ]; then
-    echo "Uploading handout files..."
-    aws s3 sync "$LOCAL_PATH/handouts/" "s3://$BUCKET_NAME/handouts/" \
+# Upload regimen education files
+if [ -d "$LOCAL_PATH/regimens" ] && [ "$(ls -A $LOCAL_PATH/regimens 2>/dev/null)" ]; then
+    echo "Uploading regimen education files..."
+    aws s3 sync "$LOCAL_PATH/regimens/" "s3://$BUCKET_NAME/regimens/" \
         --content-type "application/pdf" \
         --metadata "uploaded-by=deploy-script,upload-date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "  Handout files uploaded."
+    echo "  Regimen files uploaded."
 else
-    echo "  No handout files found in $LOCAL_PATH/handouts/"
+    echo "  No regimen files found in $LOCAL_PATH/regimens/"
 fi
 
 # List uploaded files

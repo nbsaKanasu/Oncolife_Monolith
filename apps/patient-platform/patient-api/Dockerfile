@@ -42,6 +42,13 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy application code
 COPY src/ ./
 
+# Copy static files (education PDFs, etc.)
+COPY static/ ./static/
+
+# Copy alembic for migrations
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
+
 # Create non-root user for security
 RUN groupadd -r appgroup && \
     useradd -r -g appgroup -d /app -s /sbin/nologin appuser && \

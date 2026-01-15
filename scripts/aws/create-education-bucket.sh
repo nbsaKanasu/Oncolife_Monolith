@@ -123,8 +123,8 @@ echo -e "${GREEN}[OK] Public access blocked${NC}"
 # Create folder structure
 echo -e "${CYAN}Creating folder structure...${NC}"
 aws s3api put-object --bucket "$BUCKET_NAME" --key "symptoms/" > /dev/null
-aws s3api put-object --bucket "$BUCKET_NAME" --key "care-team/" > /dev/null
-aws s3api put-object --bucket "$BUCKET_NAME" --key "handouts/" > /dev/null
+aws s3api put-object --bucket "$BUCKET_NAME" --key "handbooks/" > /dev/null
+aws s3api put-object --bucket "$BUCKET_NAME" --key "regimens/" > /dev/null
 echo -e "${GREEN}[OK] Folder structure created${NC}"
 
 # Set lifecycle policy (for cost management)

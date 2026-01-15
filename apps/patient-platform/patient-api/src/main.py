@@ -41,8 +41,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from contextlib import asynccontextmanager
+import os
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 # Core infrastructure
 from core import settings, get_logger
@@ -155,6 +159,22 @@ def create_application() -> FastAPI:
         api_v1_router,
         prefix=settings.api_v1_prefix
     )
+    
+    # =========================================================================
+    # STATIC FILES (Education PDFs for local development)
+    # =========================================================================
+    # 
+    # In production, education PDFs are served from S3 with pre-signed URLs.
+    # For local development, we serve them directly from the static folder.
+    #
+    static_path = Path(__file__).parent / "static"
+    if static_path.exists() and settings.is_development:
+        app.mount(
+            "/static",
+            StaticFiles(directory=str(static_path)),
+            name="static"
+        )
+        logger.info(f"Static files mounted from: {static_path}")
     
     # =========================================================================
     # LEGACY ROUTES - REMOVED

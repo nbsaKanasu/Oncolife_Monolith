@@ -84,6 +84,8 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/patient-platform/patient-api/src:/app:cached
+      - ./apps/patient-platform/patient-api/static:/app/static:cached
+      - ./apps/patient-platform/patient-api/alembic:/app/alembic:cached
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
