@@ -93,7 +93,7 @@ async def list_questions(
     By default returns all questions (private and shared).
     Use `shared_only=true` to filter to only shared questions.
     """
-    patient_uuid = current_user.sub
+    patient_uuid = current_user["uuid"]
     logger.info(f"Listing questions for patient {patient_uuid}")
     
     query = db.query(PatientQuestion).filter(
@@ -146,7 +146,7 @@ async def create_question(
     Questions are private by default. Set `share_with_physician=true`
     to make the question visible in the doctor portal.
     """
-    patient_uuid = current_user.sub
+    patient_uuid = current_user["uuid"]
     logger.info(f"Creating question for patient {patient_uuid}")
     
     question = PatientQuestion(
@@ -192,7 +192,7 @@ async def update_question(
     Can update the question text, category, sharing status, or mark as answered.
     Only the patient who created the question can update it.
     """
-    patient_uuid = current_user.sub
+    patient_uuid = current_user["uuid"]
     logger.info(f"Updating question {question_id} for patient {patient_uuid}")
     
     question = db.query(PatientQuestion).filter(
@@ -250,7 +250,7 @@ async def delete_question(
     
     Only the patient who created the question can delete it.
     """
-    patient_uuid = current_user.sub
+    patient_uuid = current_user["uuid"]
     logger.info(f"Deleting question {question_id} for patient {patient_uuid}")
     
     question = db.query(PatientQuestion).filter(
@@ -290,7 +290,7 @@ async def toggle_share_question(
     
     This is a convenience endpoint for quickly changing the share status.
     """
-    patient_uuid = current_user.sub
+    patient_uuid = current_user["uuid"]
     logger.info(f"Toggling share for question {question_id} to {share}")
     
     question = db.query(PatientQuestion).filter(

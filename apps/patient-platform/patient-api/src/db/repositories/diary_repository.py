@@ -61,12 +61,12 @@ class DiaryRepository(BaseRepository[DiaryEntry]):
         Returns:
             The created DiaryEntry instance
         """
-        return self.create(
-            patient_uuid=patient_uuid,
-            diary_entry=diary_entry,
-            title=title,
-            marked_for_doctor=marked_for_doctor,
-        )
+        return self.create({
+            "patient_uuid": patient_uuid,
+            "diary_entry": diary_entry,
+            "title": title,
+            "marked_for_doctor": marked_for_doctor,
+        })
     
     # =========================================================================
     # Read Operations
