@@ -366,6 +366,89 @@ async def get_education_tab(
 
 
 @router.get(
+    "/pdfs",
+    summary="Get all education PDFs",
+    description="Simple endpoint to get all available education PDFs.",
+)
+async def get_education_pdfs(
+    db: Session = Depends(get_patient_db),
+    limit: int = Query(default=50, le=100),
+):
+    """
+    Get all education PDFs.
+    
+    This is a simple endpoint that returns all active education PDFs
+    without requiring symptom sessions. For local development and testing.
+    """
+    from sqlalchemy import text
+    
+    try:
+        # Query the education_pdfs table directly
+        result = db.execute(
+            text("""
+                SELECT id, symptom_code, symptom_name, title, source, 
+                       file_path, summary, keywords, display_order
+                FROM education_pdfs 
+                WHERE is_active = true 
+                ORDER BY symptom_name, display_order
+                LIMIT :limit
+            """),
+            {"limit": limit}
+        ).fetchall()
+        
+        pdfs = []
+        for row in result:
+            pdfs.append({
+                "id": str(row[0]),
+                "symptom_code": row[1],
+                "symptom_name": row[2],
+                "title": row[3],
+                "source": row[4],
+                "file_path": row[5],
+                "pdf_url": f"/static/education/{row[5]}",
+                "summary": row[6],
+                "keywords": row[7] or [],
+            })
+        
+        # Also get handbooks
+        handbooks_result = db.execute(
+            text("""
+                SELECT id, title, description, file_path, handbook_type
+                FROM education_handbooks
+                WHERE is_active = true
+                ORDER BY display_order
+            """)
+        ).fetchall()
+        
+        handbooks = []
+        for row in handbooks_result:
+            handbooks.append({
+                "id": str(row[0]),
+                "title": row[1],
+                "description": row[2],
+                "file_path": row[3],
+                "pdf_url": f"/static/education/{row[3]}",
+                "handbook_type": row[4],
+            })
+        
+        return {
+            "symptom_pdfs": pdfs,
+            "handbooks": handbooks,
+            "total_pdfs": len(pdfs),
+            "total_handbooks": len(handbooks),
+        }
+    except Exception as e:
+        logger.error(f"Error fetching education PDFs: {e}")
+        # Return empty response if tables don't exist
+        return {
+            "symptom_pdfs": [],
+            "handbooks": [],
+            "total_pdfs": 0,
+            "total_handbooks": 0,
+        }
+
+
+@router.get(
     "/search",
     response_model=List[EducationDocument],
     summary="Search education documents",

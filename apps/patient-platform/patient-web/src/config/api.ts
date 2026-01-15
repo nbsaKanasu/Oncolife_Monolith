@@ -89,6 +89,7 @@ export const API_CONFIG = {
     // Education Resources
     EDUCATION: {
       TAB: '/education/tab',
+      PDFS: '/education/pdfs',  // Simple endpoint for getting all PDFs
       SEARCH: (query: string) => `/education/search?q=${encodeURIComponent(query)}`,
       DOCUMENT: (id: string) => `/education/document/${id}`,
       SYMPTOMS: '/education/symptoms',

@@ -3,9 +3,10 @@
  * Lovable-inspired design with Current Symptoms sidebar
  */
 
-import React, { useState } from 'react';
-import { useTheme, useMediaQuery, Drawer, IconButton } from '@mui/material';
+import React, { useState, useMemo } from 'react';
+import { useTheme, useMediaQuery, Drawer, IconButton, CircularProgress } from '@mui/material';
 import styled, { css } from 'styled-components';
+import { useEducationPdfs, openEducationPdf } from '../../services/education';
 import { 
   BookOpen, 
   FileText, 
@@ -665,11 +666,36 @@ const EducationPage: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Current Symptoms');
+  const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [symptoms, setSymptoms] = useState<Symptom[]>(initialSymptoms);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Fetch real education data from API
+  const { data: educationData, isLoading } = useEducationPdfs();
+  
+  // Transform API data into UI format
+  const apiResources = useMemo(() => {
+    if (!educationData?.symptom_pdfs) return [];
+    
+    return educationData.symptom_pdfs.map((pdf, index) => ({
+      id: pdf.id,
+      title: pdf.title,
+      description: pdf.summary || `Learn about managing ${pdf.symptom_name.toLowerCase()} during treatment.`,
+      category: 'Symptom Management',
+      readTime: 5 + (index % 5), // Estimate based on index
+      priority: index < 3 ? 'High' : 'Medium',
+      isNew: index === 0,
+      color: colors.symptom,
+      pdfUrl: pdf.pdf_url,
+      source: pdf.source,
+      symptomName: pdf.symptom_name,
+    }));
+  }, [educationData]);
+  
+  // Use API data if available, otherwise fall back to static resources
+  const displayResources = apiResources.length > 0 ? apiResources : resources;
 
-  const filteredResources = resources.filter(resource => {
+  const filteredResources = displayResources.filter(resource => {
     const matchesSearch = resource.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           resource.description.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -814,7 +840,12 @@ const EducationPage: React.FC = () => {
           </FiltersRow>
 
           {/* Resource Cards */}
-          {filteredResources.map(resource => (
+          {isLoading ? (
+            <div style={{ textAlign: 'center', padding: '3rem' }}>
+              <CircularProgress size={40} />
+              <p style={{ marginTop: '1rem', color: colors.muted }}>Loading education resources...</p>
+            </div>
+          ) : filteredResources.map(resource => (
             <ResourceCard key={resource.id} $accentColor={resource.color}>
               <CardTitleRow>
                 <CardTitle>{resource.title}</CardTitle>
@@ -824,18 +855,20 @@ const EducationPage: React.FC = () => {
               <CardDescription>{resource.description}</CardDescription>
               
               <CardMeta>
-                <MetaBadge>{resource.category}</MetaBadge>
+                <MetaBadge>{resource.symptomName || resource.category}</MetaBadge>
                 <MetaItem>
                   <Clock /> {resource.readTime} min read
                 </MetaItem>
-                <MetaItem>
-                  {getPriorityIcon(resource.priority)} {resource.priority} Priority
-                </MetaItem>
+                {resource.source && (
+                  <MetaItem>
+                    <FileText /> {resource.source}
+                  </MetaItem>
+                )}
               </CardMeta>
               
               <CardActions>
-                <ReadButton>
-                  <BookOpen /> Read Now
+                <ReadButton onClick={() => resource.pdfUrl && openEducationPdf(resource.pdfUrl)}>
+                  <BookOpen /> {resource.pdfUrl ? 'Read PDF' : 'Read Now'}
                 </ReadButton>
                 <SaveButton>Save for Later</SaveButton>
               </CardActions>

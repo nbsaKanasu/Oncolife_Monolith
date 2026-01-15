@@ -52,7 +52,48 @@ export interface EducationDisclaimer {
   version: string;
 }
 
+// ============= Types for PDFs Endpoint =============
+
+export interface EducationPdfItem {
+  id: string;
+  symptom_code: string;
+  symptom_name: string;
+  title: string;
+  source: string;
+  file_path: string;
+  pdf_url: string;
+  summary: string;
+  keywords: string[];
+}
+
+export interface EducationHandbookItem {
+  id: string;
+  title: string;
+  description: string;
+  file_path: string;
+  pdf_url: string;
+  handbook_type: string;
+}
+
+export interface EducationPdfsResponse {
+  symptom_pdfs: EducationPdfItem[];
+  handbooks: EducationHandbookItem[];
+  total_pdfs: number;
+  total_handbooks: number;
+}
+
 // ============= API Functions =============
+
+/**
+ * Fetch all education PDFs (simple endpoint).
+ * Works without requiring symptom sessions.
+ */
+const fetchEducationPdfs = async (): Promise<EducationPdfsResponse> => {
+  const response = await apiClient.get<EducationPdfsResponse>(
+    API_CONFIG.ENDPOINTS.EDUCATION.PDFS
+  );
+  return response.data;
+};
 
 /**
  * Fetch education tab content for the current patient.
@@ -106,6 +147,21 @@ const fetchEducationDisclaimer = async (): Promise<EducationDisclaimer> => {
 };
 
 // ============= React Query Hooks =============
+
+/**
+ * Hook to fetch all education PDFs (simple endpoint).
+ * This works without requiring symptom sessions.
+ * 
+ * @example
+ * const { data, isLoading, error } = useEducationPdfs();
+ */
+export const useEducationPdfs = () => {
+  return useQuery({
+    queryKey: ['education', 'pdfs'],
+    queryFn: fetchEducationPdfs,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+};
 
 /**
  * Hook to fetch education tab content.
