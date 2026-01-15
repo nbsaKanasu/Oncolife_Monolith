@@ -377,12 +377,19 @@ async def get_education_pdfs(
     """
     Get all education PDFs.
     
-    This is a simple endpoint that returns all active education PDFs
-    without requiring symptom sessions. For local development and testing.
+    This endpoint returns all active education PDFs with proper URLs:
+    - Development: Local static file URLs (/static/education/...)
+    - Production: S3 pre-signed URLs (time-limited, secure)
+    
+    Works without requiring symptom sessions.
     """
     from sqlalchemy import text
     
     try:
+        # Create service instance for URL generation
+        # This handles both local (static files) and AWS (S3 pre-signed URLs)
+        service = EducationService(db)
+        
         # Query the education_pdfs table directly
         result = db.execute(
             text("""
@@ -398,14 +405,23 @@ async def get_education_pdfs(
         
         pdfs = []
         for row in result:
+            file_path = row[5]
+            # Generate proper URL based on environment (local or AWS S3)
+            try:
+                pdf_url = service._generate_presigned_url(file_path)
+            except Exception as url_error:
+                logger.warning(f"Failed to generate URL for {file_path}: {url_error}")
+                # Fallback to local static path
+                pdf_url = f"/static/education/{file_path}"
+            
             pdfs.append({
                 "id": str(row[0]),
                 "symptom_code": row[1],
                 "symptom_name": row[2],
                 "title": row[3],
                 "source": row[4],
-                "file_path": row[5],
-                "pdf_url": f"/static/education/{row[5]}",
+                "file_path": file_path,
+                "pdf_url": pdf_url,
                 "summary": row[6],
                 "keywords": row[7] or [],
             })
@@ -422,12 +438,21 @@ async def get_education_pdfs(
         
         handbooks = []
         for row in handbooks_result:
+            file_path = row[3]
+            # Generate proper URL based on environment (local or AWS S3)
+            try:
+                pdf_url = service._generate_presigned_url(file_path)
+            except Exception as url_error:
+                logger.warning(f"Failed to generate URL for handbook {file_path}: {url_error}")
+                # Fallback to local static path
+                pdf_url = f"/static/education/{file_path}"
+            
             handbooks.append({
                 "id": str(row[0]),
                 "title": row[1],
                 "description": row[2],
-                "file_path": row[3],
-                "pdf_url": f"/static/education/{row[3]}",
+                "file_path": file_path,
+                "pdf_url": pdf_url,
                 "handbook_type": row[4],
             })
         
