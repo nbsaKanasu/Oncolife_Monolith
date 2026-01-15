@@ -17,6 +17,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           ws: true,
+        },
+        '/static': {
+          target: env.VITE_GATEWAY_URL || 'http://localhost:8000',
+          changeOrigin: true,
+          secure: false,
         }
       }
     },

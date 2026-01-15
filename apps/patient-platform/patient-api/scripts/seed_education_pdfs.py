@@ -705,6 +705,15 @@ REGIMEN_PDFS = [
     {
         "regimen_code": "R-CHOP",
         "regimen_name": "R-CHOP (Non-Hodgkin Lymphoma)",
+        "title": "Cyclophosphamide Patient Guide - OncoLink",
+        "source": "OncoLink",
+        "file_path": "regimens/r_chop/C_OL_2.pdf",
+        "document_type": "drug_info",
+        "drug_name": "Cyclophosphamide",
+    },
+    {
+        "regimen_code": "R-CHOP",
+        "regimen_name": "R-CHOP (Non-Hodgkin Lymphoma)",
         "title": "Doxorubicin - OncoLink",
         "source": "OncoLink",
         "file_path": "regimens/r_chop/D_OL.pdf",
