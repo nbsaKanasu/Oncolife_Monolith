@@ -3,6 +3,17 @@
 # OncoLife AWS Re-Deployment Script (Update Existing Services)
 # =============================================================================
 # 
+# Script:       deploy.sh
+# Description:  Updates existing ECS services with new Docker images.
+#               For initial deployment, use full-deploy.sh instead.
+#
+# Created:      2026-01-03
+# Modified:     2026-01-16
+# Author:       Naveen Babu S A
+# Version:      2.1.0
+#
+# =============================================================================
+# 
 # PURPOSE: This script is for UPDATING existing ECS services with new images.
 #          It does NOT create infrastructure - use full-deploy.sh for that.
 #

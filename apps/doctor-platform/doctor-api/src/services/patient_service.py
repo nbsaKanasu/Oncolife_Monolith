@@ -1,18 +1,39 @@
 """
+================================================================================
 Patient Service - Doctor API
-============================
+================================================================================
 
-Service for accessing patient data from the patient database.
-Provides read-only access for doctors/staff to view their patients.
+Module:         patient_service.py
+Description:    Service for accessing patient data from the patient database.
+                Provides read-only access for doctors/staff to view their
+                associated patients, conversations, and diary entries.
 
-This service uses the repository pattern to abstract database operations
-and ensures proper authorization checks.
+Created:        2025-12-22
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
+
+Features:
+    - Patient listing with physician association checks
+    - Patient details retrieval with demographics
+    - Conversation and alert access
+    - Diary entry access (shared entries only)
+    - Cross-database queries with SQLAlchemy text() wrapper
 
 Usage:
     from services import PatientService
     
     patient_service = PatientService(patient_db, doctor_db)
     patients = patient_service.get_associated_patients(staff_uuid)
+
+Security:
+    - All operations are read-only
+    - Authorization checks on every query
+    - Uses patient_physician_associations table for access control
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 
 from typing import List, Optional, Tuple, Dict, Any

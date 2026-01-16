@@ -1,11 +1,17 @@
 """
-OncoLife Patient API - Main Application Entry Point.
+================================================================================
+OncoLife Patient API - Main Application Entry Point
+================================================================================
 
-This module initializes the FastAPI application with:
-- Middleware configuration
-- API routing (versioned)
-- Logging setup
-- Error handling
+Module:         main.py
+Description:    FastAPI application entry point for the OncoLife Patient Platform.
+                Initializes the application with middleware, routing, logging,
+                and error handling configuration.
+
+Created:        2025-12-10
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
 
 Architecture:
     The application follows a layered architecture:
@@ -34,6 +40,10 @@ Usage:
 Environment:
     See core/config.py for all configuration options.
     Configuration is loaded from environment variables and .env file.
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 
 # Load environment variables first

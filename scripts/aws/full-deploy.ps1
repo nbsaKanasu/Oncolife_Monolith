@@ -1,6 +1,17 @@
 # ==============================================================================
 # OncoLife Complete AWS Deployment Script (PowerShell)
 # ==============================================================================
+# 
+# Script:       full-deploy.ps1
+# Description:  Automates the complete AWS deployment process including VPC,
+#               RDS, Cognito, ECR, ECS, and ALB setup.
+#
+# Created:      2025-12-30
+# Modified:     2026-01-16
+# Author:       Naveen Babu S A
+# Version:      2.1.0
+#
+# ==============================================================================
 # This script automates the ENTIRE AWS deployment process.
 # 
 # Prerequisites:

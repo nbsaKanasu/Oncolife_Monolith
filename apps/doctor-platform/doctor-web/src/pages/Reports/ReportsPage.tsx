@@ -1,9 +1,27 @@
 /**
- * Reports Page
- * ============
+ * =============================================================================
+ * Weekly Reports Page - Doctor Portal
+ * =============================================================================
  * 
- * Weekly physician reports for patient monitoring.
- * Shows summary statistics, patient data, and shared questions.
+ * Module:      ReportsPage.tsx
+ * Description: Weekly physician reports for patient monitoring. Displays
+ *              summary statistics, severity breakdown, and patient data.
+ * 
+ * Created:     2026-01-02
+ * Modified:    2026-01-16
+ * Author:      Naveen Babu S A
+ * Version:     2.1.0
+ * 
+ * Features:
+ *   - Week selector for historical reports
+ *   - Summary statistics (total patients, escalations)
+ *   - Severity breakdown chart
+ *   - Patient table with max severity
+ *   - Report generation functionality
+ * 
+ * Copyright:
+ *   (c) 2026 OncoLife Health Technologies. All rights reserved.
+ * =============================================================================
  */
 
 import React, { useState } from 'react';

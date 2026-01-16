@@ -1,3 +1,29 @@
+/**
+ * =============================================================================
+ * Symptom Checker Chat Page - Patient Portal
+ * =============================================================================
+ * 
+ * Module:      ChatsPage.tsx
+ * Description: Daily symptom check-in chat interface. Implements the 7-phase
+ *              symptom checker flow with real-time WebSocket communication.
+ * 
+ * Created:     2025-12-15
+ * Modified:    2026-01-16
+ * Author:      Naveen Babu S A
+ * Version:     2.1.0
+ * 
+ * Features:
+ *   - WebSocket-based real-time chat with Ruby (AI assistant)
+ *   - 7-phase symptom triage flow
+ *   - Button-based responses with validation
+ *   - Calendar integration for dates
+ *   - Severity assessment and escalation detection
+ * 
+ * Copyright:
+ *   (c) 2026 OncoLife Health Technologies. All rights reserved.
+ * =============================================================================
+ */
+
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { MessageBubble } from '../../components/chat/MessageBubble';
 import { MessageInput } from '../../components/chat/MessageInput';

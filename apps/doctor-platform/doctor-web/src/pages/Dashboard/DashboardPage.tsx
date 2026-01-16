@@ -1,6 +1,28 @@
 /**
+ * =============================================================================
  * OncoLife Physician Dashboard
- * Analytics-driven clinical monitoring dashboard
+ * =============================================================================
+ * 
+ * Module:      DashboardPage.tsx
+ * Description: Analytics-driven clinical monitoring dashboard for physicians.
+ *              Displays severity-ranked patient list with real-time symptom
+ *              data from the patient platform.
+ * 
+ * Created:     2025-12-28
+ * Modified:    2026-01-16
+ * Author:      Naveen Babu S A
+ * Version:     2.1.0
+ * 
+ * Features:
+ *   - Severity-ranked patient list (urgent/severe/moderate/mild)
+ *   - Color-coded severity badges
+ *   - Search and filter functionality
+ *   - Real-time patient data from API
+ *   - Click-through to patient detail view
+ * 
+ * Copyright:
+ *   (c) 2026 OncoLife Health Technologies. All rights reserved.
+ * =============================================================================
  */
 
 import React, { useState } from 'react';

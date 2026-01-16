@@ -1,3 +1,30 @@
+/**
+ * =============================================================================
+ * Doctor Portal - Main Application
+ * =============================================================================
+ * 
+ * Module:      App.tsx
+ * Description: Main React application entry point for the Doctor Portal.
+ *              Configures routing, authentication, and global providers.
+ * 
+ * Created:     2025-12-20
+ * Modified:    2026-01-16
+ * Author:      Naveen Babu S A
+ * Version:     2.1.0
+ * 
+ * Routes:
+ *   /login              - Login page
+ *   /dashboard          - Main dashboard with patient ranking
+ *   /patients           - Patient list management
+ *   /patients/:uuid     - Patient detail with timeline
+ *   /staff              - Staff management
+ *   /reports            - Weekly reports
+ * 
+ * Copyright:
+ *   (c) 2026 OncoLife Health Technologies. All rights reserved.
+ * =============================================================================
+ */
+
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GlobalStyles, SessionTimeoutManager } from '@oncolife/ui-components';

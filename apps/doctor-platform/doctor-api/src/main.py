@@ -1,17 +1,30 @@
 """
-Doctor API - Main Application Entry Point
-==========================================
+================================================================================
+OncoLife Doctor API - Main Application Entry Point
+================================================================================
 
-This is the main FastAPI application for the OncoLife Doctor Platform.
-It provides APIs for healthcare staff to manage patients, view alerts,
-and coordinate care.
+Module:         main.py
+Description:    FastAPI application entry point for the OncoLife Doctor Platform.
+                Provides APIs for healthcare staff to manage patients, view 
+                symptom timelines, alerts, weekly reports, and coordinate care.
+
+Created:        2025-12-15
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
 
 Application Structure:
-- core/: Configuration, logging, exceptions, middleware
-- db/: Database models, repositories, session management
-- services/: Business logic layer
-- api/v1/: Versioned REST API endpoints
-- routers/: Legacy routers (maintained for backward compatibility)
+    - core/: Configuration, logging, exceptions, middleware
+    - db/: Database models, repositories, session management
+    - services/: Business logic layer (dashboard, patient, staff services)
+    - api/v1/: Versioned REST API endpoints
+
+Key Features:
+    - Dashboard with severity-ranked patient list
+    - Patient symptom timeline visualization
+    - Weekly reports generation
+    - Staff management (nurses, MAs, navigators)
+    - Cross-database queries to patient platform
 
 Usage:
     # Development
@@ -19,6 +32,10 @@ Usage:
     
     # Production
     uvicorn main:app --host 0.0.0.0 --port 8001 --workers 4
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 
 from contextlib import asynccontextmanager

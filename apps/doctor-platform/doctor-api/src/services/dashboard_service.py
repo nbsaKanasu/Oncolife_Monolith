@@ -1,17 +1,33 @@
 """
+================================================================================
 Dashboard Service - Doctor API
-==============================
+================================================================================
 
-Service for the analytics-driven clinical monitoring dashboard.
+Module:         dashboard_service.py
+Description:    Analytics-driven clinical monitoring dashboard service.
+                Provides severity-ranked patient lists, symptom timelines,
+                treatment overlays, and weekly report generation.
 
-Provides:
-- Ranked patient list based on severity
-- Patient symptom timeline data
-- Treatment event overlays
-- Weekly report generation
-- Audit logging
+Created:        2025-12-20
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
 
-All queries are physician-scoped for HIPAA compliance.
+Features:
+    - Ranked patient list based on severity (urgent/severe/moderate/mild)
+    - Patient symptom timeline data for zigzag visualization
+    - Treatment event overlays (chemo dates, medication changes)
+    - Weekly report generation with severity breakdown
+    - HIPAA-compliant physician-scoped data access
+    - Audit logging for all data access
+
+Dependencies:
+    - patient_db: Cross-database access to patient platform
+    - doctor_db: Doctor platform database access
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 
 from typing import List, Dict, Any, Optional, Tuple

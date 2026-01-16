@@ -1,9 +1,25 @@
 /**
+ * =============================================================================
  * Dashboard Service - Doctor Portal
- * ==================================
+ * =============================================================================
  * 
- * Handles all dashboard and analytics API calls.
- * Connects to doctor-api backend endpoints.
+ * Module:      dashboard.ts
+ * Description: API service for dashboard and analytics endpoints. Handles
+ *              patient ranking, symptom timelines, and weekly reports.
+ * 
+ * Created:     2025-12-28
+ * Modified:    2026-01-16
+ * Author:      Naveen Babu S A
+ * Version:     2.1.0
+ * 
+ * Endpoints Used:
+ *   GET  /api/v1/dashboard            - Ranked patient list
+ *   GET  /api/v1/dashboard/patient/:id - Patient detail with timeline
+ *   GET  /api/v1/dashboard/reports/weekly - Weekly report data
+ * 
+ * Copyright:
+ *   (c) 2026 OncoLife Health Technologies. All rights reserved.
+ * =============================================================================
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

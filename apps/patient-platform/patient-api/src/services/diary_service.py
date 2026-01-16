@@ -1,14 +1,34 @@
 """
+================================================================================
 Diary Service - Patient API
-============================
+================================================================================
 
-Service for patient diary entry management.
+Module:         diary_service.py
+Description:    Service for patient diary entry management. Handles CRUD
+                operations for patient health journal entries with support
+                for sharing entries with doctors.
+
+Created:        2025-12-18
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
+
+Features:
+    - Create, read, update diary entries
+    - Soft delete entries
+    - Get entries by month for calendar view
+    - Mark entries to share with doctor
+    - Timezone conversion for user display
 
 Usage:
     from services import DiaryService
     
     diary_service = DiaryService(db)
     entries = diary_service.get_entries_by_month(patient_uuid, 2024, 1)
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 
 from typing import List, Dict, Any, Optional

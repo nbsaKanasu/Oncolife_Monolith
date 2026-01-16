@@ -1,16 +1,38 @@
 """
-Symptom Checker Engine - Version 2.1
-Manages the rule-based conversation flow for symptom triage.
+================================================================================
+Symptom Checker Engine - Patient API
+================================================================================
 
-Flow (Simplified - 5 phases):
-1. DISCLAIMER - Medical disclaimer with "I Understand" button
-2. EMERGENCY_CHECK - Urgent safety check (5 emergency symptoms)
-3. SYMPTOM_SELECTION - Grouped symptom selection
-4. SCREENING - Per-symptom questions (Ruby chat)
-5. SUMMARY - Session summary with actions
+Module:         symptom_engine.py
+Description:    Rule-based conversation engine for oncology symptom triage.
+                Manages the multi-phase symptom checker flow with clinically
+                validated questions and severity assessments.
 
-Note: Patient context (chemo dates, physician visits) is now stored in
+Created:        2025-12-14
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
+
+Conversation Flow:
+    1. DISCLAIMER       - Medical disclaimer with "I Understand" button
+    2. EMERGENCY_CHECK  - Urgent safety check (5 emergency symptoms)
+    3. SYMPTOM_SELECTION- Grouped symptom selection (7 categories)
+    4. SCREENING        - Per-symptom questions (Ruby chat persona)
+    5. SUMMARY          - Session summary with recommended actions
+
+Severity Levels:
+    - NONE      - No symptoms reported
+    - MILD      - Monitor at home
+    - MODERATE  - Contact care team within 24h
+    - SEVERE    - Contact care team today
+    - URGENT    - Seek immediate care / 911
+
+Note: Patient context (chemo dates, physician visits) is stored in
 the Patient Profile page, not collected during symptom check.
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field

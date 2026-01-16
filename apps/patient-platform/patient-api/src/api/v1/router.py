@@ -1,25 +1,38 @@
 """
-Main Router for API Version 1.
+================================================================================
+Main Router for API Version 1 - Patient API
+================================================================================
 
-This module aggregates all v1 endpoint routers into a single router
-that can be included in the main FastAPI application.
+Module:         router.py
+Description:    Aggregates all v1 endpoint routers into a single router
+                for the Patient API platform.
+
+Created:        2025-12-11
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
 
 Endpoints:
-- /health: Health check
-- /auth: Authentication (signup, login, logout, password, delete)
-- /onboarding: Patient onboarding flow (fax, OCR, welcome, setup)
-- /patients: Patient management
-- /chat: Symptom checker chat (REST + WebSocket)
-- /chemo: Chemotherapy dates
-- /diary: Patient diary entries
-- /summaries: Conversation summaries
-- /profile: Patient profile and configuration
-- /education: Patient education resources and summaries
+    /health     - Health check endpoints
+    /auth       - Authentication (signup, login, logout, password, delete)
+    /onboarding - Patient onboarding flow (fax, OCR, welcome, setup)
+    /patients   - Patient management
+    /chat       - Symptom checker chat (REST + WebSocket)
+    /chemo      - Chemotherapy dates
+    /diary      - Patient diary entries
+    /summaries  - Conversation summaries
+    /profile    - Patient profile and configuration
+    /education  - Patient education resources
+    /questions  - Questions for doctor feature
 
 Usage:
     from api.v1 import router as api_v1_router
     
     app.include_router(api_v1_router, prefix="/api/v1")
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 
 from fastapi import APIRouter

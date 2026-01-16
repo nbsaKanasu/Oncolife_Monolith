@@ -1,18 +1,34 @@
 """
+================================================================================
 Dashboard Endpoints - Doctor API
-================================
+================================================================================
 
-Analytics-driven clinical monitoring dashboard for physicians.
+Module:         dashboard.py
+Description:    REST API endpoints for the clinical monitoring dashboard.
+                Provides patient ranking, symptom timelines, and weekly reports.
+
+Created:        2025-12-25
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
 
 Endpoints:
-- GET /dashboard: Landing view with ranked patient list
-- GET /dashboard/patient/{uuid}: Patient detail view with timeline
-- GET /dashboard/patient/{uuid}/questions: Shared patient questions
-- GET /dashboard/reports: List weekly reports
-- GET /dashboard/reports/weekly: Generate/get weekly report data
-- POST /dashboard/reports/generate: Trigger report generation
+    GET  /dashboard                          - Landing view with ranked patients
+    GET  /dashboard/patient/{uuid}           - Patient detail with timeline
+    GET  /dashboard/patient/{uuid}/questions - Patient's shared questions
+    GET  /dashboard/reports                  - List weekly reports
+    GET  /dashboard/reports/weekly           - Get/generate weekly report
+    POST /dashboard/reports/generate         - Trigger report generation
 
-All endpoints are physician-scoped. Staff access via associated physicians.
+Security:
+    - All endpoints require authentication
+    - Physician-scoped data access
+    - Staff access via associated physicians
+    - Audit logging on all patient data access
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 
 from typing import List, Optional

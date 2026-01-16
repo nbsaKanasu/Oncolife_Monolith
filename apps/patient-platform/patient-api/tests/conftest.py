@@ -1,12 +1,34 @@
 """
+================================================================================
 OncoLife Patient API - Test Fixtures
-====================================
+================================================================================
 
-Shared fixtures for all tests including:
-- Test database session
-- Test client
-- Mock authentication
-- Sample data factories
+Module:         conftest.py
+Description:    Shared pytest fixtures for Patient API tests. Provides test
+                database sessions, mock authentication, and sample data factories.
+
+Created:        2026-01-05
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
+
+Fixtures Provided:
+    - db_session: In-memory SQLite database session
+    - client: Authenticated test client
+    - unauthenticated_client: Test client without auth
+    - test_patient_uuid: Consistent test patient ID
+    - sample_patient_data: Sample patient registration data
+    - sample_diary_entry: Sample diary entry data
+    - sample_question: Sample patient question data
+
+Usage:
+    def test_my_feature(client: TestClient, sample_question):
+        response = client.post("/api/v1/questions", json=sample_question)
+        assert response.status_code == 201
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 
 import os

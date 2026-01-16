@@ -1,19 +1,35 @@
 """
+================================================================================
 Chat Service - Patient API
-===========================
+================================================================================
 
-Service for chat and symptom checker operations.
-Integrates the rule-based symptom checker engine.
+Module:         chat_service.py
+Description:    Service for chat and symptom checker operations. Integrates
+                the rule-based symptom checker engine for predictable,
+                clinically-validated responses.
 
-This service replaces the LLM-based chat service with a
-rule-based symptom checker approach for predictable,
-clinically-validated responses.
+Created:        2025-12-12
+Modified:       2026-01-16
+Author:         Naveen Babu S A
+Version:        2.1.0
+
+Features:
+    - Daily symptom check-in sessions
+    - 7-phase symptom checker flow
+    - Severity assessment (mild/moderate/severe/urgent)
+    - Escalation detection and handling
+    - WebSocket support for real-time chat
+    - Automatic diary entry creation
 
 Usage:
     from services import ChatService
     
     chat_service = ChatService(db)
     session = chat_service.get_or_create_today_session(patient_uuid)
+
+Copyright:
+    (c) 2026 OncoLife Health Technologies. All rights reserved.
+================================================================================
 """
 
 from typing import Dict, Any, List, Tuple, Optional, AsyncGenerator
