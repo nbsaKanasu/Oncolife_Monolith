@@ -4,7 +4,9 @@
 
 ## Your Personal Health Companion During Cancer Treatment
 
-**Version 1.0 | January 2026**
+**Version 1.1 | January 2026**
+
+**Developer:** NAVEEN BABU S A
 
 </div>
 

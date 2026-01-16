@@ -16,7 +16,13 @@ from sqlalchemy import pool
 from alembic import context
 
 # Add src to path for model imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+# For local: ../src, for Docker: /app (where src contents are mounted)
+local_src_path = os.path.join(os.path.dirname(__file__), '..', 'src')
+docker_src_path = '/app'
+if os.path.exists(local_src_path):
+    sys.path.insert(0, local_src_path)
+if os.path.exists(docker_src_path) and docker_src_path not in sys.path:
+    sys.path.insert(0, docker_src_path)
 
 # Import all models to ensure they're registered with Base.metadata
 from db.base import Base

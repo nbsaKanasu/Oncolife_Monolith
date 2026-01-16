@@ -20,7 +20,7 @@ from uuid import UUID
 from datetime import datetime
 
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func, or_, and_
+from sqlalchemy import desc, func, or_, and_, text
 
 from .base import BaseService
 from core.logging import get_logger
@@ -84,12 +84,12 @@ class PatientService(BaseService):
         
         # Get patient UUIDs from associations
         associations_result = self.patient_db.execute(
-            """
+            text("""
             SELECT patient_uuid 
             FROM patient_physician_associations 
             WHERE physician_uuid = :physician_uuid 
             AND is_deleted = false
-            """,
+            """),
             {"physician_uuid": str(staff_uuid)}
         )
         patient_uuids = [str(row[0]) for row in associations_result.fetchall()]
@@ -98,13 +98,13 @@ class PatientService(BaseService):
             logger.info(f"No patients found for staff {staff_uuid}")
             return [], 0
         
-        # Build the query
+        # Build the query with parameterized UUID list
         uuid_list = ",".join([f"'{uuid}'" for uuid in patient_uuids])
         
         # Add search filter if provided
         where_clause = f"uuid IN ({uuid_list}) AND is_deleted = false"
         if search_query:
-            search_term = search_query.lower()
+            search_term = search_query.lower().replace("'", "''")  # Escape single quotes
             where_clause += f"""
                 AND (
                     LOWER(first_name) LIKE '%{search_term}%'
@@ -115,14 +115,14 @@ class PatientService(BaseService):
         
         # Get patients
         patients_result = self.patient_db.execute(
-            f"""
+            text(f"""
             SELECT uuid, email_address, first_name, last_name, 
                    phone_number, created_at
             FROM patient_info 
             WHERE {where_clause}
             ORDER BY created_at DESC
             OFFSET {skip} LIMIT {limit}
-            """
+            """)
         )
         
         patients = []
@@ -138,10 +138,10 @@ class PatientService(BaseService):
         
         # Get total count
         count_result = self.patient_db.execute(
-            f"""
+            text(f"""
             SELECT COUNT(*) FROM patient_info 
             WHERE {where_clause}
-            """
+            """)
         )
         total = count_result.fetchone()[0]
         
@@ -181,12 +181,12 @@ class PatientService(BaseService):
         
         # Get patient details
         result = self.patient_db.execute(
-            """
+            text("""
             SELECT uuid, email_address, first_name, last_name, phone_number, 
                    dob, sex, disease_type, treatment_type, created_at, mrn
             FROM patient_info 
             WHERE uuid = :patient_uuid AND is_deleted = false
-            """,
+            """),
             {"patient_uuid": str(patient_uuid)}
         )
         
@@ -240,14 +240,14 @@ class PatientService(BaseService):
             )
         
         result = self.patient_db.execute(
-            """
+            text("""
             SELECT uuid, conversation_state, symptom_list, created_at
             FROM conversations 
             WHERE patient_uuid = :patient_uuid
             AND (conversation_state = 'EMERGENCY' OR conversation_state = 'COMPLETED')
             ORDER BY created_at DESC
             LIMIT :limit
-            """,
+            """),
             {"patient_uuid": str(patient_uuid), "limit": limit}
         )
         
@@ -296,14 +296,14 @@ class PatientService(BaseService):
             )
         
         result = self.patient_db.execute(
-            """
+            text("""
             SELECT uuid, created_at, conversation_state, symptom_list, 
                    overall_feeling, bulleted_summary
             FROM conversations 
             WHERE patient_uuid = :patient_uuid
             ORDER BY created_at DESC
             LIMIT :limit
-            """,
+            """),
             {"patient_uuid": str(patient_uuid), "limit": limit}
         )
         
@@ -356,13 +356,13 @@ class PatientService(BaseService):
             where_clause += " AND marked_for_doctor = true"
         
         result = self.patient_db.execute(
-            f"""
+            text(f"""
             SELECT id, entry_uuid, created_at, title, diary_entry, marked_for_doctor
             FROM patient_diary_entries 
             WHERE {where_clause}
             ORDER BY created_at DESC
             LIMIT :limit
-            """,
+            """),
             {"patient_uuid": str(patient_uuid), "limit": limit}
         )
         
@@ -399,12 +399,12 @@ class PatientService(BaseService):
             True if authorized, False otherwise
         """
         result = self.patient_db.execute(
-            """
+            text("""
             SELECT COUNT(*) FROM patient_physician_associations
             WHERE patient_uuid = :patient_uuid
             AND physician_uuid = :staff_uuid
             AND is_deleted = false
-            """,
+            """),
             {"patient_uuid": str(patient_uuid), "staff_uuid": str(staff_uuid)}
         )
         
@@ -437,33 +437,33 @@ class PatientService(BaseService):
         
         # Count conversations
         conv_result = self.patient_db.execute(
-            """
+            text("""
             SELECT COUNT(*) FROM conversations
             WHERE patient_uuid = :patient_uuid
-            """,
+            """),
             {"patient_uuid": str(patient_uuid)}
         )
         total_conversations = conv_result.fetchone()[0]
         
         # Count alerts (emergency + completed with symptoms)
         alert_result = self.patient_db.execute(
-            """
+            text("""
             SELECT COUNT(*) FROM conversations
             WHERE patient_uuid = :patient_uuid
             AND conversation_state IN ('EMERGENCY', 'COMPLETED')
             AND symptom_list IS NOT NULL
-            """,
+            """),
             {"patient_uuid": str(patient_uuid)}
         )
         total_alerts = alert_result.fetchone()[0]
         
         # Count diary entries
         diary_result = self.patient_db.execute(
-            """
+            text("""
             SELECT COUNT(*) FROM patient_diary_entries
             WHERE patient_uuid = :patient_uuid
             AND is_deleted = false
-            """,
+            """),
             {"patient_uuid": str(patient_uuid)}
         )
         total_diary_entries = diary_result.fetchone()[0]
@@ -523,7 +523,7 @@ class PatientService(BaseService):
         query += " ORDER BY created_at DESC LIMIT :limit"
         
         result = self.patient_db.execute(
-            query,
+            text(query),
             {"patient_uuid": str(patient_uuid), "limit": limit}
         )
         
@@ -569,14 +569,14 @@ class PatientService(BaseService):
         
         # Get the question
         result = self.patient_db.execute(
-            """
+            text("""
             SELECT id, question_text, category, is_answered, created_at
             FROM patient_questions
             WHERE id = :question_id
             AND patient_uuid = :patient_uuid
             AND share_with_physician = true
             AND is_deleted = false
-            """,
+            """),
             {"question_id": str(question_id), "patient_uuid": str(patient_uuid)}
         )
         
@@ -586,11 +586,11 @@ class PatientService(BaseService):
         
         # Mark as answered
         self.patient_db.execute(
-            """
+            text("""
             UPDATE patient_questions
             SET is_answered = true, updated_at = NOW()
             WHERE id = :question_id
-            """,
+            """),
             {"question_id": str(question_id)}
         )
         self.patient_db.commit()

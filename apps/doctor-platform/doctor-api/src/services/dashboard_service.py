@@ -523,7 +523,8 @@ class DashboardService(BaseService):
             {"physician_id": str(physician_id)}
         )
         
-        return [UUID(row[0]) for row in result.fetchall()]
+        # PostgreSQL may return UUID objects directly, so convert to string first
+        return [UUID(str(row[0])) for row in result.fetchall()]
     
     def _is_authorized_for_patient(
         self,

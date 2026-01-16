@@ -391,6 +391,15 @@ const DashboardPage: React.FC = () => {
   
   const { data, isLoading, error } = usePatientSummaries(page, search, filter);
   
+  // Calculate dynamic stats from patient data
+  const urgentCount = data?.data.filter(p => p.maxSeverity === 'urgent' || p.hasEscalation).length || 0;
+  const checkInsToday = data?.data.filter(p => {
+    if (!p.lastUpdated) return false;
+    const lastCheckin = new Date(p.lastUpdated);
+    const today = new Date();
+    return lastCheckin.toDateString() === today.toDateString();
+  }).length || 0;
+  
   const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
   };
@@ -414,15 +423,20 @@ const DashboardPage: React.FC = () => {
       .slice(0, 2);
   };
 
-  const getSeverity = (summary: string): 'mild' | 'moderate' | 'severe' | 'urgent' => {
-    // Mock severity detection - in production this would come from the API
-    if (summary?.toLowerCase().includes('urgent') || summary?.toLowerCase().includes('emergency')) {
+  const getSeverity = (patient: PatientSummary): 'mild' | 'moderate' | 'severe' | 'urgent' => {
+    // Use severity from API if available
+    if (patient.maxSeverity) {
+      return patient.maxSeverity;
+    }
+    // Fallback: detect from summary text
+    const summary = patient.summary || '';
+    if (summary.toLowerCase().includes('urgent') || summary.toLowerCase().includes('emergency') || patient.hasEscalation) {
       return 'urgent';
     }
-    if (summary?.toLowerCase().includes('severe')) {
+    if (summary.toLowerCase().includes('severe')) {
       return 'severe';
     }
-    if (summary?.toLowerCase().includes('moderate')) {
+    if (summary.toLowerCase().includes('moderate')) {
       return 'moderate';
     }
     return 'mild';
@@ -455,7 +469,7 @@ const DashboardPage: React.FC = () => {
           <div className="stat-icon">
             <AlertTriangle size={20} />
           </div>
-          <div className="stat-value">3</div>
+          <div className="stat-value">{urgentCount}</div>
           <div className="stat-label">Urgent Cases</div>
         </StatCard>
         
@@ -463,7 +477,7 @@ const DashboardPage: React.FC = () => {
           <div className="stat-icon">
             <TrendingUp size={20} />
           </div>
-          <div className="stat-value">12</div>
+          <div className="stat-value">{checkInsToday}</div>
           <div className="stat-label">Check-ins Today</div>
         </StatCard>
         
@@ -471,7 +485,7 @@ const DashboardPage: React.FC = () => {
           <div className="stat-icon">
             <Clock size={20} />
           </div>
-          <div className="stat-value">2h</div>
+          <div className="stat-value">-</div>
           <div className="stat-label">Avg Response Time</div>
         </StatCard>
       </StatsRow>
@@ -576,8 +590,8 @@ const DashboardPage: React.FC = () => {
                     MRN: {patient.mrn}
                   </DetailBadge>
                 </PatientInfo>
-                <SeverityBadge $severity={getSeverity(patient.summary || '')}>
-                  {getSeverity(patient.summary || '')}
+                <SeverityBadge $severity={getSeverity(patient)}>
+                  {getSeverity(patient)}
                 </SeverityBadge>
               </PatientHeader>
               

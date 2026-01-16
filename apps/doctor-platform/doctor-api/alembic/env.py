@@ -15,10 +15,16 @@ from sqlalchemy import pool
 from alembic import context
 
 # Add src to path for model imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+# For local: ../src, for Docker: /app (where src contents are mounted)
+local_src_path = os.path.join(os.path.dirname(__file__), '..', 'src')
+docker_src_path = '/app'
+if os.path.exists(local_src_path):
+    sys.path.insert(0, local_src_path)
+if os.path.exists(docker_src_path) and docker_src_path not in sys.path:
+    sys.path.insert(0, docker_src_path)
 
 # Import all models to ensure they're registered with Base.metadata
-from db.base import Base
+from db.base import DoctorBase as Base
 from db.doctor_models import *  # noqa
 from db.models.clinic import *  # noqa
 from db.models.staff import *  # noqa
@@ -43,11 +49,12 @@ def get_url():
     if url:
         return url
     
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5432")
-    user = os.getenv("POSTGRES_USER", "oncolife_admin")
-    password = os.getenv("POSTGRES_PASSWORD", "oncolife_dev_password")
-    database = os.getenv("POSTGRES_DOCTOR_DB", "oncolife_doctor")
+    # Support both DOCTOR_DB_* (docker-compose) and POSTGRES_* (legacy) env vars
+    host = os.getenv("DOCTOR_DB_HOST", os.getenv("POSTGRES_HOST", "localhost"))
+    port = os.getenv("DOCTOR_DB_PORT", os.getenv("POSTGRES_PORT", "5432"))
+    user = os.getenv("DOCTOR_DB_USER", os.getenv("POSTGRES_USER", "oncolife_admin"))
+    password = os.getenv("DOCTOR_DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "oncolife_dev_password"))
+    database = os.getenv("DOCTOR_DB_NAME", os.getenv("POSTGRES_DOCTOR_DB", "oncolife_doctor"))
     
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 

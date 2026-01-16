@@ -30,12 +30,13 @@ interface UserProviderProps {
 }
 
 export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
-  // Mock profile data that matches Navigation component expectations
+  // Profile data - in production this would come from API
+  // For local dev, use test doctor credentials
   const profile: ProfileData = {
-    first_name: 'Dr. John',
-    last_name: 'Smith',
-    email: 'dr.john.smith@clinic.com',
-    id: 'doctor-1'
+    first_name: 'Test',
+    last_name: 'Doctor',
+    email: 'test.doctor@oncolife.local',
+    id: '22222222-2222-2222-2222-222222222222'
   };
   const isLoading = false;
   const error = null;

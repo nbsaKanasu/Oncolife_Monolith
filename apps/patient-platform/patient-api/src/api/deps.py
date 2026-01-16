@@ -88,12 +88,17 @@ def get_token_payload(
         Token payload dictionary or None if no token
     
     Raises:
-        AuthenticationException: If token is invalid
+        AuthenticationException: If token is invalid (when not in local dev mode)
     """
     if credentials is None:
         return None
     
     token = credentials.credentials
+    
+    # In LOCAL_DEV_MODE, accept dev mode tokens without validation
+    if settings.local_dev_mode and token.startswith("dev-mode-token-"):
+        logger.debug("LOCAL_DEV_MODE: Accepting dev mode token")
+        return {"sub": str(LOCAL_DEV_TEST_USER_UUID), "dev_mode": True}
     
     try:
         payload = jwt.decode(
@@ -103,6 +108,11 @@ def get_token_payload(
         )
         return payload
     except JWTError as e:
+        # In local dev mode, don't fail on invalid tokens
+        if settings.local_dev_mode:
+            logger.debug(f"LOCAL_DEV_MODE: Invalid token ignored, using test user: {e}")
+            return {"sub": str(LOCAL_DEV_TEST_USER_UUID), "dev_mode": True}
+        
         error_msg = str(e).lower()
         if "expired" in error_msg:
             raise AuthenticationException("Token has expired")

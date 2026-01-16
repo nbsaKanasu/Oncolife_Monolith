@@ -1,6 +1,8 @@
 # OncoLife Developer Guide
 
-**Version 2.0 | Updated January 2026**
+**Version 2.1 | Updated January 2026**
+
+**Developer:** NAVEEN BABU S A
 
 ---
 

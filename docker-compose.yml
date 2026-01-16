@@ -86,6 +86,8 @@ services:
       - ./apps/patient-platform/patient-api/src:/app:cached
       - ./apps/patient-platform/patient-api/static:/app/static:cached
       - ./apps/patient-platform/patient-api/alembic:/app/alembic:cached
+      - ./apps/patient-platform/patient-api/alembic.ini:/app/alembic.ini:cached
+      - ./apps/patient-platform/patient-api/scripts:/app/scripts:cached
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -136,6 +138,8 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/doctor-platform/doctor-api/src:/app:cached
+      - ./apps/doctor-platform/doctor-api/alembic:/app/alembic:cached
+      - ./apps/doctor-platform/doctor-api/alembic.ini:/app/alembic.ini:cached
     command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]

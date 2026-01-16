@@ -24,6 +24,10 @@ export interface PatientSummary {
   lastUpdated: string;
   status: 'active' | 'inactive' | 'pending';
   priority: 'high' | 'medium' | 'low';
+  // Added for severity display
+  maxSeverity: 'mild' | 'moderate' | 'severe' | 'urgent' | null;
+  hasEscalation: boolean;
+  severityBadge: string;
 }
 
 export interface PatientRanking {
@@ -129,10 +133,14 @@ const transformPatientRankingToSummary = (ranking: PatientRanking): PatientSumma
   dateOfBirth: '',
   mrn: '',
   symptoms: '',
-  summary: '',
+  summary: ranking.has_escalation ? 'urgent escalation' : (ranking.max_severity || ''),
   lastUpdated: ranking.last_checkin || '',
   status: 'active',
   priority: mapSeverityToPriority(ranking.max_severity),
+  // Pass through severity data from API
+  maxSeverity: (ranking.max_severity as 'mild' | 'moderate' | 'severe' | 'urgent') || null,
+  hasEscalation: ranking.has_escalation,
+  severityBadge: ranking.severity_badge,
 });
 
 // =============================================================================

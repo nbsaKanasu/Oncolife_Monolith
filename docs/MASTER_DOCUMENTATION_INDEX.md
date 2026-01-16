@@ -4,6 +4,10 @@
 > 
 > This guide tells you exactly which document to read for any task.
 
+**Version 2.1 | Updated January 2026**
+
+**Developer:** NAVEEN BABU S A
+
 ---
 
 ## 🚦 Start Here - Quick Navigation

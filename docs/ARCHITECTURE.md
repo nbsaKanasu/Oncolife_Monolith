@@ -1,5 +1,9 @@
 # OncoLife Architecture Guide
 
+**Version 2.1 | Updated January 2026**
+
+**Developer:** NAVEEN BABU S A
+
 ## Overview
 
 OncoLife is a healthcare platform built with a modular monorepo architecture. This document provides a comprehensive overview of the system architecture, design patterns, and code organization.

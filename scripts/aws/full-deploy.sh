@@ -2,6 +2,9 @@
 # =============================================================================
 # OncoLife Complete AWS Deployment Script (Bash Version)
 # =============================================================================
+# Developer: NAVEEN BABU S A
+# Version: 2.1 | Updated January 2026
+# =============================================================================
 # This script automates the ENTIRE AWS deployment process.
 #
 # Usage: ./scripts/aws/full-deploy.sh

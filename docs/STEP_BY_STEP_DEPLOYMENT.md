@@ -1,6 +1,8 @@
 # OncoLife - Complete AWS Deployment Guide
 
-**Version 2.0 | Updated January 2026**
+**Version 2.1 | Updated January 2026**
+
+**Developer:** NAVEEN BABU S A
 
 > ⚠️ **IMPORTANT**: This guide includes fixes for common deployment errors. Read each section carefully, especially the "Common Errors" boxes.
 

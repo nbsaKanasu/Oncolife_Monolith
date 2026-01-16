@@ -289,7 +289,8 @@ const ReportsPage: React.FC = () => {
     refetch();
   };
 
-  const getSeverityColor = (severity: string): string => {
+  const getSeverityColor = (severity: string | null | undefined): string => {
+    if (!severity) return colors.severity.mild;
     const severityMap: Record<string, string> = {
       mild: colors.severity.mild,
       moderate: colors.severity.moderate,

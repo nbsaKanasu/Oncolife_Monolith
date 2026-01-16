@@ -164,8 +164,8 @@ class TreatmentEvent(DoctorBase, TimestampMixin):
         comment="Date of the event"
     )
     
-    # Additional metadata
-    metadata = Column(
+    # Additional metadata (named event_metadata to avoid SQLAlchemy reserved name)
+    event_metadata = Column(
         JSONB,
         nullable=True,
         default=dict,
@@ -342,8 +342,8 @@ class AuditLog(DoctorBase):
         comment="User agent string"
     )
     
-    # Additional context
-    metadata = Column(
+    # Additional context (named audit_metadata to avoid SQLAlchemy reserved name)
+    audit_metadata = Column(
         JSONB,
         nullable=True,
         default=dict,
